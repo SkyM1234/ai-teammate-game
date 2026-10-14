@@ -109,7 +109,8 @@ function render() {
   document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.disabled = terminal || !!frames; });
   const task = view.task;
   $('task').replaceChildren();
-  const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${task ? { active: '执行中', paused: '暂停', waiting: '待决定', completed: '已完成' }[task.status] : '待命'}`;
+  const taskStatus = task?.status === 'completed' && task.interpretation === 'model' ? '已结束' : task ? { active: '执行中', paused: '暂停', waiting: '待决定', completed: '已完成' }[task.status] : '待命';
+  const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${taskStatus}`;
   const taskText = document.createElement('p'); taskText.textContent = task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
   if (task?.question) { const question = document.createElement('p'); question.className = 'question'; question.textContent = task.question; $('task').append(question); }
   $<HTMLButtonElement>('continue').disabled = !!frames || terminal || view.running || !task || task.status === 'completed';

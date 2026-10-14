@@ -9,15 +9,21 @@ import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveMod
 import type { CredentialSource } from './credentials.ts';
 import type { ModelAdapter, ModelConfig, ToolIntent } from './model.ts';
 import { SessionJournal } from './journal.ts';
+import { demoHelp, parseDemoCommand } from './demo-task.ts';
+import type { DemoGoal } from './demo-task.ts';
 
 type Control = 'continue' | 'redecide' | 'wait_player' | 'task_done' | 'game_over';
-type Goal = { kind: 'goto' | 'scan' | 'collect' | 'repair' | 'pickup' | 'extract' | 'circuit' | 'custom'; position?: Position; targetId?: string; itemType?: string; returnHome?: boolean; on?: boolean };
 export interface ChatMessage {
   id: string; role: 'human' | 'robot' | 'system'; text: string; at: number;
   kind?: 'tool';
   tool?: { id: string; name: string; arguments: Record<string, unknown>; status: 'queued' | 'running' | 'waiting' | 'done' | 'partial' | 'failed' | 'skipped' | 'cancelled' };
 }
-export interface Task { id: string; text: string; goal: Goal; status: 'active' | 'paused' | 'waiting' | 'completed'; question: string | null; waitReason?: 'power' | 'hazard' | 'decision' | 'authorization'; constraints: Constraints }
+export interface Task {
+  id: string; text: string; selected?: Position; interpretation: 'model' | 'demo';
+  goal?: DemoGoal; demoSupported?: boolean;
+  status: 'active' | 'paused' | 'waiting' | 'completed'; question: string | null;
+  waitReason?: 'power' | 'hazard' | 'decision' | 'authorization'; constraints: Constraints;
+}
 export interface PendingAuthorization {
   id: string; toolName: string; arguments: Record<string, unknown>; kind: 'repair' | 'drop' | 'hazard' | 'power';
   description: string; consequence: string; stateRevision: number; hazardIds?: string[];
@@ -38,6 +44,7 @@ interface ToolOutcome {
 export class RevisionConflictError extends Error {}
 
 const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气有限，你有电量限制。只使用收到的机器人知识和人类明确发送的信息；雷达模糊回波不是物品身份。
+真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。仅在实际工具结果支持结束整项委托时调用 finish_task；该工具只结束自动行动，游戏胜负仍由规则引擎判断。
 保持人类委托的目标与约束，允许一轮最多6个工具串行调用，基于已知对象生成有限批次。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至同格或相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回可触及的开关，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
 动作结果区分newDiscoveries、stateChanges、invalidatedFacts、knownRefs。只相信实际执行结果，不声称未执行动作完成。面向玩家的解释、报告、问题均使用简体中文；工具名称、参数字段及对象ID保持原样。简短报告事实，不输出内部思考。`;
@@ -236,6 +243,7 @@ export class GameSession {
       await this.cancelRunning();
       if (expectedRevision !== undefined && expectedRevision !== this.engine.state.stateRevision) throw new RevisionConflictError('地图状态已更新，请根据最新信息重试');
       const previous = this.adapter.config;
+      const previousMode = this.adapter.mode;
       const retained = previous?.provider === config.provider && previous.baseUrl === config.baseUrl ? this.modelKey : '';
       const apiKey = typeof key === 'string' && key.trim() ? key.trim() : retained;
       const adapter = config.mode === 'live' ? await liveModel(config, apiKey || undefined) : this.demoAdapter(config);
@@ -244,6 +252,7 @@ export class GameSession {
       this.modelKey = config.mode === 'live' ? apiKey : '';
       this.agent.reset(); this.transcript = [];
       this.agent.state.model = this.adapter.model; this.agent.streamFunction = this.adapter.streamFn;
+      if (this.task && previousMode !== this.adapter.mode) this.interpretTask();
       this.modelError = null;
       this.pause(`已切换为 ${this.adapter.label}。当前游戏进度保留，点击继续任务或发送新指令。`);
       this.emit();
@@ -251,7 +260,20 @@ export class GameSession {
   }
 
   private repairAuthorized(targetId: string): boolean {
-    return !!this.task && (this.task.constraints.allowedRepairs.includes(targetId) || this.task.constraints.allowedRepairs.includes('airlock') && this.engine.state.knowledge.entities[targetId]?.type === 'airlock');
+    return this.adapter.mode !== 'live' && this.task?.interpretation === 'demo' && (this.task.constraints.allowedRepairs.includes(targetId) || this.task.constraints.allowedRepairs.includes('airlock') && this.engine.state.knowledge.entities[targetId]?.type === 'airlock');
+  }
+
+  private interpretTask(): void {
+    if (!this.task) return;
+    this.task.constraints = defaultConstraints();
+    if (this.adapter.mode === 'live') {
+      this.task.interpretation = 'model';
+      delete this.task.goal; delete this.task.demoSupported;
+    } else {
+      const command = parseDemoCommand(this.task.text, this.engine.level, this.engine.state.human.position, this.task.selected);
+      this.task.interpretation = 'demo'; this.task.goal = command.goal;
+      this.task.constraints = command.constraints; this.task.demoSupported = command.supported;
+    }
   }
 
   private executionConstraints(): Constraints {
@@ -268,12 +290,11 @@ export class GameSession {
         const tu = args.targetId === 'human' ? 6 : 4;
         return { kind: 'repair', description: `允许修复${args.targetId === 'human' ? '你的供氧管' : entity!.name}吗？`, consequence: `消耗 1 份维修材料、${tu} TU、4 电量；预计消耗 ${tu * this.engine.state.human.oxygenRate} 氧气。` };
       }
-      if (!this.task?.text.includes('放下')) {
-        const item = typeof args.itemId === 'string' && this.engine.state.robot.inventory.includes(args.itemId) ? this.engine.state.knowledge.entities[args.itemId] : undefined;
-        if (args.operation === 'drop_item' && item || args.operation === 'drop_human' && this.engine.state.human.carried) return { kind: 'drop', description: `允许在当前位置放下${args.operation === 'drop_human' ? '你' : item!.name}吗？`, consequence: `消耗 1 TU、1 电量和 ${this.engine.state.human.oxygenRate} 氧气；物资或玩家将留在当前位置。` };
-      }
+      const item = typeof args.itemId === 'string' && this.engine.state.robot.inventory.includes(args.itemId) ? this.engine.state.knowledge.entities[args.itemId] : undefined;
+      if (args.operation === 'drop_item' && item || args.operation === 'drop_human' && this.engine.state.human.carried) return { kind: 'drop', description: `允许在当前位置放下${args.operation === 'drop_human' ? '你' : item!.name}吗？`, consequence: `消耗 1 TU、1 电量和 ${this.engine.state.human.oxygenRate} 氧气；物资或玩家将留在当前位置。` };
     }
-    if (name === 'set_circuit' && args.on === true && !this.engine.state.circuitOn && !(this.task?.goal.kind === 'circuit' && this.task.goal.on === true)) {
+    const demoPowerCommand = this.adapter.mode !== 'live' && this.task?.interpretation === 'demo' && this.task.demoSupported && this.task.goal?.kind === 'circuit' && this.task.goal.on === true;
+    if (name === 'set_circuit' && args.on === true && !this.engine.state.circuitOn && !demoPowerCommand) {
       const entity = typeof args.targetId === 'string' ? this.engine.state.knowledge.entities[args.targetId] : undefined;
       if (entity?.type === 'switch' && distance(this.engine.state.robot.position, entity.position) <= 1) return { kind: 'power', description: `允许机器人操作 (${entity.position.x}, ${entity.position.y}) 的${entity.name}通电吗？`, consequence: `操作开关消耗 1 TU、0 电量和 ${this.engine.state.human.oxygenRate} 氧气；电池柜和电动门可开启，暴露线路将带电。批准后仍须满足距离与视线条件。` };
     }
@@ -331,13 +352,15 @@ export class GameSession {
     if (this.newActiveHazard(delta)) return true;
     if (!this.task) return false;
     return delta.newDiscoveries.some(e =>
-      e.type === 'door' || e.type === 'obstacle' || e.type === 'switch' && (this.task?.goal.kind === 'collect' || this.task?.goal.kind === 'circuit') || e.type === 'airlock' && this.task?.goal.kind === 'repair' ||
-      this.task?.goal.kind === 'collect' && (e.itemType === this.task.goal.itemType || e.type === 'cabinet') ||
-      this.task?.goal.kind === 'repair' && e.itemType === 'repair' && !this.engine.state.robot.inventory.some(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair')
+      e.type === 'door' || e.type === 'obstacle' || e.type === 'switch' && (this.task?.goal?.kind === 'collect' || this.task?.goal?.kind === 'circuit') || e.type === 'airlock' && this.task?.goal?.kind === 'repair' ||
+      this.task?.goal?.kind === 'collect' && (e.itemType === this.task.goal.itemType || e.type === 'cabinet') ||
+      this.task?.goal?.kind === 'repair' && e.itemType === 'repair' && !this.engine.state.robot.inventory.some(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair')
     );
   }
 
   private taskSatisfied(): boolean {
+    // Live delegation ends through finish_task, never a keyword-derived milestone.
+    if (this.adapter.mode === 'live' || this.task?.interpretation !== 'demo') return false;
     const goal = this.task?.goal;
     if (!goal) return false;
     if (this.engine.terminal) return this.engine.state.phase === 'success';
@@ -474,8 +497,11 @@ export class GameSession {
       {
         name: 'finish_task', label: '结束任务', description: '仅结束本次委托，不改变游戏胜负。', executionMode: 'sequential', parameters: Type.Object({ reason: Type.String({ maxLength: 800 }) }, { additionalProperties: false }),
         execute: async (_id, raw) => {
-          if (!this.taskSatisfied() && this.task?.goal.kind !== 'custom') { this.pause('当前目标尚未满足，任务保留。'); this.control = 'wait_player'; }
-          else { this.control = 'task_done'; if (this.task) this.task.status = 'completed'; }
+          if (this.task?.interpretation === 'demo' && !this.taskSatisfied()) {
+            this.pause('当前目标尚未满足，任务保留。'); this.control = 'wait_player';
+            return { ...this.emptyResult('TASK_INCOMPLETE', '本地演示目标尚未满足。'), terminate: true };
+          }
+          this.control = 'task_done'; if (this.task) this.task.status = 'completed';
           this.say('robot', (raw as { reason: string }).reason);
           return { ...this.emptyResult('TASK_DONE', '本次自动运行结束。'), terminate: true };
         },
@@ -490,27 +516,10 @@ export class GameSession {
     return { content: [{ type: 'text', text: message }], details: { accepted: code === 'OK' || code === 'TASK_DONE', code, message, delta: emptyDelta(), costTU: 0 } };
   }
 
-  private parseGoal(text: string, selected?: Position): Goal {
-    if (/抱起|搬起/.test(text)) return { kind: 'pickup' };
-    if (/修.*供氧|修.*氧气|修补.*我/.test(text)) return { kind: 'repair', targetId: 'human' };
-    if (/维修.*气闸|修.*控制器/.test(text)) return { kind: 'repair', targetId: 'airlock' };
-    if (/找.*电池|拿.*电池|取.*电池/.test(text)) return { kind: 'collect', itemType: 'battery', returnHome: /回来|返回/.test(text) };
-    if (/找.*维修|拿.*材料|取.*材料/.test(text)) return { kind: 'collect', itemType: 'repair', returnHome: /回来|返回/.test(text) };
-    if (/(关闭|切断|断开).*电路|断电/.test(text)) return { kind: 'circuit', on: false };
-    if (/(开启|打开|接通).*电路|通电/.test(text)) return { kind: 'circuit', on: true };
-    if (/撤离|启动气闸/.test(text)) return { kind: 'extract' };
-    if (/回来|返回|回到我/.test(text)) return { kind: 'goto', position: { ...this.engine.state.human.position } };
-    const coordinate = text.match(/(?:\(|（)?\s*(\d{1,2})\s*[,，]\s*(\d{1,2})/);
-    if (coordinate) return { kind: 'goto', position: { x: Number(coordinate[1]), y: Number(coordinate[2]) } };
-    const room = this.engine.level.rooms.find(value => text.includes(value.name));
-    if (room) return { kind: 'goto', position: { ...room.position } };
-    if (selected && /前往|过去|检查标记|去那里/.test(text)) return { kind: 'goto', position: { ...selected } };
-    return { kind: 'custom' };
-  }
-
   private demoIntents(): ToolIntent[] {
     const task = this.task;
     if (!task) return [{ name: 'ask_player', arguments: { question: '请给我一个目标。' } }];
+    if (!task.goal || !task.demoSupported) return [{ name: 'ask_player', arguments: { question: demoHelp } }];
     const goal = task.goal;
     const go = (target: Position): ToolIntent => ({ name: 'move_to', arguments: { target, maxSteps: 12 } });
     const interact = (operation: string, targetId?: string, itemId?: string): ToolIntent => ({ name: 'interact', arguments: { operation, ...(targetId ? { targetId } : {}), ...(itemId ? { itemId } : {}) } });
@@ -544,7 +553,7 @@ export class GameSession {
       if (target) return [go(this.approach(target)), interact('repair', target.id)];
       return [go(this.engine.level.exit)];
     }
-    return [{ name: 'ask_player', arguments: { question: '当前是规则演示模式。支持“前往 (x,y)”“去设备间找电池并回来”“开启辅助电路”“关闭辅助电路”“修补我的供氧管”“抱起我”等明确指令；复杂对话需配置真实模型。' } }];
+    return [{ name: 'ask_player', arguments: { question: demoHelp } }];
   }
 
   private demoCircuitIntents(on: boolean, device?: ObservedEntity): ToolIntent[] {
@@ -584,12 +593,8 @@ export class GameSession {
       if (expectedRevision !== undefined && expectedRevision !== this.engine.state.stateRevision) throw new RevisionConflictError('地图状态已更新，请根据最新信息重试');
       if (this.engine.terminal) throw new Error('本局已经结束，请创建新局。');
       this.commandRevision++;
-      const constraints = defaultConstraints();
-      constraints.reserveReturnBattery = /保留.*返回|返回.*电量|足够.*回来/.test(text);
-      constraints.stopOnHazard = /危险.*停|漏电.*停/.test(text);
-      if (/修.*供氧|修.*氧气|修补.*我/.test(text)) constraints.allowedRepairs.push('human');
-      if (/维修.*气闸|修.*控制器/.test(text)) constraints.allowedRepairs.push('airlock');
-      this.task = { id: crypto.randomUUID(), text, goal: this.parseGoal(text, selected), status: 'active', question: null, constraints };
+      this.task = { id: crypto.randomUUID(), text, ...(selected ? { selected: { ...selected } } : {}), interpretation: this.adapter.mode === 'live' ? 'model' : 'demo', status: 'active', question: null, constraints: defaultConstraints() };
+      this.interpretTask();
       this.deniedCalls.clear();
       this.say('human', text);
       await this.startRun(text);
@@ -673,13 +678,18 @@ export class GameSession {
   save(): SessionSave { return { version: 1, id: this.id, engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
   async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');
-    this.engine.restore(save.engine); this.task = save.task; this.messages = save.messages; this.metrics = save.metrics; this.eventId = save.eventId;
+    this.engine.restore(save.engine); this.task = structuredClone(save.task); this.messages = save.messages; this.metrics = save.metrics; this.eventId = save.eventId;
     if (save.modelConfig) {
       const config = validateModelConfig(save.modelConfig);
       this.adapter = config.mode === 'live' ? await liveModel(config, apiKey) : this.demoAdapter(config);
       this.modelKey = config.mode === 'live' ? apiKey ?? '' : '';
       this.agent.state.model = this.adapter.model; this.agent.streamFunction = this.adapter.streamFn;
       if (this.adapter.ready === false) this.modelError = '存档的真实模型未找到可用凭据，请检查 pi 登录、API Key 或模型设置。';
+    }
+    if (this.task) {
+      const legacyLiveTask = this.adapter.mode === 'live' && this.task.interpretation !== 'model';
+      this.interpretTask();
+      if (legacyLiveTask) this.task.status = 'paused';
     }
     if (this.task && (this.task.status === 'active' || this.task.waitReason === 'authorization' || this.task.waitReason === 'power')) { this.task.status = 'paused'; this.task.question = null; this.task.waitReason = undefined; }
   }
