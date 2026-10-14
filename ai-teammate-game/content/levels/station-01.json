@@ -1,0 +1,60 @@
+{
+  "id": "station-01",
+  "version": 1,
+  "name": "第七站 · 事故舱",
+  "width": 12,
+  "height": 12,
+  "tiles": [
+    "############",
+    "#......#..E#",
+    "#......#...#",
+    "#......D...#",
+    "#......#...#",
+    "#......#...#",
+    "####.###.###",
+    "#......#...#",
+    "#......#...#",
+    "#......#...#",
+    "#......X...#",
+    "############"
+  ],
+  "humanStart": { "x": 1, "y": 9 },
+  "robotStart": { "x": 2, "y": 9 },
+  "exit": { "x": 10, "y": 1 },
+  "rules": {
+    "oxygen": 120,
+    "oxygenMax": 180,
+    "oxygenRate": 2,
+    "repairedOxygenRate": 1,
+    "battery": 90,
+    "batteryMax": 100,
+    "batteryRefill": 30,
+    "oxygenRefill": 40,
+    "inventorySlots": 2,
+    "sensorRadius": 1,
+    "radarRadius": 5,
+    "leakCost": 6,
+    "moveLimit": 12,
+    "toolLimit": 6,
+    "requestLimit": 8,
+    "actionTULimit": 12
+  },
+  "rooms": [
+    { "name": "事故舱", "position": { "x": 2, "y": 9 } },
+    { "name": "维修区", "position": { "x": 4, "y": 8 } },
+    { "name": "设备间", "position": { "x": 4, "y": 3 } },
+    { "name": "气闸", "position": { "x": 9, "y": 1 } }
+  ],
+  "entities": [
+    { "id": "s-01", "type": "supply", "name": "维修材料", "position": { "x": 3, "y": 8 }, "itemType": "repair", "reflection": 1 },
+    { "id": "s-02", "type": "supply", "name": "维修材料", "position": { "x": 4, "y": 8 }, "itemType": "repair", "reflection": 1 },
+    { "id": "s-03", "type": "supply", "name": "氧气补给", "position": { "x": 5, "y": 7 }, "itemType": "oxygen", "reflection": 1 },
+    { "id": "c-01", "type": "cabinet", "name": "电池柜", "position": { "x": 5, "y": 3 }, "powerRequired": true, "reflection": 3 },
+    { "id": "s-04", "type": "supply", "name": "备用电池", "position": { "x": 5, "y": 3 }, "itemType": "battery", "containerId": "c-01", "reflection": 1 },
+    { "id": "sw-01", "type": "switch", "name": "辅助电路开关", "position": { "x": 6, "y": 1 }, "reflection": 2 },
+    { "id": "d-01", "type": "door", "name": "辅助电动门", "position": { "x": 7, "y": 3 }, "powerRequired": true, "reflection": 2 },
+    { "id": "h-01", "type": "hazard", "name": "暴露的带电线路", "position": { "x": 8, "y": 3 }, "reflection": 2 },
+    { "id": "o-01", "type": "obstacle", "name": "坍塌金属架", "position": { "x": 7, "y": 10 }, "reflection": 3 },
+    { "id": "a-01", "type": "airlock", "name": "气闸控制器", "position": { "x": 9, "y": 1 }, "reflection": 2 }
+  ]
+}
