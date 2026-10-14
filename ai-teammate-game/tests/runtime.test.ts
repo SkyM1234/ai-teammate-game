@@ -278,7 +278,7 @@ test('共享信息或状态变化使待授权调用失效，存档恢复不重�
   const { session } = scripted([[repair, report], [finish]]); giveMaterial(session);
   await session.command('检查救援情况'); const pending = await authorization(session);
   const saved = session.save(); assert.ok(!JSON.stringify(saved).includes(pending.id));
-  const restored = new GameSession(level, { id: session.id, delayMs: 0 }); restored.restore(saved);
+  const restored = new GameSession(level, { id: session.id, delayMs: 0 }); await restored.restore(saved);
   assert.equal(restored.pendingAuthorization, null); assert.equal(restored.task?.status, 'paused'); assert.equal(restored.task?.waitReason, undefined);
   session.marker({ x: 4, y: 8 }, '先检查这里', true); await session.settled();
   await assert.rejects(session.authorize(pending.id, true), /失效/);

@@ -59,6 +59,7 @@
   <dialog id="model-dialog" class="game-dialog model-dialog" aria-labelledby="model-dialog-title">
     <form id="model-form" novalidate>
       <div class="section-title"><h2 id="model-dialog-title">机器人模型</h2><button id="model-close" type="button" aria-label="关闭模型设置">关闭</button></div>
+      <div class="model-default"><p id="model-default-summary" class="subtle"></p><button id="model-use-default" type="button">使用新局默认</button></div>
       <label>运行模式<select id="model-mode"><option value="demo">本地规则演示</option><option value="live">真实模型</option></select></label>
       <div id="live-settings">
         <label>模型服务<select id="model-provider"></select></label>
@@ -67,11 +68,11 @@
         <label>API Key（可选覆盖）<input id="model-key" type="password" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="默认复用本机 pi 凭据，无需填写"></label>
         <p id="model-key-hint" class="subtle"></p>
         <details><summary>请求限制</summary><div class="model-limits"><label>超时（毫秒）<input id="model-timeout" type="number" min="1000" max="120000" step="1000"></label><label>输出上限（tokens）<input id="model-tokens" type="number" min="256" max="8192" step="1"></label></div></details>
-        <p class="subtle">真实模型请求会产生 API 费用。填写密钥后点击应用；下一条指令将请求模型。</p>
+        <p class="subtle">真实模型可能产生服务商费用。应用设置后，下一条指令将请求模型。</p>
       </div>
-      <p class="subtle">默认复用本机 pi 用户目录的 API Key，重启和恢复存档后自动读取。此处填写的覆盖密钥仅保存在服务端内存。切换保留游戏进度。</p>
+      <p class="subtle">应用后记为新局默认，重启后仍保留模型选择。自动复用 pi 登录或 API Key；手动密钥在本次服务运行期间跨局复用，重启后需重新填写。恢复存档沿用该局模型。</p>
       <p id="model-form-error" class="model-form-error" role="alert" hidden></p>
-      <button id="model-apply" type="submit" class="primary">应用设置</button>
+      <button id="model-apply" type="submit" class="primary">应用并设为新局默认</button>
     </form>
   </dialog>
   <div id="toast" class="toast" role="status" hidden></div>

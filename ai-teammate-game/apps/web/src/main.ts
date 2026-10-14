@@ -1,5 +1,6 @@
 import type { SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
+import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { Action, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -14,7 +15,9 @@ let toastTimer: ReturnType<typeof setTimeout>;
 let sending = false;
 let lastMessages = '';
 let markerEditorKey = '';
-let providers: ReturnType<typeof modelCatalog> = [];
+let providers: Awaited<ReturnType<typeof modelCatalog>> = [];
+let modelDefaults: ModelPreferencesView | null = null;
+let modelFormConfig: ModelConfig | null = null;
 let answeringAuthorization = false;
 let restoringSave = false;
 const phaseNames: Record<string, string> = { awaiting_command: '等待指令', agent_thinking: '正在决策', executing: '行动中', awaiting_player: '等待你的决定', paused: '已暂停', success: '救援成功', failure: '救援失败' };
@@ -69,7 +72,7 @@ function render() {
   $('robot-status').textContent = `${phaseNames[p.phase]} / 坐标 (${p.robot.position.x}, ${p.robot.position.y})`;
   $('circuit-state').textContent = p.circuitOn ? '已通电 · 故障可能带电' : '已断电';
   $('agent-label').textContent = view.agentLabel;
-  $('model-status').textContent = view.modelError ?? (view.agentMode === 'live' ? !view.modelReady ? '缺少 API Key · 请打开模型设置' : view.running ? '模型已配置 · 任务运行中' : '模型已配置 · 等待指令（连接将在请求时验证）' : '本地演示 · 无模型请求');
+  $('model-status').textContent = view.modelError ?? (view.agentMode === 'live' ? !view.modelReady ? '缺少模型凭据 · 请打开模型设置' : view.running ? '模型已配置 · 任务运行中' : '模型已配置 · 等待指令（连接将在请求时验证）' : '本地演示 · 无模型请求');
   $('model-status').classList.toggle('has-error', !!view.modelError || !view.modelReady);
   if (view.agentMode === 'live' && view.modelReady && !view.modelError && view.modelCredentialSource === 'pi') $('model-status').textContent += ' · 复用本机 pi 凭据';
   $('mode-help').textContent = view.agentMode === 'live' ? '自然语言报告仅作通信；确认信息以地图和行动记录为准。遇到关键变化，机器人会重新决策。' : '规则演示支持明确目标和坐标，如“前往 (4,8)”。复杂对话需配置真实模型。';
@@ -307,27 +310,34 @@ function updateModelFields(reset = false) {
   $('model-ids').replaceChildren(...provider.models.map(id => { const option = document.createElement('option'); option.value = id; return option; }));
   $<HTMLInputElement>('model-url').readOnly = provider.id !== 'compatible';
   const retained = view?.modelReady && view.agentMode === 'live' && view.modelConfig.provider === provider.id && view.modelConfig.baseUrl === $<HTMLInputElement>('model-url').value;
-  const piKey = provider.hasPiKey || (provider.id === 'compatible' && /^https:\/\/api\.deepseek\.com(?:\/|$)/.test($<HTMLInputElement>('model-url').value) && providers.some(p => p.id === 'deepseek' && p.hasPiKey));
-  $('model-key-hint').textContent = retained && view?.modelCredentialSource === 'manual' ? '当前会话已配置覆盖密钥，留空沿用。' : piKey ? '已找到本机 pi API Key，留空自动复用；重启后仍可使用。' : provider.hasEnvironmentKey ? '服务端已有此服务的环境密钥，可以留空。' : retained ? '当前会话已有可用凭据，可以留空。' : '本机 pi 暂无此接口凭据，可填写 API Key。';
+  const piCredential = provider.ready && provider.credentialSource === 'pi' || (provider.id === 'compatible' && /^https:\/\/api\.deepseek\.com(?:\/|$)/.test($<HTMLInputElement>('model-url').value) && providers.some(p => p.id === 'deepseek' && p.ready && p.credentialSource === 'pi'));
+  const remembered = modelDefaults?.ready && modelDefaults.credentialSource === 'manual' && modelDefaults.config.provider === provider.id && modelDefaults.config.baseUrl === $<HTMLInputElement>('model-url').value;
+  $('model-key-hint').textContent = remembered || retained && view?.modelCredentialSource === 'manual' ? '本次服务已记住此接口的覆盖密钥，留空沿用；新局也会自动复用。' : piCredential ? '已找到本机 pi 凭据，留空自动复用。' : provider.ready ? '服务端已有此服务的环境凭据，可以留空。' : retained ? '当前会话已有可用凭据，可以留空。' : '暂无可用凭据，可在 pi 中登录或配置 API Key，也可在此填写密钥。';
   $('live-settings').hidden = $<HTMLSelectElement>('model-mode').value !== 'live';
+}
+function fillModelFields(config: ModelConfig) {
+  modelFormConfig = config;
+  $<HTMLSelectElement>('model-mode').value = config.mode;
+  $<HTMLSelectElement>('model-provider').value = config.provider;
+  $<HTMLInputElement>('model-id').value = config.modelId;
+  $<HTMLInputElement>('model-url').value = config.baseUrl;
+  $<HTMLInputElement>('model-timeout').value = String(config.timeoutMs);
+  $<HTMLInputElement>('model-tokens').value = String(config.maxTokens);
+  $<HTMLInputElement>('model-key').value = '';
+  updateModelFields();
 }
 $('model-settings').onclick = async () => {
   if (!view) return;
   try {
-    providers = await api<ReturnType<typeof modelCatalog>>('/api/models');
+    [providers, modelDefaults] = await Promise.all([api<Awaited<ReturnType<typeof modelCatalog>>>('/api/models'), api<ModelPreferencesView>('/api/model-settings')]);
     $('model-provider').replaceChildren(...providers.map(p => { const option = document.createElement('option'); option.value = p.id; option.textContent = p.name; return option; }));
-    const config = view.modelConfig;
-    $<HTMLSelectElement>('model-mode').value = config.mode;
-    $<HTMLSelectElement>('model-provider').value = config.provider;
-    $<HTMLInputElement>('model-id').value = config.modelId;
-    $<HTMLInputElement>('model-url').value = config.baseUrl;
-    $<HTMLInputElement>('model-timeout').value = String(config.timeoutMs);
-    $<HTMLInputElement>('model-tokens').value = String(config.maxTokens);
-    $<HTMLInputElement>('model-key').value = '';
+    $('model-default-summary').textContent = `新局默认：${modelDefaults.config.mode === 'demo' ? '本地规则演示' : `${modelDefaults.config.provider} / ${modelDefaults.config.modelId}${modelDefaults.ready ? '' : ' · 待补充凭据'}`}`;
+    fillModelFields(view.modelConfig);
     $('model-form-error').hidden = true;
     updateModelFields(); $<HTMLDialogElement>('model-dialog').showModal();
   } catch (error) { toast(error instanceof Error ? error.message : String(error)); }
 };
+$('model-use-default').onclick = () => { if (modelDefaults) fillModelFields(modelDefaults.config); };
 $('model-provider').onchange = () => updateModelFields(true);
 $('model-mode').onchange = () => updateModelFields();
 $('model-url').oninput = () => updateModelFields();
@@ -342,11 +352,11 @@ $('model-form').onsubmit = async event => {
     timeoutMs: Number($<HTMLInputElement>('model-timeout').value), maxTokens: Number($<HTMLInputElement>('model-tokens').value),
   };
   // Demo can always be selected, including an unfinished custom endpoint form.
-  const applied = config.mode === 'demo' ? { ...view.modelConfig, mode: 'demo' } : config;
+  const applied = config.mode === 'demo' ? { ...(modelFormConfig ?? view.modelConfig), mode: 'demo' } : config;
   const apply = $<HTMLButtonElement>('model-apply'); apply.disabled = true; $('model-form-error').hidden = true;
   try {
     const next = await api<SessionView>(`/api/sessions/${view.sessionId}/model`, { requestId: crypto.randomUUID(), config: applied, apiKey: $<HTMLInputElement>('model-key').value });
-    accept(next); $<HTMLDialogElement>('model-dialog').close(); toast('模型设置已应用，游戏进度已保留。');
+    accept(next); $<HTMLDialogElement>('model-dialog').close(); toast('模型设置已应用并记为新局默认。');
   } catch (error) { $('model-form-error').textContent = error instanceof Error ? error.message : String(error); $('model-form-error').hidden = false; }
   finally { apply.disabled = false; }
 };

@@ -11,7 +11,7 @@ cd D:\pi\ai-teammate-game
 npm run dev
 ```
 
-打开 **http://127.0.0.1:4317**。默认使用本地规则演示，**不请求模型、没有模型费用**，但仍通过真正的 pi Agent 执行工具和生命周期钩子。页面会明确标注当前模式。
+打开 **http://127.0.0.1:4317**。首次启动使用本地规则演示，**不请求模型、没有模型费用**，但仍通过真正的 pi Agent 执行工具和生命周期钩子。配置模型后，新的一局自动沿用已保存的默认设置。页面会明确标注当前模式。
 
 需要 Node.js **24.4 或更新版本**。本工作区复用相邻 `../pi-main` 中已有的 TypeScript、esbuild、pi-agent 与 pi-ai 构建产物，无需安装依赖。运行前应存在：
 
@@ -19,7 +19,8 @@ npm run dev
 - `pi-main/node_modules/esbuild/lib/main.js`
 - `pi-main/packages/agent/dist/index.js`
 - `pi-main/packages/ai/dist/index.js`
-- `pi-main/packages/coding-agent/dist/config.js` 与 `dist/core/resolve-config-value.js`（复用 pi 用户目录及凭据值解析）
+- `pi-main/packages/ai/dist/providers/all.js`（复用 pi 服务商与模型目录）
+- `pi-main/packages/coding-agent/dist/config.js`、`dist/core/auth-storage.js`、`dist/core/runtime-credentials.js` 与 `dist/core/resolve-config-value.js`（复用 pi 用户目录、凭据存储与运行时覆盖）
 
 当前采用 TypeScript、原生 DOM、Canvas 2D 与 Node HTTP，不修改 pi 仓库源码。启动时重新打包网页；修改代码后重新启动生效。另一个端口可通过 `$env:PORT = '4318'` 设置。
 
@@ -94,17 +95,19 @@ npm run dev
 
 ## 接入真实模型
 
-点击页面右上角 **“模型设置”**，选择“真实模型”、服务商和模型 ID 后直接应用。游戏默认复用本机 pi 用户目录 `~/.pi/agent/auth.json` 中对应服务商的 API Key，无需再次填写。`PI_CODING_AGENT_DIR` 指定的自定义用户目录也会生效。再发送指令或点击“继续任务”，机器人就会通过 pi 请求真实模型。支持 DeepSeek、Anthropic / Claude，以及提供 Chat Completions 流式工具调用的自定义兼容接口。
+点击页面右上角 **“模型设置”**，选择“真实模型”、服务商和模型 ID 后直接应用。游戏默认复用本机 pi 用户目录 `~/.pi/agent/auth.json` 中对应服务商的 API Key 或 OAuth 登录凭据，无需再次填写。`PI_CODING_AGENT_DIR` 指定的自定义用户目录也会生效。再发送指令或点击“继续任务”，机器人就会通过 pi 请求真实模型。服务商和聊天模型列表直接来自 `pi-ai` 的内置目录，包括 DeepSeek、Anthropic、OpenAI、Google、OpenRouter 等；保留提供 Chat Completions 流式工具调用的自定义兼容接口。仅有动态目录、尚无本地模型列表的服务商不显示。
 
-模型 ID 列表来自本地 pi 目录。当前目录的 DeepSeek 默认模型为 `deepseek-flash`；其他模型可在设置中选择。自定义接口需填写完整基础地址（例如 `https://example.com/v1`）和模型 ID；需要支持 `tools`、`tool_calls` 与 SSE 流式响应。接口地址不允许包含用户名、密码或查询参数。真实模式不会自动降级到规则演示。
+现有弹窗的 **“应用并设为新局默认”** 同时更新当前对局和新局默认，点击“新的一局”即可自动使用，无需再次配置。运行模式、服务商、模型、地址、超时和输出上限保存在 `.saves/model-settings.json`，重启后仍然生效；保存的默认设置优先于启动环境变量。弹窗显示新局默认，并可点击“使用新局默认”填入表单后应用。其他已有对局保留原配置，恢复存档沿用该局的模型。
+
+模型 ID、API 类型、接口地址和兼容参数来自本地 pi 目录，服务商决定实际请求协议；不再由游戏逐个映射服务商。当前目录的 DeepSeek 默认模型为 `deepseek-flash`；其他模型可在设置中选择。Azure、Bedrock、Vertex 等还需按 pi 对应服务商的要求配置部署、区域或环境凭据。自定义接口需填写完整基础地址（例如 `https://example.com/v1`）和模型 ID；需要支持 `tools`、`tool_calls` 与 SSE 流式响应。接口地址不允许包含用户名、密码或查询参数。真实模式不会自动降级到规则演示。
 
 DeepSeek 目录入口直接使用 pi 的完整模型定义，包括 `reasoning`、`thinkingLevelMap` 与 `compat`。自定义接口指向 `api.deepseek.com` 且模型 ID 在目录中时，同样继承这些参数，保证工具历史携带 `reasoning_content`。游戏当前使用 `thinkingLevel: off`，由 pi 转为 DeepSeek 的 `thinking: { type: 'disabled' }`。
 
 服务进程需要外网权限。若由编码助手在网络受限的沙箱中启动，浏览器仍能打开本地页面，但服务端模型请求可能返回连接失败或 `EACCES`。请在本机正常 PowerShell 中执行 `npm run dev`，或允许编码助手在沙箱外启动服务。
 
-凭据优先级为：页面手动覆盖 → 本机 pi API Key → 服务端环境变量。pi 凭据只读使用，不创建或修改用户的 `auth.json`，不会复制到游戏目录。每次模型请求重新读取，因此更新 pi 密钥后下一次请求即可使用新值。支持 pi 的凭据环境变量引用与已有密钥命令解析；本次只读取 API Key 类型，不将 OAuth 登录令牌当作 API Key。
+凭据优先级为：页面手动覆盖 → 本机 pi 凭据 → 服务商支持的环境或系统凭据。游戏通过 pi 的 `RuntimeCredentials` 和 `Models` 复用鉴权流程，支持凭据环境变量引用、已有密钥命令解析及服务商自己的 OAuth 处理。普通读取不创建或改写 `auth.json`；OAuth 临近过期时，pi 会在文件锁内刷新并将新令牌写回该文件，避免并发重复刷新或破坏 pi 原有登录。刷新失败保留原凭据，不静默回退到环境密钥。凭据不会复制到游戏目录。每次请求重新读取，因此更新 pi 密钥后下一次请求即可使用新值。
 
-页面仅显示凭据来源，不返回密钥；密钥不会写入浏览器存储、游戏存档或对话。恢复存档或重启后自动读取 pi 凭据。可选的页面覆盖密钥仅保留在服务端内存。自定义接口仅在地址为 `https://api.deepseek.com`（可带 `/v1` 等路径）时自动复用 DeepSeek 凭据，其他接口使用手动密钥或 `GAME_MODEL_API_KEY`。
+页面仅显示凭据来源，不返回密钥；密钥不会写入浏览器存储、默认设置文件、游戏存档或对话。恢复存档或重启后自动读取 pi 凭据。可选的页面覆盖密钥仅保留在服务端内存，按服务商和接口基础地址隔离，同一次服务运行中新局和恢复存档可自动复用；填写框留空沿用已记住的对应接口密钥。重启后手动密钥清除，需要重新填写；使用 pi 登录或环境凭据则无需重复输入。自定义接口仅在地址为 `https://api.deepseek.com`（可带 `/v1` 等路径）时自动复用 DeepSeek 凭据，其他接口使用手动密钥或 `GAME_MODEL_API_KEY`。
 
 也可复制 [.env.example](.env.example) 为 `.env`，填写对应密钥，`npm run dev` 会自动加载。已有环境变量优先于 `.env`。以下示例默认启用 DeepSeek：
 
@@ -118,7 +121,7 @@ npm run dev
 
 Anthropic 使用 `GAME_MODEL_PROVIDER=anthropic`、`GAME_MODEL_ID=claude-sonnet-4-6` 和 `ANTHROPIC_API_KEY`。自定义接口使用 `GAME_MODEL_PROVIDER=compatible`、`GAME_MODEL_ID`、`GAME_MODEL_BASE_URL` 和 `GAME_MODEL_API_KEY`。目录服务的模型 ID 必须存在于当前 pi 模型目录。
 
-设置支持 1–120 秒超时和 256–8192 tokens 输出上限，默认 30 秒 / 2000 tokens；禁用自动重试。切换模型会取消正在等待的请求、暂停委托并保留已提交动作。鉴权、限流、连接失败或超时会明确显示错误，可修正设置后继续；未执行动作不扣资源。模型回复中的通信文本也会显示，包含同时调用工具的回复。
+设置支持 1–120 秒超时和 256–8192 tokens 输出上限，默认 30 秒 / 2000 tokens；模型请求禁用自动重试，OAuth 刷新沿用 pi 的策略。设置页通过 pi 的鉴权检查显示可用凭据，不刷新令牌或验证远程连接。切换模型会取消正在等待的请求、暂停委托并保留已提交动作。鉴权、限流、连接失败或超时会明确显示错误，可修正设置后继续；未执行动作不扣资源。模型回复中的通信文本也会显示，包含同时调用工具的回复。
 
 真实模型会产生提供商 API 费用。已通过本地模拟 HTTP/SSE 接口运行真实 pi 提供方代码，验证请求、工具循环、取消、超时及密钥隔离；没有发起付费外部请求，提供商线上表现仍需配置密钥后实测。自然语言报告作为通信文本展示；确认事实以程序生成的发现、地图和行动账本为准。
 
@@ -130,7 +133,7 @@ npm test
 npm run verify:routes
 ```
 
-52 项测试覆盖领域规则、实体开关的知识与距离校验、前端邻接操作及请求去重、旧存档迁移与跨位置回放、信息隔离、pi 串行批次、逐工具差分、执行中改令、停止、按钮授权及过期处理、预算、并发版本冲突、HTTP/SSE、存档、完整救援回放和真实模型 HTTP 接入，包括 DeepSeek Flash / Pro 的目录与兼容入口请求参数、推理工具历史，以及 pi 用户凭据复用、优先级、密钥更新和隔离。
+测试覆盖领域规则、实体开关的知识与距离校验、前端邻接操作及请求去重、旧存档迁移与跨位置回放、信息隔离、pi 串行批次、逐工具差分、执行中改令、停止、按钮授权及过期处理、预算、并发版本冲突、HTTP/SSE、存档、完整救援回放和真实模型 HTTP 接入，包括 DeepSeek Flash / Pro 的请求参数与推理工具历史、全部静态聊天模型目录、pi 凭据优先级和密钥更新、Anthropic OAuth 流式接入，以及模拟 OAuth 并发刷新、持久化与失败保留。默认设置测试验证跨局复用、重启后的模型选择和 pi 凭据、旧存档配置、接口密钥隔离及错误设置不覆盖默认。
 
 初始氧气 120、电量 90；两条经过实际规则验证的救援路线：
 

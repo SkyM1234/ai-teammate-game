@@ -10,6 +10,7 @@ import type { ModelAdapter } from './model.ts';
 import { validateLevel } from '../../../packages/game-core/src/level.ts';
 import { GameEngine } from '../../../packages/game-core/src/engine.ts';
 import { SessionJournal, readableGame } from './journal.ts';
+import { ModelPreferences } from './model-preferences.ts';
 import type { Action, Level, Position } from '../../../packages/game-core/src/types.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
@@ -39,6 +40,7 @@ function actionFrom(value: unknown): Action {
 
 export function createAppServer(level: Level, options: { savesDir?: string; adapter?: ModelAdapter; delayMs?: number } = {}) {
   const savesDir = options.savesDir ?? join(root, '.saves');
+  const modelPreferences = new ModelPreferences(savesDir, options.adapter);
   const sessions = new Map<string, GameSession>();
   const pendingWrites = new Map<string, Promise<void>>();
   const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -105,7 +107,8 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
     catch { throw new HttpError(404, '没有找到有效存档'); }
     const previous = sessions.get(id); if (previous) { await previous.stop(); await previous.journal?.flush(); }
     clearTimeout(saveTimers.get(id)); saveTimers.delete(id);
-    const session = new GameSession(level, { ...options, id }); session.restore(save); register(session);
+    const session = new GameSession(level, { ...options, id });
+    await session.restore(save, save.modelConfig ? modelPreferences.keyFor(save.modelConfig) : undefined); register(session);
     await persist(session); return session;
   }
   const server = createServer(async (req, res) => {
@@ -126,9 +129,10 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
         json(res, session?.view() ?? null); return;
       }
       if (req.method === 'GET' && url.pathname === '/api/saves') { json(res, await listSaves()); return; }
-      if (req.method === 'GET' && url.pathname === '/api/models') { json(res, modelCatalog()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/models') { json(res, await modelCatalog()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/model-settings') { json(res, await modelPreferences.view()); return; }
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
-        await body(req); const session = register(new GameSession(level, options)); await persist(session); json(res, session.view(), 201); return;
+        await body(req); const session = register(new GameSession(level, { ...options, ...await modelPreferences.newSessionOptions() })); await persist(session); json(res, session.view(), 201); return;
       }
       const match = url.pathname.match(/^\/api\/sessions\/([a-f\d-]+)(?:\/(\w+))?$/i);
       if (!match) throw new HttpError(404, '接口不存在');
@@ -166,7 +170,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
           } else if (operation === 'action') await session.manual(actionFrom(input.action), input.requestId as string, input.allowHazard === true, input.expectedRevision as number);
           else if (operation === 'stop') await session.stop();
           else if (operation === 'continue') await session.continue();
-          else if (operation === 'model') await session.configureModel(input.config, input.apiKey);
+          else if (operation === 'model') await modelPreferences.save(input.config, input.apiKey, (config, apiKey) => session.configureModel(config, apiKey));
           else if (operation === 'authorize') {
             if (typeof input.authorizationId !== 'string' || !uuidPattern.test(input.authorizationId) || typeof input.approve !== 'boolean') throw new HttpError(400, '授权参数不合法');
             await session.authorize(input.authorizationId, input.approve);
@@ -198,7 +202,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const level = validateLevel(JSON.parse(await readFile(join(root, 'content/levels/station-01.json'), 'utf8')));
-  const adapter = configuredModel();
+  const adapter = await configuredModel();
   const app = createAppServer(level, adapter ? { adapter } : {});
   const port = Number(process.env.PORT ?? 4317);
   app.server.listen(port, '127.0.0.1', () => console.log(`LAST OXYGEN → http://127.0.0.1:${port} (${adapter?.label ?? '本地规则演示，无模型费用'})`));

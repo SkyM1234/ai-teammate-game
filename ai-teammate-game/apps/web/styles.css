@@ -32,6 +32,9 @@ textarea { resize: none; }
 .model-dialog input[readonly] { color: var(--muted); }
 .model-dialog details { margin: 14px 0; }
 .model-dialog summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.model-default { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--edge); border-radius: 6px; }
+.model-default p { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.model-default button { flex-shrink: 0; font-size: 11px; }
 .model-limits { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .game-dialog .primary { width: 100%; }
 .authorization-message { border: 1px solid #f2b86488; }

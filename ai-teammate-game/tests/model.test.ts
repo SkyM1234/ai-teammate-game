@@ -52,7 +52,7 @@ test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把�
     { name: 'move_to', arguments: { target: { x: 3, y: 9 }, maxSteps: 1 } },
     { name: 'report', arguments: { text: '已移动一格。' } },
   ] : [{ name: 'finish_task', arguments: { reason: '检查结束。' } }], index === 0 ? '开始检查附近通道。' : ''));
-  const session = new GameSession(level, { adapter: liveModel(config, secret), delayMs: 0 });
+  const session = new GameSession(level, { adapter: await liveModel(config, secret), delayMs: 0 });
   const directory = await journal(t, session);
   await session.command('检查附近通道并报告'); await session.settled();
   assert.equal(requests.length, 2); assert.equal(requests[0].path, '/v1/chat/completions');
@@ -98,7 +98,7 @@ test('DeepSeek 目录和兼容入口保留完整模型参数，pi-agent 正确�
         { name: 'move_to', arguments: { target: { x: 3, y: 9 }, maxSteps: 1 } },
       ] : [{ name: 'finish_task', arguments: { reason: '检查完成。' } }], '', 'mock-reasoning-for-tool-round'));
       const config = validateModelConfig({ ...defaultModelConfig, mode: 'live', provider, modelId, baseUrl: `https://api.deepseek.com${provider === 'compatible' ? '/v1' : ''}` });
-      const adapter = liveModel(config, secret);
+      const adapter = await liveModel(config, secret);
       const catalog = deepseekProvider().getModels().find(m => m.id === modelId)!;
       assert.equal(adapter.model.reasoning, true);
       assert.deepEqual(adapter.model.compat, catalog.compat);
@@ -133,7 +133,7 @@ test('上游鉴权错误和超时暂停任务，不泄露上游错误内容或�
       if (failure === 'timeout') return;
       res.writeHead(401, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: `invalid api key ${secret}`, type: 'authentication_error' } }));
     });
-    const session = new GameSession(level, { adapter: liveModel(config, secret), delayMs: 0 });
+    const session = new GameSession(level, { adapter: await liveModel(config, secret), delayMs: 0 });
     const directory = await journal(t, session);
     await session.command('检查附近'); await session.settled();
     assert.equal(session.running, false); assert.equal(session.task?.status, 'paused');
@@ -159,7 +159,7 @@ test('执行一批动作后的下一次请求失败，仅保留已提交动作�
     else if (index === 1) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'server failure' } })); }
     else completion(res, [{ name: 'finish_task', arguments: { reason: '检查结束。' } }]);
   });
-  const session = new GameSession(level, { adapter: liveModel(config, secret), delayMs: 0 });
+  const session = new GameSession(level, { adapter: await liveModel(config, secret), delayMs: 0 });
   await session.command('检查附近通道'); await session.settled();
   assert.equal(session.task?.status, 'paused'); assert.equal(session.engine.state.elapsedTU, 1);
   assert.equal(session.engine.state.human.oxygen, 118); assert.equal(session.engine.state.ledger.length, 1);
@@ -190,7 +190,7 @@ test('切换模型取消正在等待的网络请求，保留进度和委托；�
   await session.configureModel({ ...config, timeoutMs: 2000 }, '');
   assert.equal(session.view().modelReady, true); assert.equal(session.view().modelConfig.timeoutMs, 2000);
   const save = session.save(); assert.ok(!JSON.stringify(save).includes(secret));
-  const restored = new GameSession(level, { id: session.id, delayMs: 0 }); restored.restore(save);
+  const restored = new GameSession(level, { id: session.id, delayMs: 0 }); await restored.restore(save);
   assert.equal(restored.adapter.mode, 'live'); assert.equal(restored.view().modelReady, false);
   await restored.continue(); await restored.settled(); assert.equal(restored.running, false); assert.match(restored.modelError!, /API Key/);
 });
@@ -218,14 +218,14 @@ test('配置 API、SSE 和落盘存档只包含非敏感模型设置', async t =
   controller.abort(); await reader.cancel().catch(() => undefined);
   await post(`${path}/save`, { requestId: crypto.randomUUID() });
   const save = await readFile(join(savesDir, id, 'game.json'), 'utf8'); assert.ok(!save.includes(secret)); assert.ok(save.includes('mock-robot'));
-  const catalog = await fetch(base + '/api/models').then(r => r.json()); assert.equal(catalog.length, 3); assert.ok(!JSON.stringify(catalog).includes(secret));
+  const catalog = await fetch(base + '/api/models').then(r => r.json()); assert.ok(catalog.some((p: { id: string }) => p.id === 'openai')); assert.ok(catalog.some((p: { id: string }) => p.id === 'google')); assert.ok(!JSON.stringify(catalog).includes(secret));
 });
 
-test('配置验证拒绝携带凭据的地址、未知目录模型和超预算参数', () => {
+test('配置验证拒绝携带凭据的地址、未知目录模型和超预算参数', async () => {
   assert.throws(() => validateModelConfig({ ...defaultModelConfig, baseUrl: 'https://key:secret@api.deepseek.com' }), /凭据/);
   assert.throws(() => validateModelConfig({ ...defaultModelConfig, baseUrl: 'https://api.deepseek.com?key=secret' }), /查询/);
   assert.throws(() => validateModelConfig({ ...defaultModelConfig, modelId: 'unknown-model' }), /目录/);
   assert.throws(() => validateModelConfig({ ...defaultModelConfig, maxTokens: 99999 }), /上限/);
   assert.throws(() => validateModelConfig({ ...defaultModelConfig, timeoutMs: 0 }), /超时/);
-  assert.ok(modelCatalog()[0].models.includes(defaultModelConfig.modelId));
+  assert.ok((await modelCatalog())[0].models.includes(defaultModelConfig.modelId));
 });

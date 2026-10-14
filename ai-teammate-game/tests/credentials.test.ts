@@ -4,8 +4,10 @@ import type { TestContext } from 'node:test';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { modelCredential, readPiApiKey } from '../apps/server/src/credentials.ts';
-import { defaultModelConfig, liveModel, modelCatalog } from '../apps/server/src/model.ts';
+import { modelCredentials } from '../apps/server/src/credentials.ts';
+import { defaultModelConfig, demoModel, liveModel, modelCatalog, toolStream, validateModelConfig } from '../apps/server/src/model.ts';
+import { builtinModels } from '../../pi-main/packages/ai/dist/providers/all.js';
+import { createModels, createProvider } from '../../pi-main/packages/ai/dist/index.js';
 import { GameSession } from '../apps/server/src/session.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 
@@ -21,12 +23,16 @@ const config = { ...defaultModelConfig, mode: 'live' as const };
 const keyOne = 'fake-pi-key-one'; const keyTwo = 'fake-pi-key-two';
 
 test('只读复用 pi 用户凭据，支持 BOM 和 pi 的环境变量引用，不改写文件', async t => {
-  const { dir, path } = await piUser(t);
-  assert.equal(readPiApiKey('deepseek', dir), '');
-  const contents = '\uFEFF' + JSON.stringify({ deepseek: { type: 'api_key', key: '${PI_TEST_API_KEY}', env: { PI_TEST_API_KEY: keyOne } }, anthropic: { type: 'oauth', access: 'not-an-api-key' } });
+  const { path } = await piUser(t);
+  const credentials = modelCredentials();
+  assert.equal(await credentials.read('deepseek'), undefined);
+  const contents = '\uFEFF' + JSON.stringify({ deepseek: { type: 'api_key', key: '${PI_TEST_API_KEY}', env: { PI_TEST_API_KEY: keyOne } }, anthropic: { type: 'oauth', access: 'not-an-api-key', refresh: 'fake-refresh', expires: Date.now() + 3600000 } });
   await writeFile(path, contents, 'utf8');
-  assert.equal(readPiApiKey('deepseek', dir), keyOne); assert.equal(readPiApiKey('anthropic', dir), '');
-  assert.equal(modelCredential(config).source, 'pi'); assert.equal(modelCredential(config).key, keyOne);
+  assert.equal((await credentials.read('deepseek'))?.type, 'api_key');
+  const models = builtinModels({ credentials });
+  assert.equal((await models.getAuth('deepseek'))?.auth.apiKey, keyOne);
+  assert.equal((await models.getAuth('anthropic'))?.auth.apiKey, 'not-an-api-key');
+  assert.equal((await liveModel(config)).credentialSource, 'pi');
   assert.equal(await readFile(path, 'utf8'), contents);
 });
 
@@ -34,26 +40,28 @@ test('pi 凭据优先于环境密钥，显式覆盖有效，任意自定义端�
   const { setKey } = await piUser(t); await setKey(keyOne);
   const previous = process.env.DEEPSEEK_API_KEY; process.env.DEEPSEEK_API_KEY = 'fake-env-key';
   t.after(() => { if (previous === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = previous; });
-  assert.deepEqual(modelCredential(config), { key: keyOne, source: 'pi' });
-  assert.deepEqual(modelCredential(config, keyTwo), { key: keyTwo, source: 'manual' });
-  assert.equal(modelCredential({ provider: 'compatible', baseUrl: 'https://api.deepseek.com/v1' }).key, keyOne);
-  for (const baseUrl of ['https://other.example/v1', 'http://api.deepseek.com/v1', 'https://api.deepseek.com.other.example/v1']) assert.notEqual(modelCredential({ provider: 'compatible', baseUrl }).key, keyOne);
-  await setKey(''); assert.deepEqual(modelCredential(config), { key: 'fake-env-key', source: 'environment' });
+  assert.equal((await liveModel(config)).credentialSource, 'pi');
+  const overridden = builtinModels({ credentials: modelCredentials('deepseek', keyTwo) });
+  assert.equal((await overridden.getAuth('deepseek'))?.auth.apiKey, keyTwo);
+  assert.equal((await liveModel(config, keyTwo)).credentialSource, 'manual');
+  assert.equal((await liveModel({ ...config, provider: 'compatible', baseUrl: 'https://api.deepseek.com/v1' })).credentialSource, 'pi');
+  for (const baseUrl of ['https://other.example/v1', 'http://api.deepseek.com/v1', 'https://api.deepseek.com.other.example/v1']) assert.notEqual((await liveModel({ ...config, provider: 'compatible', baseUrl })).credentialSource, 'pi');
+  await setKey(''); assert.equal((await liveModel(config)).credentialSource, 'environment');
 });
 
 test('缺少或损坏凭据不会回显文件中的密钥或解析错误内容', async t => {
-  const { dir, path } = await piUser(t);
-  assert.equal(readPiApiKey('deepseek', dir), '');
+  const { path } = await piUser(t);
+  assert.equal(await modelCredentials().read('deepseek'), undefined);
   await writeFile(path, `invalid-json-${keyOne}`, 'utf8');
-  assert.throws(() => readPiApiKey('deepseek', dir), error => error instanceof Error && /无法读取/.test(error.message) && !error.message.includes(keyOne));
-  assert.equal(modelCatalog()[0].hasPiKey, false);
+  await assert.rejects(modelCredentials().read('deepseek'), error => error instanceof Error && /无法读取/.test(error.message) && !error.message.includes(keyOne));
+  assert.equal((await modelCatalog())[0].ready, false);
 });
 
 test('恢复和新会话自动使用 pi 密钥，每次模型请求重新读取；页面与存档不含密钥', async t => {
   const { path, setKey } = await piUser(t); await setKey(keyOne);
   const originalFile = await readFile(path, 'utf8');
   const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
-  const adapter = liveModel(config);
+  const adapter = await liveModel(config);
   const seen: string[] = [];
   const mockFetch: typeof fetch = async (input, init) => {
     const request = new Request(input, init); seen.push(request.headers.get('authorization')!);
@@ -67,11 +75,82 @@ test('恢复和新会话自动使用 pi 密钥，每次模型请求重新读取�
   assert.equal(await readFile(path, 'utf8'), originalFile);
   await setKey(keyTwo);
   await session.command('再次检查'); await session.settled(); assert.equal(seen[1], `Bearer ${keyTwo}`);
-  const save = session.save(); const restored = new GameSession(level, { id: session.id }); restored.restore(save);
+  const save = session.save(); const restored = new GameSession(level, { id: session.id }); await restored.restore(save);
   assert.equal(restored.view().modelReady, true); assert.equal(restored.view().modelCredentialSource, 'pi');
-  const fresh = new GameSession(level, { adapter: liveModel(config) }); assert.equal(fresh.view().modelReady, true);
+  const fresh = new GameSession(level, { adapter: await liveModel(config) }); assert.equal(fresh.view().modelReady, true);
   await fresh.configureModel(config, ''); assert.equal(fresh.view().modelCredentialSource, 'pi');
   for (const key of [keyOne, keyTwo]) {
-    assert.ok(!JSON.stringify(session.view()).includes(key)); assert.ok(!JSON.stringify(save).includes(key)); assert.ok(!JSON.stringify(modelCatalog()).includes(key));
+    assert.ok(!JSON.stringify(session.view()).includes(key)); assert.ok(!JSON.stringify(save).includes(key)); assert.ok(!JSON.stringify(await modelCatalog()).includes(key));
   }
+});
+
+test('服务目录复用 pi-ai 的全部静态聊天模型，环境凭据无需游戏单独映射', async t => {
+  const { path } = await piUser(t);
+  const previous = process.env.GROQ_API_KEY; process.env.GROQ_API_KEY = keyOne;
+  t.after(() => { if (previous === undefined) delete process.env.GROQ_API_KEY; else process.env.GROQ_API_KEY = previous; });
+  const entries = await modelCatalog();
+  const builtin = builtinModels();
+  for (const provider of builtin.getProviders().filter(p => builtin.getModels(p.id).length)) {
+    const entry = entries.find(p => p.id === provider.id)!;
+    assert.deepEqual(entry.models, builtin.getModels(provider.id).map(m => m.id));
+    const selected = validateModelConfig({ ...defaultModelConfig, mode: 'live', provider: entry.id, modelId: entry.defaultModel, baseUrl: entry.baseUrl });
+    const adapter = await liveModel(selected, keyTwo);
+    assert.deepEqual(adapter.model, builtin.getModel(entry.id, entry.defaultModel));
+  }
+  assert.equal(entries.find(p => p.id === 'groq')?.credentialSource, 'environment');
+  await assert.rejects(readFile(path), { code: 'ENOENT' });
+});
+
+test('pi OAuth 凭据通过真实 Anthropic 流式适配器接入游戏，令牌不进入页面或存档', async t => {
+  const { path } = await piUser(t);
+  const access = 'sk-ant-oat01-fake-game-test'; const refresh = 'fake-game-refresh-token';
+  const contents = JSON.stringify({ anthropic: { type: 'oauth', access, refresh, expires: Date.now() + 3600000 } });
+  await writeFile(path, contents, 'utf8');
+  const entry = (await modelCatalog()).find(p => p.id === 'anthropic')!;
+  assert.equal(entry.ready, true); assert.equal(entry.credentialSource, 'pi');
+  const adapter = await liveModel(validateModelConfig({ ...config, provider: entry.id, modelId: entry.defaultModel, baseUrl: entry.baseUrl }));
+  let authorization = '';
+  const mockFetch: typeof fetch = async (input, init) => {
+    const request = new Request(input, init); authorization = request.headers.get('authorization') ?? '';
+    assert.equal(new URL(request.url).pathname, '/v1/messages');
+    const events = [
+      { type: 'message_start', message: { id: 'msg_test', type: 'message', role: 'assistant', model: entry.defaultModel, content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 20, output_tokens: 0 } } },
+      { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } },
+      { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: '登录凭据已接入。' } },
+      { type: 'content_block_stop', index: 0 },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 10 } },
+      { type: 'message_stop' },
+    ];
+    return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+  const session = new GameSession(level, { adapter, delayMs: 0 });
+  session.agent.streamFunction = (model, context, options) => adapter.streamFn(model, context, { ...options, fetch: mockFetch });
+  await session.command('检查状态'); await session.settled();
+  assert.equal(authorization, `Bearer ${access}`); assert.equal(session.modelError, null);
+  assert.ok(session.messages.some(m => m.text === '登录凭据已接入。'));
+  assert.equal(await readFile(path, 'utf8'), contents);
+  const serialized = JSON.stringify([session.view(), session.save(), await modelCatalog()]);
+  assert.ok(!serialized.includes(access)); assert.ok(!serialized.includes(refresh));
+  const override = await liveModel(adapter.config!, keyTwo); assert.equal(override.credentialSource, 'manual');
+});
+
+test('OAuth 过期复用 pi 的加锁刷新与持久化，并发请求只刷新一次，失败保留原凭据', async t => {
+  const { path } = await piUser(t);
+  const expired = { type: 'oauth' as const, access: keyOne, refresh: 'fake-old-refresh', expires: 0 };
+  await writeFile(path, JSON.stringify({ anthropic: expired, deepseek: { type: 'api_key', key: keyOne } }), 'utf8');
+  let refreshes = 0; let fail = false;
+  const models = createModels({ credentials: modelCredentials() });
+  models.setProvider(createProvider({ id: 'anthropic', name: 'Test OAuth', models: [{ ...demoModel, provider: 'anthropic' }],
+    auth: { oauth: { name: 'Test login', async login() { return expired; },
+      async refresh(current) { refreshes++; if (fail) throw new Error('refresh failed'); return { ...current, access: keyTwo, refresh: 'fake-new-refresh', expires: Date.now() + 3600000 }; },
+      async toAuth(current) { return { apiKey: current.access }; } } },
+    api: { stream: () => toolStream([]), streamSimple: () => toolStream([]) } }));
+  const auth = await Promise.all([models.getAuth('anthropic'), models.getAuth('anthropic')]);
+  assert.equal(refreshes, 1); assert.ok(auth.every(a => a?.auth.apiKey === keyTwo));
+  const saved = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(saved.anthropic.access, keyTwo); assert.equal(saved.anthropic.refresh, 'fake-new-refresh'); assert.equal(saved.deepseek.key, keyOne);
+  const original = JSON.stringify({ anthropic: expired }); await writeFile(path, original, 'utf8'); fail = true;
+  await assert.rejects(models.getAuth('anthropic'), /OAuth refresh failed/);
+  assert.equal(await readFile(path, 'utf8'), original);
 });

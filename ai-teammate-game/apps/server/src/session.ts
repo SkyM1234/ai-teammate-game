@@ -6,7 +6,6 @@ import { sensorCells } from '../../../packages/game-core/src/navigation.ts';
 import { distance, emptyDelta, samePosition } from '../../../packages/game-core/src/types.ts';
 import type { Action, ActionOutcome, Constraints, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveModel, modelErrorMessage } from './model.ts';
-import { modelCredential } from './credentials.ts';
 import type { CredentialSource } from './credentials.ts';
 import type { ModelAdapter, ModelConfig, ToolIntent } from './model.ts';
 import { SessionJournal } from './journal.ts';
@@ -77,12 +76,12 @@ export class GameSession {
   private deniedCalls = new Set<string>();
   private toolHazards: string[] = [];
 
-  constructor(level: Level, options: { id?: string; adapter?: ModelAdapter; delayMs?: number } = {}) {
+  constructor(level: Level, options: { id?: string; adapter?: ModelAdapter; modelConfig?: ModelConfig; delayMs?: number } = {}) {
     this.id = options.id ?? crypto.randomUUID();
     this.engine = new GameEngine(level);
     this.delayMs = options.delayMs ?? 180;
     this.knowledgeBefore = structuredClone(this.engine.state.knowledge);
-    this.adapter = options.adapter ?? this.demoAdapter();
+    this.adapter = options.adapter ?? this.demoAdapter(options.modelConfig);
     this.agent = new Agent({
       initialState: { model: this.adapter.model, systemPrompt: prompt, tools: this.tools(), thinkingLevel: 'off' },
       streamFn: this.adapter.streamFn,
@@ -239,8 +238,9 @@ export class GameSession {
       const previous = this.adapter.config;
       const retained = previous?.provider === config.provider && previous.baseUrl === config.baseUrl ? this.modelKey : '';
       const apiKey = typeof key === 'string' && key.trim() ? key.trim() : retained;
-      if (config.mode === 'live' && !modelCredential(config, apiKey).key) { this.pause(); this.emit(); throw new Error('未找到本机 pi API Key，请在 pi 中配置凭据，或填写密钥及服务端环境变量'); }
-      this.adapter = config.mode === 'live' ? liveModel(config, apiKey || undefined) : this.demoAdapter(config);
+      const adapter = config.mode === 'live' ? await liveModel(config, apiKey || undefined) : this.demoAdapter(config);
+      if (adapter.ready === false) { this.pause(); this.emit(); throw new Error('未找到可用的模型凭据，请在 pi 中配置登录或 API Key，或填写密钥及服务端环境变量'); }
+      this.adapter = adapter;
       this.modelKey = config.mode === 'live' ? apiKey : '';
       this.agent.reset(); this.transcript = [];
       this.agent.state.model = this.adapter.model; this.agent.streamFunction = this.adapter.streamFn;
@@ -592,12 +592,13 @@ export class GameSession {
       this.task = { id: crypto.randomUUID(), text, goal: this.parseGoal(text, selected), status: 'active', question: null, constraints };
       this.deniedCalls.clear();
       this.say('human', text);
-      this.startRun(text);
+      await this.startRun(text);
     });
   }
 
-  private startRun(text: string): void {
-    if (this.adapter.ready === false) { this.modelError = '未找到可用的本机 pi API Key，请检查 pi 凭据或模型设置。'; this.pause(this.modelError); this.emit(); return; }
+  private async startRun(text: string): Promise<void> {
+    await this.adapter.checkReady?.();
+    if (this.adapter.ready === false) { this.modelError = '未找到可用的模型凭据，请检查 pi 登录、API Key 或模型设置。'; this.pause(this.modelError); this.emit(); return; }
     this.modelError = null;
     this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.control = 'continue'; this.running = true;
     this.record('自动运行开始', { text, task: this.task, stateRevision: this.engine.state.stateRevision });
@@ -637,7 +638,7 @@ export class GameSession {
         const ready = this.task.waitReason === 'power' && this.engine.state.circuitOn || this.task.waitReason === 'hazard' && !this.engine.state.circuitOn;
         if (!ready) throw new Error('请先满足电路条件，或发送新指令回答机器人的问题。');
       }
-      this.startRun(`继续原任务：${this.task.text}。使用最新知识，重新选择有效工具。`);
+      await this.startRun(`继续原任务：${this.task.text}。使用最新知识，重新选择有效工具。`);
     });
   }
 
@@ -670,14 +671,15 @@ export class GameSession {
 
   view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
   save(): SessionSave { return { version: 1, id: this.id, engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
-  restore(save: SessionSave): void {
+  async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');
     this.engine.restore(save.engine); this.task = save.task; this.messages = save.messages; this.metrics = save.metrics; this.eventId = save.eventId;
     if (save.modelConfig) {
       const config = validateModelConfig(save.modelConfig);
-      this.adapter = config.mode === 'live' ? liveModel(config) : this.demoAdapter(config);
+      this.adapter = config.mode === 'live' ? await liveModel(config, apiKey) : this.demoAdapter(config);
+      this.modelKey = config.mode === 'live' ? apiKey ?? '' : '';
       this.agent.state.model = this.adapter.model; this.agent.streamFunction = this.adapter.streamFn;
-      if (this.adapter.ready === false) this.modelError = '存档的真实模型未找到本机 pi API Key，请检查 pi 凭据或模型设置。';
+      if (this.adapter.ready === false) this.modelError = '存档的真实模型未找到可用凭据，请检查 pi 登录、API Key 或模型设置。';
     }
     if (this.task && (this.task.status === 'active' || this.task.waitReason === 'authorization' || this.task.waitReason === 'power')) { this.task.status = 'paused'; this.task.question = null; this.task.waitReason = undefined; }
   }
