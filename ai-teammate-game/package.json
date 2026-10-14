@@ -3,13 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.4.0" },
+  "engines": {
+    "node": ">=24.4.0"
+  },
   "scripts": {
+    "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
     "check": "node scripts/check.mjs",
     "verify:routes": "node scripts/verify-routes.ts",
     "test:core": "node --test tests/core.test.ts",
     "test:runtime": "node --test tests/runtime.test.ts",
     "test": "node --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0"
   }
 }

@@ -10,7 +10,7 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "typeRoots": ["../pi-main/node_modules/@types"],
+    "typeRoots": ["./node_modules/@types", "../pi-main/node_modules/@types"],
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },

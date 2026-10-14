@@ -2,10 +2,22 @@ import type { SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { Action, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
+import { StationRenderer } from './station-renderer.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const canvas = $<HTMLCanvasElement>('map');
-const context = canvas.getContext('2d')!;
+let canvas = $<HTMLCanvasElement>('map');
+let station: StationRenderer | null = null;
+let flatContext: CanvasRenderingContext2D | null = null;
+try { station = new StationRenderer(canvas); }
+catch {
+  const replacement = canvas.cloneNode() as HTMLCanvasElement;
+  canvas.replaceWith(replacement); canvas = replacement;
+  flatContext = canvas.getContext('2d');
+  canvas.dataset.renderMode = '2d';
+  canvas.setAttribute('aria-label', '空间站平面地图：点击格子选择位置');
+  $('map-render-status').textContent = '当前设备使用平面地图';
+  document.querySelectorAll<HTMLButtonElement>('[data-camera]').forEach(button => { button.disabled = true; });
+}
 let view: SessionView | null = null;
 let selected: Position | null = null;
 let stream: EventSource | null = null;
@@ -62,12 +74,27 @@ function render() {
   const p = current()!;
   const terminal = ['success', 'failure'].includes(p.phase);
   $('level-name').textContent = p.level.name;
+  $('level-name').title = p.level.name;
   $('clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${frames ? ' / 回放' : ''}`;
   $('oxygen-value').textContent = String(p.human.oxygen);
   $('battery-value').textContent = String(p.robot.battery);
-  $('oxygen-bar').style.width = `${p.human.oxygen / p.rules.oxygenMax * 100}%`;
+  document.querySelectorAll<HTMLElement>('[data-stat="oxygen"]').forEach(el => { el.textContent = String(p.human.oxygen); });
+  document.querySelectorAll<HTMLElement>('[data-stat="battery"]').forEach(el => { el.textContent = String(p.robot.battery); });
+  $('map-oxygen').textContent = String(p.human.oxygen);
+  $('map-battery').textContent = String(p.robot.battery);
+  $('map-phase').textContent = frames ? '历史回放' : phaseNames[p.phase];
+  document.querySelector<HTMLElement>('.shell')!.dataset.danger = String(p.human.oxygen < 25);
+  const milestones = [p.human.oxygenRate === p.rules.repairedOxygenRate, p.observed.some(entity => entity.type === 'airlock' && entity.state === 'repaired'), p.phase === 'success'];
+  const firstIncomplete = milestones.indexOf(false);
+  document.querySelectorAll<HTMLElement>('[data-milestone]').forEach((step, i) => {
+    step.classList.toggle('complete', milestones[i]);
+    if (i === firstIncomplete) step.setAttribute('aria-current', 'step'); else step.removeAttribute('aria-current');
+  });
+  for (const id of ['oxygen-bar', 'monitor-oxygen-bar']) {
+    $(id).style.width = `${p.human.oxygen / p.rules.oxygenMax * 100}%`;
+    $(id).style.background = p.human.oxygen < 25 ? '#ef817c' : '#66ddce';
+  }
   $('battery-bar').style.width = `${p.robot.battery / p.rules.batteryMax * 100}%`;
-  $('oxygen-bar').style.background = p.human.oxygen < 25 ? '#ef817c' : '#66ddce';
   $('human-status').textContent = `${p.human.carried ? '正在由 R-07 搬运' : '受伤 · 无法移动'} / 每 TU 消耗 ${p.human.oxygenRate} 氧气`;
   $('robot-status').textContent = `${phaseNames[p.phase]} / 坐标 (${p.robot.position.x}, ${p.robot.position.y})`;
   $('circuit-state').textContent = p.circuitOn ? '已通电 · 故障可能带电' : '已断电';
@@ -151,6 +178,7 @@ function renderSelection() {
   }
   $<HTMLInputElement>('marker-note').disabled = !selected || !!frames;
   $<HTMLInputElement>('marker-shared').disabled = !selected || !!frames;
+  $('target-summary').textContent = selected ? `(${selected.x}, ${selected.y}) · 查看情报 ↗` : '点击格子查看情报 ↗';
   if (!selected) { $('selection-title').textContent = '选择一个回波或格子'; $('selection-detail').textContent = '雷达显示较远的信号；靠近后才能确认对象。'; return; }
   const object = p.observed.find(e => same(e.position, selected!) && !['cleared', 'inventory'].includes(e.state));
   const echo = p.radar.find(e => same(e.position, selected!));
@@ -159,12 +187,18 @@ function renderSelection() {
 }
 function geometry() {
   const { width, height } = canvas.getBoundingClientRect();
-  const size = Math.min(width, height);
+  // Keep every corner of the square fallback map inside the circular viewport.
+  const size = Math.min(width, height) * Math.SQRT1_2;
   const padding = Math.min(25, size * .07);
   return { width, height, size, offsetX: (width - size) / 2, offsetY: (height - size) / 2, padding, cell: (size - padding * 2) / 12 };
 }
 function drawMap() {
   const p = current(); if (!p) return;
+  if (station) station.update(p, selected); else drawFlatMap();
+}
+function drawFlatMap() {
+  const p = current(); if (!p) return;
+  const context = flatContext; if (!context) return;
   const { width, height, size, offsetX, offsetY, padding, cell } = geometry();
   if (size <= 0) return;
   const dpr = window.devicePixelRatio || 1; canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); context.setTransform(dpr, 0, 0, dpr, offsetX * dpr, offsetY * dpr);
@@ -217,6 +251,12 @@ function drawMap() {
   }
 }
 canvas.onclick = event => {
+  if (station) {
+    if (!station.selectionClickAllowed(event)) return;
+    const cell = station.pick(event.clientX, event.clientY);
+    if (cell) { selected = cell; renderSelection(); drawMap(); }
+    return;
+  }
   const { padding, cell, offsetX, offsetY } = geometry(); const box = canvas.getBoundingClientRect();
   if (cell <= 0) return;
   const x = Math.floor((event.clientX - box.left - offsetX - padding) / cell); const y = Math.floor((event.clientY - box.top - offsetY - padding) / cell);
@@ -224,17 +264,35 @@ canvas.onclick = event => {
   selected = { x, y }; renderSelection(); drawMap();
 };
 new ResizeObserver(drawMap).observe(canvas);
-document.querySelectorAll<HTMLButtonElement>('.workspace-tabs [data-pane]').forEach(button => {
-  button.onclick = () => {
-    document.querySelector<HTMLElement>('.shell')!.dataset.pane = button.dataset.pane;
-    document.querySelectorAll<HTMLButtonElement>('.workspace-tabs [data-pane]').forEach(tab => tab.setAttribute('aria-pressed', String(tab === button)));
-    if (button.dataset.pane === 'comms' && view?.pendingAuthorization && !frames) $('messages').scrollTop = $('messages').scrollHeight;
-  };
+$('map-rotate').onclick = () => station?.rotate();
+$('map-zoom-in').onclick = () => station?.zoomBy(.2);
+$('map-zoom-out').onclick = () => station?.zoomBy(-.2);
+$('map-reset').onclick = () => station?.reset();
+window.addEventListener('pagehide', event => { if (!event.persisted) station?.dispose(); });
+const drawer = $<HTMLDialogElement>('console-drawer');
+const panelTitles: Record<string, string> = { nearby: '附近操作', inventory: '物资管理', status: '生命监测', objective: '救援目标', selection: '共享标记', ledger: '行动记录', comms: '机器人通信', guide: '操作指南' };
+function openPanel(panel: string) {
+  if (!panelTitles[panel]) return;
+  drawer.dataset.panel = panel;
+  $('drawer-title').textContent = panelTitles[panel];
+  document.querySelectorAll<HTMLElement>('.drawer-panel').forEach(section => { section.hidden = section.dataset.panel !== panel; });
+  if (!drawer.open) drawer.showModal();
+  if (panel === 'comms') {
+    $('messages').scrollTop = $('messages').scrollHeight;
+    if (view?.pendingAuthorization && !frames) $('authorization-approve').focus();
+    else $('command').focus();
+  } else $('drawer-close').focus();
+}
+document.querySelectorAll<HTMLButtonElement>('[data-open]').forEach(button => { button.onclick = () => openPanel(button.dataset.open!); });
+$('drawer-close').onclick = () => drawer.close();
+drawer.addEventListener('click', event => {
+  const rect = drawer.getBoundingClientRect();
+  if (event.target === drawer && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) drawer.close();
 });
 async function command(text: string) { if (!text.trim() || frames) return; sending = true; render(); await post('command', { text, ...(selected ? { selected } : {}) }); sending = false; render(); }
 $('chat-form').onsubmit = event => { event.preventDefault(); const input = $<HTMLTextAreaElement>('command'); const text = input.value; input.value = ''; void command(text); };
 $('command').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $<HTMLFormElement>('chat-form').requestSubmit(); } };
-$('go-selected').onclick = () => { if (selected) void command(`前往 (${selected.x},${selected.y})`); };
+$('go-selected').onclick = () => { if (selected) { openPanel('comms'); void command(`前往 (${selected.x},${selected.y})`); } };
 $('marker-form').onsubmit = event => { event.preventDefault(); if (selected && !frames) void post('marker', { position: selected, note: $<HTMLInputElement>('marker-note').value, shared: $<HTMLInputElement>('marker-shared').checked }); };
 $('stop').onclick = () => void post('stop'); $('continue').onclick = () => void post('continue');
 $('save').onclick = async () => { if (await post('save')) toast('当前进度已保存。'); };
@@ -289,7 +347,7 @@ $('load-form').onsubmit = async event => {
 function step(dx: number, dy: number) { if (view && !frames) void manual({ kind: 'move', target: { x: view.robot.position.x + dx, y: view.robot.position.y + dy } }); }
 document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.onclick = () => step(Number(el.dataset.dx), Number(el.dataset.dy)); });
 document.addEventListener('keydown', event => {
-  if (document.querySelector('dialog[open]')) return;
+  if (document.querySelector('.game-dialog[open]') || drawer.open && drawer.dataset.panel !== 'nearby') return;
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.ctrlKey || event.altKey || event.metaKey) return;
   const directions: Record<string, [number, number]> = { w: [0, -1], ArrowUp: [0, -1], a: [-1, 0], ArrowLeft: [-1, 0], s: [0, 1], ArrowDown: [0, 1], d: [1, 0], ArrowRight: [1, 0] };
   const direction = directions[event.key]; if (direction) { event.preventDefault(); if (!event.repeat) step(...direction); }
@@ -365,9 +423,11 @@ $('model-form').onsubmit = async event => {
 function renderMessages() {
   if (!view) return;
   const pending = frames ? null : view?.pendingAuthorization;
-  const tab = document.querySelector<HTMLButtonElement>('.workspace-tabs button[data-pane="comms"]')!;
-  tab.textContent = pending ? '通信 · 待授权' : '机器人通信';
-  tab.classList.toggle('needs-authorization', !!pending);
+  $('comms-notice').hidden = !pending;
+  document.querySelectorAll<HTMLButtonElement>('[data-open="comms"]').forEach(button => {
+    button.classList.toggle('needs-authorization', !!pending);
+    button.setAttribute('aria-label', pending ? '机器人通信 · 待授权' : '机器人通信');
+  });
   const messageKey = JSON.stringify([view.messages, pending?.id, !!frames, answeringAuthorization]);
   if (messageKey === lastMessages) return;
   const area = $('messages');

@@ -3,3 +3,6 @@ dist/
 .env
 node_modules/
 *.log
+output/
+.playwright-cli/
+.playwright/
