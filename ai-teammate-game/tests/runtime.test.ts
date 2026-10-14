@@ -17,6 +17,37 @@ function scripted(rounds: ToolIntent[][], delayMs = 0) {
 }
 const move = (x: number, y: number): ToolIntent => ({ name: 'move_to', arguments: { target: { x, y } } });
 const report: ToolIntent = { name: 'report', arguments: { text: '状态报告' } };
+
+test('日志中的氧气交互错误返回参数说明，下一轮可纠正并实际补充氧气', async () => {
+  const invalidArguments: ToolIntent['arguments'][] = [
+    { operation: 'use_item', targetId: 's-03', itemId: 's-03' },
+    { operation: 'use_item', targetId: 's-03' },
+  ];
+  for (const args of invalidArguments) {
+    const { session, contexts } = scripted([
+      [{ name: 'interact', arguments: args }],
+      [{ name: 'interact', arguments: { operation: 'use_item', itemId: 's-03', targetId: 'human' } }],
+      [{ name: 'ask_player', arguments: { question: '已补充氧气，接下来做什么？' } }],
+    ]);
+    const supply = session.engine.state.entities.find(entity => entity.id === 's-03')!;
+    supply.taken = true; session.engine.state.robot.inventory.push(supply.id);
+    session.engine.state.human.oxygen = 40; session.engine.observe();
+    await session.command('补充氧气给人类'); await session.settled();
+
+    const failure = session.messages.find(message => message.tool?.name === 'interact' && message.tool.status === 'failed');
+    assert.match(failure?.text ?? '', /itemId.*targetId.*"human".*"robot"/);
+    assert.equal(failure?.at, 0);
+    assert.ok(contexts[1].includes('不能把物品 ID 当作 targetId'));
+    const ledger = session.engine.state.ledger;
+    assert.equal(ledger.length, 1);
+    assert.deepEqual(ledger[0].action, { kind: 'use_item', itemId: 's-03', targetId: 'human' });
+    assert.equal(session.engine.state.elapsedTU, 2);
+    assert.equal(session.engine.state.human.oxygen, 40 - 2 * level.rules.oxygenRate + level.rules.oxygenRefill);
+    assert.equal(session.engine.state.robot.battery, level.rules.battery - 2);
+    assert.ok(!session.engine.state.robot.inventory.includes('s-03'));
+  }
+});
+
 async function authorization(session: GameSession) {
   if (session.pendingAuthorization) return session.pendingAuthorization;
   return new Promise<NonNullable<GameSession['pendingAuthorization']>>((resolve, reject) => {

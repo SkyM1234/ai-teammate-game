@@ -43,6 +43,18 @@ interface ToolOutcome {
 }
 export class RevisionConflictError extends Error {}
 
+const interactionUsage: Record<string, string> = {
+  open: '需要 targetId（已知门或柜子的 ID）',
+  collect: '需要 targetId（已知物资的 ID）',
+  drop_item: '需要 itemId（背包物品的 ID），不需要 targetId',
+  use_item: '必须同时提供 itemId（背包物品的 ID）和 targetId（只能为 "human" 或 "robot"；氧气补给用 "human"，备用电池用 "robot"），不能把物品 ID 当作 targetId',
+  repair: '需要 targetId（修补玩家供氧管用 "human"，修复气闸用已知气闸 ID）；自动消耗背包维修材料，不需要 itemId',
+  clear: '需要 targetId（已知障碍的 ID）',
+  pickup_human: '抱起玩家，不需要 targetId 或 itemId',
+  drop_human: '放下玩家，不需要 targetId 或 itemId',
+  extract: '启动撤离，不需要 targetId 或 itemId',
+};
+
 const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气有限，你有电量限制。只使用收到的机器人知识和人类明确发送的信息；雷达模糊回波不是物品身份。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。仅在实际工具结果支持结束整项委托时调用 finish_task；该工具只结束自动行动，游戏胜负仍由规则引擎判断。
 保持人类委托的目标与约束，允许一轮最多6个工具串行调用，基于已知对象生成有限批次。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
@@ -462,12 +474,16 @@ export class GameSession {
         },
       },
       {
-        name: 'interact', label: '交互', description: '操作附近已知对象。未获授权的维修和放下由程序在执行前弹出按钮；设备缺电时须先寻找并靠近实体开关，用set_circuit通电。', executionMode: 'sequential',
-        parameters: Type.Object({ operation: Type.Union(['open', 'collect', 'drop_item', 'use_item', 'repair', 'clear', 'pickup_human', 'drop_human', 'extract'].map(value => Type.Literal(value))), targetId: Type.Optional(Type.String()), itemId: Type.Optional(Type.String()) }, { additionalProperties: false }),
+        name: 'interact', label: '交互', description: `操作附近已知对象。参数按 operation 区分：${Object.entries(interactionUsage).map(([operation, usage]) => `${operation}：${usage}`).join('；')}。未获授权的维修和放下由程序在执行前弹出按钮；设备缺电时须先寻找并靠近实体开关，用set_circuit通电。`, executionMode: 'sequential',
+        parameters: Type.Object({
+          operation: Type.Union(Object.keys(interactionUsage).map(value => Type.Literal(value))),
+          targetId: Type.Optional(Type.String({ description: '操作目标。use_item 只能填 "human"（氧气补给）或 "robot"（备用电池）；repair 修补供氧管填 "human"；其他对象操作填已知实体 ID。' })),
+          itemId: Type.Optional(Type.String({ description: '背包物品 ID，use_item 和 drop_item 必填。use_item 中物品 ID 填这里，作用对象填 targetId。' })),
+        }, { additionalProperties: false }),
         execute: async (id, raw) => {
           const input = raw as { operation: string; targetId?: string; itemId?: string };
           const action = interactionAction(input);
-          if (!action) return this.emptyResult('INVALID_ACTION', '交互参数不完整。');
+          if (!action) return this.emptyResult('INVALID_ACTION', `交互参数不完整：${input.operation} ${interactionUsage[input.operation] ?? '不是支持的操作'}。`);
           const tu = action.kind === 'repair' ? action.targetId === 'human' ? 6 : 4 : action.kind === 'clear' ? 3 : action.kind === 'extract' ? 2 : action.kind === 'use_item' && action.targetId === 'human' ? 2 : 1;
           if (!this.checkBudget(tu)) return this.emptyResult('BUDGET', '行动预算不足。');
           return this.actionResult(this.commit(action, id));
