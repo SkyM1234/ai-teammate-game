@@ -3,7 +3,7 @@ import { Type } from '../../../../pi-main/packages/ai/dist/index.js';
 import type { AgentMessage, AgentTool } from '../../../../pi-main/packages/agent/dist/index.js';
 import { defaultConstraints, diffKnowledge, GameEngine } from '../../../packages/game-core/src/engine.ts';
 import { sensorCells } from '../../../packages/game-core/src/navigation.ts';
-import { distance, emptyDelta, samePosition } from '../../../packages/game-core/src/types.ts';
+import { distance, emptyDelta, roomCenter, samePosition } from '../../../packages/game-core/src/types.ts';
 import type { Action, ActionOutcome, Constraints, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveModel, modelErrorMessage } from './model.ts';
 import type { CredentialSource } from './credentials.ts';
@@ -56,7 +56,7 @@ const interactionUsage: Record<string, string> = {
 };
 
 const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气有限，你有电量限制。只使用收到的机器人知识和人类明确发送的信息；雷达模糊回波不是物品身份。
-historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0,0)，x 向右增大，y 向下增大；tiles[y][x] 表示坐标 (x,y) 的格子，每个字符串是一整行，数组索引是 y，字符串字符索引是 x。图例：# 是墙，不可通行；. 是历史地面，可作为候选路线；D 是历史门位，当前开闭与供电状态需靠近确认；X 是历史障碍位，不代表永久不可通行；E 是撤离出口，能到达不等于满足撤离条件。rooms 是历史房间名称与参考坐标，不提供当前设施状态或可交互实体 ID。
+historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0,0)，x 向右增大，y 向下增大；tiles[y][x] 表示坐标 (x,y) 的格子，每个字符串是一整行，数组索引是 y，字符串字符索引是 x。图例：# 是墙，不可通行；. 是历史地面，可作为候选路线；D 是历史门位，当前开闭与供电状态需靠近确认；X 是历史障碍位，不代表永久不可通行；E 是撤离出口，能到达不等于满足撤离条件。rooms 用 name 和 bounds 描述历史区域，minX/minY/maxX/maxY 均包含端点，没有固定导航点；范围内的墙体和实际阻挡仍以 tiles 和最新观察为准，不提供当前设施状态或可交互实体 ID。前往区域时可选择其中合适的可达位置，抵达不等于完成物资搜索；事故舱暂以人类初始位置这一格表示，属于固定历史位置，不随搬运移动。
 当前设施状态以 knownEntities 和最新工具结果为准，优先于历史地图符号及此前的推测：障碍 state=cleared 表示已清除，不再阻挡；门 state=opened 表示已打开，可以通过；已知关闭的门、未清除的障碍和柜体仍阻挡移动。历史可通行格可能存在尚未发现的阻挡或危险，需以逐格执行结果确认；不要把未知状态直接判为无路。
 move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.position 为准，不要把部分移动视为抵达。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
@@ -559,14 +559,16 @@ export class GameSession {
         if (cabinet.scanned && cabinet.powerRequired && !this.engine.state.circuitOn) return this.demoCircuitIntents(true, cabinet);
         return [go(this.approach(cabinet)), ...(!cabinet.scanned ? [{ name: 'scan', arguments: { targetId: cabinet.id } }] : []), interact('open', cabinet.id)];
       }
-      return [go(this.engine.level.rooms.find(room => room.name === '设备间')?.position ?? { x: 4, y: 3 })];
+      const room = this.engine.level.rooms.find(room => room.name === '设备间');
+      return [go(room ? roomCenter(room) : { x: 4, y: 3 })];
     }
     if (goal.kind === 'repair') {
       const material = this.engine.state.robot.inventory.find(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair');
       if (!material) {
         const item = known.find(e => e.itemType === 'repair' && e.state === 'available');
         if (item) return [go(this.approach(item)), interact('collect', item.id)];
-        return [go(this.engine.level.rooms.find(room => room.name === '维修区')?.position ?? { x: 4, y: 8 })];
+        const room = this.engine.level.rooms.find(room => room.name === '维修区');
+        return [go(room ? roomCenter(room) : { x: 4, y: 8 })];
       }
       const target = known.find(e => e.type === 'airlock');
       if (goal.targetId === 'human') return [go(this.engine.state.human.position), interact('repair', 'human')];
@@ -583,7 +585,8 @@ export class GameSession {
       { name: 'set_circuit', arguments: { targetId: knownSwitch.id, on } },
     ];
     // Explore reachable floor around the known device/room; never consult hidden switch entities.
-    const center = device?.position ?? this.engine.level.rooms.find(room => room.name === '设备间')?.position;
+    const room = this.engine.level.rooms.find(room => room.name === '设备间');
+    const center = device?.position ?? (room ? roomCenter(room) : undefined);
     const positions = [this.engine.state.robot.position, ...this.engine.state.ledger.filter(e => e.action.kind === 'move').map(e => e.position)];
     const visited = new Set(positions.map(p => `${p.x},${p.y}`));
     const observedCells = new Set(positions.flatMap(p => sensorCells(this.engine.level, p, this.engine.level.rules.sensorRadius)).map(p => `${p.x},${p.y}`));

@@ -8,6 +8,27 @@ import type { Action, RadarEcho } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
 
+test('房间范围允许单格与地图边界，拒绝颠倒、越界或缺失的边界', () => {
+  for (const bounds of [
+    { minX: 1, minY: 9, maxX: 1, maxY: 9 },
+    { minX: 0, minY: 0, maxX: level.width - 1, maxY: level.height - 1 },
+  ]) {
+    const candidate = structuredClone(level); candidate.rooms = [{ name: '测试区', bounds }];
+    assert.doesNotThrow(() => validateLevel(candidate));
+  }
+  for (const bounds of [
+    { minX: 4, minY: 1, maxX: 3, maxY: 5 },
+    { minX: 1, minY: 5, maxX: 6, maxY: 1 },
+    { minX: -1, minY: 1, maxX: 6, maxY: 5 },
+    { minX: 1, minY: 1, maxX: level.width, maxY: 5 },
+    { minX: 1, minY: 1, maxX: 6, maxY: level.height },
+    { minX: 1.5, minY: 1, maxX: 6, maxY: 5 },
+    undefined,
+  ]) {
+    assert.throws(() => validateLevel({ ...level, rooms: [{ name: '测试区', bounds }] }), /房间范围非法/);
+  }
+});
+
 test('电路开关遵守知识、距离与类型检查，失败不消耗资源', () => {
   const engine = new GameEngine(level);
   assert.ok(!JSON.stringify(engine.playerView()).includes('sw-01'));

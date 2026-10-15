@@ -1,4 +1,5 @@
 import { defaultConstraints } from '../../../packages/game-core/src/engine.ts';
+import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import type { Constraints, Level, Position } from '../../../packages/game-core/src/types.ts';
 
 export type DemoGoal = { kind: 'goto' | 'scan' | 'collect' | 'repair' | 'pickup' | 'extract' | 'circuit' | 'custom'; position?: Position; targetId?: string; itemType?: string; returnHome?: boolean; on?: boolean };
@@ -30,7 +31,7 @@ export function parseDemoCommand(text: string, level: Level, home: Position, sel
     const coordinate = input.match(/^(前往|去|移动到)\s*[(（]?\s*(\d{1,2})\s*[,，]\s*(\d{1,2})\s*[)）]?$/);
     const room = level.rooms.find(room => input === `去${room.name}` || input === `前往${room.name}`);
     if (coordinate) goal = { kind: 'goto', position: { x: Number(coordinate[2]), y: Number(coordinate[3]) } };
-    else if (room) goal = { kind: 'goto', position: { ...room.position } };
+    else if (room) goal = { kind: 'goto', position: roomCenter(room) };
     else if (selected && /^(过去|检查标记|去那里)$/.test(input)) goal = { kind: 'goto', position: { ...selected } };
   }
   if (goal) { command.goal = goal; command.supported = true; }

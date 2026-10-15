@@ -16,10 +16,14 @@ export interface EntityDefinition {
 export interface Entity extends EntityDefinition {
   opened: boolean; repaired: boolean; removed: boolean; taken: boolean;
 }
+export interface Room {
+  name: string;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+}
 export interface Level {
   id: string; version: number; name: string; width: number; height: number; tiles: string[];
   humanStart: Position; robotStart: Position; exit: Position; rules: Rules;
-  rooms: { name: string; position: Position }[]; entities: EntityDefinition[];
+  rooms: Room[]; entities: EntityDefinition[];
 }
 export interface ObservedEntity {
   id: string; type: EntityType; name: string; position: Position;
@@ -82,4 +86,5 @@ export interface PlayerView {
 export const distance = (a: Position, b: Position): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 export const samePosition = (a: Position, b: Position): boolean => a.x === b.x && a.y === b.y;
 export const positionKey = (p: Position): string => `${p.x},${p.y}`;
+export const roomCenter = (room: Room): Position => ({ x: Math.round((room.bounds.minX + room.bounds.maxX) / 2), y: Math.round((room.bounds.minY + room.bounds.maxY) / 2) });
 export const emptyDelta = (): ObservationDelta => ({ newDiscoveries: [], stateChanges: [], invalidatedFacts: [], knownRefs: [] });

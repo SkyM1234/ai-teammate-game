@@ -197,6 +197,18 @@ test('规则演示能够通过发现、拾取和返回完成供氧管维修', as
   assert.ok(session.metrics.requests < level.rules.requestLimit);
 });
 
+test('规则演示根据房间范围选择落点，单格事故舱指向人类初始位置', async () => {
+  for (const name of ['事故舱', '维修区', '设备间']) {
+    const session = new GameSession(level, { delayMs: 0 });
+    await session.command(`前往${name}`); await session.settled();
+    assert.equal(session.task?.status, 'completed');
+    const { bounds } = level.rooms.find(room => room.name === name)!;
+    const { x, y } = session.engine.state.robot.position;
+    assert.ok(x >= bounds.minX && x <= bounds.maxX && y >= bounds.minY && y <= bounds.maxY);
+    if (name === '事故舱') assert.deepEqual(session.engine.state.robot.position, level.humanStart);
+  }
+});
+
 test('每轮行动预算在逐格边界停止，继续后不重复旧动作', async () => {
   const smallBudget = structuredClone(level); smallBudget.rules.actionTULimit = 2;
   const session = new GameSession(smallBudget, { delayMs: 0 });

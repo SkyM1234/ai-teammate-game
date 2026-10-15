@@ -2,6 +2,7 @@ import type { SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { Action, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
+import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { StationRenderer } from './station-renderer.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -235,7 +236,7 @@ function drawFlatMap() {
   const exit = center(p.level.exit); context.fillStyle = '#2f716b'; context.fillRect(exit.x - cell * .35, exit.y - cell * .35, cell * .7, cell * .7); context.fillStyle = '#a1d8cc'; context.font = `${Math.max(9, cell * .24)}px monospace`; context.fillText('EXIT', exit.x, exit.y);
   for (const room of p.level.rooms) {
     if (cell < 35) continue;
-    const c = center(room.position); context.fillStyle = '#7c9caa66'; context.font = '9px "Microsoft YaHei",sans-serif'; context.fillText(room.name, c.x, c.y + cell * .35);
+    const c = center(roomCenter(room)); context.fillStyle = '#7c9caa66'; context.font = '9px "Microsoft YaHei",sans-serif'; context.fillText(room.name, c.x, c.y + cell * .35);
   }
   for (const echo of p.radar) {
     if (p.observed.some(e => same(e.position, echo.position) && !['cleared', 'inventory'].includes(e.state))) continue;

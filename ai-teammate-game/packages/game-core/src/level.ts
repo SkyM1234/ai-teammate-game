@@ -10,6 +10,13 @@ export function validateLevel(value: unknown): Level {
   if (level.rules.oxygen <= 0 || level.rules.battery <= 0 || level.rules.oxygen > level.rules.oxygenMax || level.rules.battery > level.rules.batteryMax) throw new Error('初始资源非法');
   const inside = (p: Position): boolean => !!p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x < level.width && p.y >= 0 && p.y < level.height && level.tiles[p.y][p.x] !== '#';
   for (const p of [level.humanStart, level.robotStart, level.exit]) if (!inside(p)) throw new Error('起点或出口非法');
+  for (const room of level.rooms) {
+    const bounds = room?.bounds;
+    if (!room || typeof room.name !== 'string' || !room.name || !bounds ||
+      ![bounds.minX, bounds.minY, bounds.maxX, bounds.maxY].every(Number.isInteger) ||
+      bounds.minX < 0 || bounds.minY < 0 || bounds.maxX >= level.width || bounds.maxY >= level.height ||
+      bounds.minX > bounds.maxX || bounds.minY > bounds.maxY) throw new Error('房间范围非法');
+  }
   const ids = new Set<string>();
   for (const entity of level.entities) {
     if (!inside(entity.position) || ids.has(entity.id) || !['supply', 'cabinet', 'door', 'hazard', 'obstacle', 'airlock', 'switch'].includes(entity.type)) throw new Error('实体位置、类型或 ID 非法');

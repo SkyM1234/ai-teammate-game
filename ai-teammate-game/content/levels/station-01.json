@@ -40,10 +40,10 @@
     "actionTULimit": 12
   },
   "rooms": [
-    { "name": "事故舱", "position": { "x": 2, "y": 9 } },
-    { "name": "维修区", "position": { "x": 4, "y": 8 } },
-    { "name": "设备间", "position": { "x": 4, "y": 3 } },
-    { "name": "气闸", "position": { "x": 9, "y": 1 } }
+    { "name": "事故舱", "bounds": { "minX": 1, "minY": 9, "maxX": 1, "maxY": 9 } },
+    { "name": "维修区", "bounds": { "minX": 1, "minY": 7, "maxX": 6, "maxY": 10 } },
+    { "name": "设备间", "bounds": { "minX": 1, "minY": 1, "maxX": 6, "maxY": 5 } },
+    { "name": "气闸", "bounds": { "minX": 8, "minY": 1, "maxX": 10, "maxY": 5 } }
   ],
   "entities": [
     { "id": "s-01", "type": "supply", "name": "维修材料", "position": { "x": 3, "y": 8 }, "itemType": "repair", "reflection": 1 },
