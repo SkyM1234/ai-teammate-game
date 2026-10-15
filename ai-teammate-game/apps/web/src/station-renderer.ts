@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 
-const colors = { steel: 0x68715e, dark: 0x1c241c, ivory: 0xcbd0b5, signal: 0xdce52b, amber: 0xd3ae79, red: 0xed8165, marker: 0xd4e0c3 };
+const colors = { steel: 0x718174, dark: 0x1c2724, ivory: 0xcdd1c4, signal: 0xe4eb1c, amber: 0xd3ae79, red: 0xed8165, marker: 0xd4e0c3 };
 const equal = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 
 /** A view of player knowledge. Never loads the authoritative level entities. */
@@ -17,8 +18,10 @@ export class StationRenderer {
   private readonly human = new THREE.Group();
   private readonly selection = new THREE.Group();
   private readonly hover = new THREE.Group();
-  private readonly cube = new THREE.BoxGeometry(1, 1, 1);
-  private readonly cylinder = new THREE.CylinderGeometry(.5, .5, 1, 8);
+  private readonly cube = new RoundedBoxGeometry(1, 1, 1, 1, .08);
+  private readonly deck = new THREE.BoxGeometry(1, 1, 1);
+  private readonly cylinder = new THREE.CylinderGeometry(.5, .5, 1, 20);
+  private readonly sphere = new THREE.SphereGeometry(.5, 16, 10);
   private readonly materials = new Map<number, THREE.MeshStandardMaterial>();
   private readonly surfaces = new Map<string, THREE.MeshStandardMaterial>();
   private readonly textures = new Map<string, THREE.CanvasTexture>();
@@ -41,23 +44,27 @@ export class StationRenderer {
   private disposed = false;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'low-power' });
-    this.renderer.setPixelRatio(1);
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'low-power' });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.scene.add(this.terrain, this.objects, this.robot, this.human, this.selection, this.hover);
-    this.scene.add(new THREE.HemisphereLight(0xe3e8c9, 0x252e20, 1.8));
-    const light = new THREE.DirectionalLight(0xf5edce, 2.8);
+    this.scene.add(new THREE.HemisphereLight(0xe8eee9, 0x25332c, 1.6));
+    const light = new THREE.DirectionalLight(0xf5f1e7, 2.8);
     light.position.set(-8, 18, 6);
     light.castShadow = true;
-    light.shadow.mapSize.set(1024, 1024);
+    light.shadow.mapSize.set(2048, 2048);
+    light.shadow.radius = 3;
+    light.shadow.intensity = .8;
     Object.assign(light.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10, near: .5, far: 50 });
     light.shadow.bias = -.001;
     light.shadow.normalBias = .04;
     this.scene.add(light);
+    const fill = new THREE.DirectionalLight(0xc7ddd5, .8);
+    fill.position.set(8, 6, -10);
+    this.scene.add(fill);
     this.camera.position.set(Math.SQRT1_2 * 18, 23.45, Math.SQRT1_2 * 18);
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.target.set(0, .45, 0);
@@ -99,7 +106,7 @@ export class StationRenderer {
   private material(color: number) {
     let material = this.materials.get(color);
     if (!material) {
-      material = new THREE.MeshStandardMaterial({ color, roughness: .88, metalness: .16, flatShading: true });
+      material = new THREE.MeshStandardMaterial({ color, roughness: .68, metalness: .25 });
       this.materials.set(color, material);
     }
     return material;
@@ -122,6 +129,13 @@ export class StationRenderer {
     group.add(mesh); return mesh;
   }
 
+  private ball(group: THREE.Group, size: [number, number, number], position: [number, number, number], color: number) {
+    const mesh = new THREE.Mesh(this.sphere, this.material(color));
+    mesh.scale.set(...size); mesh.position.set(...position);
+    mesh.castShadow = true; mesh.receiveShadow = true;
+    group.add(mesh); return mesh;
+  }
+
   /** Batch shared primitives in local space; moving a character still moves every part. */
   private batchMeshes(group: THREE.Group) {
     const batches = new Map<string, { source: THREE.Mesh; matrices: THREE.Matrix4[] }>();
@@ -130,7 +144,7 @@ export class StationRenderer {
     const inverse = group.matrixWorld.clone().invert();
     group.traverse(object => {
       if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh || Array.isArray(object.material)) return;
-      if (object.geometry !== this.cube && object.geometry !== this.cylinder) return;
+      if (object.geometry !== this.cube && object.geometry !== this.cylinder && object.geometry !== this.sphere) return;
       const key = `${object.geometry.uuid}:${object.material.uuid}:${object.castShadow}:${object.receiveShadow}`;
       let batch = batches.get(key);
       if (!batch) { batch = { source: object, matrices: [] }; batches.set(key, batch); }
@@ -151,38 +165,44 @@ export class StationRenderer {
     if (material) return material;
     let texture = this.textures.get(kind);
     if (!texture) {
-      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
       const context = canvas.getContext('2d')!;
-      context.fillStyle = '#d9ddcf'; context.fillRect(0, 0, 64, 64);
-      // Deterministic wear, without external assets or hidden world data.
-      for (let i = 0; i < 64; i++) {
-        context.fillStyle = i % 3 ? '#c8cdbd' : '#e4e6da';
-        context.fillRect((i * 17 + 13) % 60 + 2, (i * 23 + 7) % 60 + 2, 2, 1);
-      }
-      context.strokeStyle = '#8a927a'; context.lineWidth = 2; context.strokeRect(3, 3, 58, 58);
-      context.strokeStyle = '#eef0de'; context.lineWidth = 1; context.strokeRect(6.5, 6.5, 51, 51);
-      context.fillStyle = '#7a836b';
-      for (const x of [9, 53]) for (const y of [9, 53]) context.fillRect(x, y, 3, 3);
+      const finish = context.createLinearGradient(0, 0, 256, 256);
+      finish.addColorStop(0, '#eef0eb'); finish.addColorStop(1, '#cbd2c9');
+      context.fillStyle = finish; context.fillRect(0, 0, 256, 256);
       if (kind === 'vent') {
-        context.fillStyle = '#65705c';
-        for (let y = 20; y <= 44; y += 6) context.fillRect(17, y, 30, 3);
+        context.strokeStyle = '#aeb8ac'; context.lineWidth = 2; context.strokeRect(5, 5, 246, 246);
+        context.strokeStyle = '#f2f4ed'; context.lineWidth = 1; context.strokeRect(8.5, 8.5, 239, 239);
+        context.fillStyle = '#a7b2a5'; context.fillRect(65, 63, 126, 130);
+        for (let y = 76; y <= 172; y += 16) {
+          context.fillStyle = '#657669'; context.fillRect(76, y, 104, 5);
+          context.fillStyle = '#dae0d5'; context.fillRect(76, y + 5, 104, 2);
+        }
+        context.fillStyle = '#849180';
+        for (const x of [27, 229]) for (const y of [27, 229]) {
+          context.beginPath(); context.arc(x, y, 3, 0, Math.PI * 2); context.fill();
+        }
       } else {
-        context.fillStyle = '#bec5ae'; context.fillRect(16, 15, 32, 2); context.fillRect(16, 47, 32, 2);
-        context.fillStyle = '#8d957b'; context.fillRect(13, 40, 10, 2); context.fillRect(13, 44, 6, 2);
+        // Fine brushed finish; larger panel seams are built from public map geometry.
+        context.fillStyle = '#d8dfd7'; context.fillRect(0, 0, 256, 256);
+        for (let y = 0; y < 256; y += 4) {
+          context.fillStyle = y % 12 ? '#ffffff06' : '#52675a06';
+          context.fillRect(0, y, 256, 1);
+        }
       }
       texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
-      // Filter distant plate details to prevent shimmer; magnified texels stay crisp.
       texture.minFilter = THREE.LinearMipmapLinearFilter;
-      texture.magFilter = THREE.NearestFilter; texture.generateMipmaps = true;
+      texture.magFilter = THREE.LinearFilter; texture.generateMipmaps = true;
+      texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
       this.textures.set(kind, texture);
     }
-    material = new THREE.MeshStandardMaterial({ color, map: texture, roughness: .94, metalness: .12 });
+    material = new THREE.MeshStandardMaterial({ color, map: texture, roughness: .8, metalness: .2 });
     this.surfaces.set(key, material); return material;
   }
 
   private glow(group: THREE.Group, size: [number, number, number], position: [number, number, number], color: number) {
     const mesh = this.box(group, size, position, color);
-    // Small luminous inserts, rather than full-screen bloom, preserve pixel edges.
+    // Keep luminous inserts restrained so nearby surfaces retain their contrast.
     const key = color + 0x1000000;
     let material = this.materials.get(key);
     if (!material) {
@@ -199,24 +219,24 @@ export class StationRenderer {
     let texture = this.textures.get(key);
     if (!texture) {
       const canvas = document.createElement('canvas');
-      canvas.height = 32;
+      canvas.height = 96;
       const context = canvas.getContext('2d')!;
-      context.font = 'bold 22px monospace';
-      canvas.width = Math.ceil(context.measureText(text).width) + 16;
-      context.fillStyle = '#161e15e8'; context.fillRect(0, 0, canvas.width, 32);
-      context.fillStyle = color; context.font = 'bold 22px monospace';
+      context.font = '600 66px "Segoe UI", sans-serif';
+      canvas.width = Math.ceil(context.measureText(text).width) + 48;
+      context.fillStyle = '#19241fe8'; context.fillRect(0, 0, canvas.width, 96);
+      context.fillStyle = color; context.font = '600 66px "Segoe UI", sans-serif';
       context.textAlign = 'center'; context.textBaseline = 'middle';
-      context.fillText(text, canvas.width / 2, 17);
+      context.fillText(text, canvas.width / 2, 51);
       texture = new THREE.CanvasTexture(canvas);
       texture.colorSpace = THREE.SRGBColorSpace;
-      texture.minFilter = THREE.NearestFilter; texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.LinearFilter; texture.magFilter = THREE.LinearFilter;
       texture.generateMipmaps = false;
       this.textures.set(key, texture);
     }
-    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+    const material = new THREE.SpriteMaterial({ map: texture, depthTest: false, toneMapped: false });
     const sprite = new THREE.Sprite(material);
     sprite.position.y = y;
-    sprite.scale.set(scale * .65 * texture.image.width / 32, scale * .65, 1);
+    sprite.scale.set(scale * .65 * texture.image.width / 96, scale * .65, 1);
     sprite.renderOrder = 5;
     group.add(sprite);
   }
@@ -226,34 +246,49 @@ export class StationRenderer {
   }
 
   private buildRobot() {
-    for (const x of [-.22, .22]) {
-      this.box(this.robot, [.23, .2, .4], [x, .14, 0], colors.dark);
-      this.box(this.robot, [.17, .045, .3], [x, .26, 0], colors.steel);
-      this.box(this.robot, [.12, .13, .13], [x, .31, 0], colors.dark);
-      this.box(this.robot, [.1, .34, .15], [x * 1.6, .5, 0], colors.ivory);
-      this.box(this.robot, [.12, .09, .18], [x * 1.6, .35, .06], colors.dark);
+    for (const x of [-.27, .27]) {
+      this.box(this.robot, [.23, .25, .65], [x, .17, 0], colors.dark);
+      for (const z of [-.2, 0, .2]) {
+        const wheel = this.tank(this.robot, [.17, .025, .17], [x * 1.43, .17, z], colors.steel);
+        wheel.rotation.z = Math.PI / 2;
+      }
+      for (const z of [-.24, -.12, 0, .12, .24]) this.box(this.robot, [.235, .025, .045], [x, .3, z], colors.steel);
+      this.box(this.robot, [.2, .08, .51], [x, .34, 0], colors.ivory);
+      this.ball(this.robot, [.17, .17, .17], [x * 1.3, .66, 0], colors.steel);
+      const arm = this.box(this.robot, [.12, .25, .16], [x * 1.42, .5, .035], colors.ivory);
+      arm.rotation.z = -Math.sign(x) * .16;
+      this.box(this.robot, [.13, .08, .17], [x * 1.48, .37, .065], colors.dark);
+      for (const dz of [-.055, .055]) this.box(this.robot, [.08, .1, .04], [x * 1.48, .3, .075 + dz], colors.steel);
     }
-    this.box(this.robot, [.56, .4, .38], [0, .51, 0], colors.ivory);
-    this.box(this.robot, [.36, .23, .035], [0, .52, .212], colors.dark);
-    this.glow(this.robot, [.22, .045, .045], [0, .56, .23], colors.signal);
-    this.box(this.robot, [.28, .29, .16], [0, .53, -.27], colors.steel);
-    this.box(this.robot, [.46, .3, .39], [0, .87, .015], colors.ivory);
-    this.box(this.robot, [.39, .15, .035], [0, .88, .224], colors.dark);
-    for (const x of [-.11, .11]) this.glow(this.robot, [.09, .055, .04], [x, .9, .249], colors.signal);
-    this.box(this.robot, [.38, .025, .3], [0, 1.04, .015], colors.steel);
-    this.box(this.robot, [.035, .19, .035], [.16, 1.13, -.04], colors.steel);
-    this.glow(this.robot, [.075, .05, .075], [.16, 1.25, -.04], colors.signal);
+    this.box(this.robot, [.55, .16, .43], [0, .34, 0], colors.steel);
+    this.box(this.robot, [.5, .32, .36], [0, .57, 0], colors.ivory);
+    const breastplate = this.box(this.robot, [.42, .23, .065], [0, .58, .19], colors.steel);
+    breastplate.rotation.x = -.18;
+    this.glow(this.robot, [.2, .035, .025], [0, .61, .235], colors.signal);
+    this.box(this.robot, [.31, .29, .16], [0, .55, -.25], colors.dark);
+    for (const x of [-.1, .1]) this.tank(this.robot, [.1, .26, .1], [x, .55, -.34], colors.steel);
+    this.tank(this.robot, [.18, .09, .18], [0, .77, 0], colors.dark);
+    this.box(this.robot, [.5, .25, .39], [0, .92, .025], colors.ivory);
+    this.box(this.robot, [.43, .13, .04], [0, .93, .225], colors.dark);
+    this.glow(this.robot, [.25, .045, .02], [0, .94, .252], colors.signal);
+    this.box(this.robot, [.41, .035, .32], [0, 1.06, .025], colors.steel);
+    this.tank(this.robot, [.03, .18, .03], [.18, 1.15, -.065], colors.steel);
+    this.ball(this.robot, [.065, .065, .065], [.18, 1.26, -.065], colors.signal);
     this.label(this.robot, 'R-07', '#e5ed78', 1.52, .62);
   }
 
   private buildHuman() {
-    this.box(this.human, [.61, .08, .91], [0, .08, .01], colors.dark);
-    this.box(this.human, [.45, .075, .77], [0, .15, .01], 0x5f6953);
-    this.box(this.human, [.38, .2, .4], [0, .28, .05], colors.steel);
-    this.box(this.human, [.4, .035, .095], [0, .4, -.05], colors.amber);
-    this.box(this.human, [.29, .24, .28], [0, .3, -.3], colors.ivory);
-    this.box(this.human, [.21, .1, .04], [0, .34, -.456], colors.dark);
-    this.glow(this.human, [.08, .035, .03], [.07, .42, -.44], colors.amber);
+    this.box(this.human, [.61, .07, .97], [0, .08, .01], colors.dark);
+    this.box(this.human, [.45, .07, .79], [0, .15, .01], 0x5f6953);
+    for (const x of [-.27, .27]) {
+      this.tank(this.human, [.045, .94, .045], [x, .15, .01], colors.ivory).rotation.x = Math.PI / 2;
+      for (const z of [-.39, .39]) this.box(this.human, [.06, .08, .13], [x, .1, z], colors.dark);
+    }
+    this.box(this.human, [.34, .18, .4], [0, .27, .06], colors.steel);
+    for (const z of [-.03, .23]) this.box(this.human, [.37, .035, .065], [0, .37, z], colors.amber);
+    this.ball(this.human, [.28, .25, .28], [0, .3, -.3], colors.ivory);
+    this.box(this.human, [.21, .1, .035], [0, .33, -.433], colors.dark);
+    this.glow(this.human, [.07, .025, .025], [.07, .4, -.41], colors.amber);
     for (const x of [-.14, .14]) {
       this.box(this.human, [.13, .12, .25], [x, .23, .4], colors.dark);
       this.box(this.human, [.1, .12, .34], [x * 1.9, .23, .05], colors.steel);
@@ -280,7 +315,7 @@ export class StationRenderer {
     this.clear(this.terrain);
     this.width = p.level.width; this.height = p.level.height;
     const count = this.width * this.height;
-    this.floor = new THREE.InstancedMesh(this.cube, this.surface('deck', 0xffffff), count);
+    this.floor = new THREE.InstancedMesh(this.deck, this.surface('deck', 0xffffff), count);
     this.floor.receiveShadow = true;
     this.terrain.add(this.floor);
     this.wallCells = [];
@@ -293,25 +328,57 @@ export class StationRenderer {
     const transform = new THREE.Object3D();
     for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {
       transform.position.copy(this.world({ x, y })); transform.position.y = -.075;
-      transform.scale.set(.96, .15, .96); transform.updateMatrix();
+      transform.scale.set(.998, .15, .998); transform.updateMatrix();
       this.floor.setMatrixAt(y * this.width + x, transform.matrix);
+      if (p.level.tiles[y][x] === '#') continue;
+      const plate = new THREE.Group(); plate.position.copy(this.world({ x, y }));
+      // Two-by-two inspection plates span movement cells; cell colors still show sensor knowledge.
+      if (x % 2 === 0 && p.level.tiles[y][x + 1] !== '#' && x + 1 < this.width) {
+        this.box(plate, [.012, .006, 1], [.5, .003, 0], 0x35483e);
+        this.box(plate, [.008, .004, 1], [.518, .002, 0], 0x77877a);
+      }
+      if (y % 2 === 0 && p.level.tiles[y + 1]?.[x] !== '#' && y + 1 < this.height) {
+        this.box(plate, [1, .006, .012], [0, .003, .5], 0x35483e);
+        this.box(plate, [1, .004, .008], [0, .002, .518], 0x77877a);
+      }
+      if (x % 2 === 1 && y % 2 === 1) {
+        this.box(plate, [.15, .009, .055], [-.33, .006, -.35], colors.steel);
+        this.box(plate, [.09, .012, .018], [-.33, .012, -.35], colors.dark);
+      }
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        if (p.level.tiles[y + dz]?.[x + dx] !== '#') continue;
+        this.box(plate, dx ? [.1, .035, 1] : [1, .035, .1], [dx * .45, .02, dz * .45], 0x718174);
+      }
+      this.terrain.add(plate);
     }
     this.wallCells.forEach((cell, i) => {
       const boundary = cell.x === 0 || cell.y === 0 || cell.x === this.width - 1 || cell.y === this.height - 1;
       const height = boundary ? .34 : .55;
       transform.position.copy(this.world(cell)); transform.position.y = height / 2;
-      transform.scale.set(.98, height, .98); transform.updateMatrix();
+      transform.scale.set(.998, height, .998); transform.updateMatrix();
       this.walls!.setMatrixAt(i, transform.matrix);
-      this.walls!.setColorAt(i, new THREE.Color(boundary ? 0x303a2b : 0x414a36));
-      // Riveted metal wall caps are map geometry, not hidden gameplay objects.
+      this.walls!.setColorAt(i, new THREE.Color(boundary ? 0x35463d : 0x4c5c51));
+      // Wall cladding follows public floor-plan edges, never hidden gameplay objects.
       const cap = new THREE.Group(); cap.position.copy(this.world(cell));
-      const lid = this.box(cap, [.86, .035, .86], [0, height + .012, 0], colors.ivory);
-      lid.material = this.surface('vent', boundary ? 0x788067 : 0x9da38a);
-      if ((cell.x * 3 + cell.y) % 7 === 0) {
-        this.box(cap, [.65, .015, .075], [0, height + .035, .32], 0xa3ab44);
-        for (const x of [-.23, 0, .23]) this.box(cap, [.075, .016, .075], [x, height + .04, .32], colors.dark);
+      this.box(cap, [.99, .065, .99], [0, height + .018, 0], boundary ? 0x8b9586 : 0xb1b9aa);
+      if ((cell.x + cell.y) % 3 === 0) {
+        const vent = this.box(cap, [.61, .018, .55], [0, height + .058, 0], colors.steel);
+        vent.material = this.surface('vent', 0x8b9586);
       }
-      for (const x of [-.38, .38]) this.box(cap, [.08, height * .8, .09], [x, height / 2, .47], 0x5b6550);
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        if (!p.level.tiles[cell.y + dz]?.[cell.x + dx] || p.level.tiles[cell.y + dz][cell.x + dx] === '#') continue;
+        this.box(cap, dx ? [.06, height * .7, .82] : [.82, height * .7, .06], [dx * .51, height * .48, dz * .51], colors.steel);
+        this.box(cap, dx ? [.075, .035, .92] : [.92, .035, .075], [dx * .52, height * .82, dz * .52], colors.ivory);
+        if ((cell.x + cell.y) % 2 === 0) {
+          this.box(cap, dx ? [.09, height * .85, .085] : [.085, height * .85, .09], [dx * .535, height / 2, dz * .535], colors.dark);
+        }
+      }
+      if ((cell.x * 3 + cell.y) % 7 === 0) {
+        this.box(cap, [.32, .014, .09], [0, height + .061, .32], colors.amber);
+        for (const x of [-.09, .03]) {
+          const stripe = this.box(cap, [.04, .016, .1], [x, height + .064, .32], colors.dark); stripe.rotation.y = -.5;
+        }
+      }
       this.terrain.add(cap);
     });
     this.box(this.terrain, [this.width + .38, .37, this.height + .38], [0, -.35, 0], colors.dark);
@@ -341,82 +408,119 @@ export class StationRenderer {
   private buildEntity(entity: ObservedEntity, sensed: boolean) {
     const group = new THREE.Group(); group.position.copy(this.world(entity.position));
     group.name = `observed:${entity.id}`;
-    const steel = sensed ? 0x929c7d : 0x5b664c;
+    const steel = sensed ? 0xa3b0a2 : 0x617567;
     if (entity.type === 'supply') {
       if (entity.itemType === 'oxygen') {
-        this.box(group, [.48, .065, .37], [0, .075, 0], colors.dark);
-        for (const x of [-.13, .13]) {
-          this.tank(group, [.19, .44, .19], [x, .31, 0], colors.ivory);
-          this.tank(group, [.2, .07, .2], [x, .33, 0], colors.steel);
-          this.tank(group, [.11, .06, .11], [x, .56, 0], colors.dark);
+        this.box(group, [.55, .07, .4], [0, .075, 0], colors.dark);
+        for (const x of [-.14, .14]) {
+          this.tank(group, [.22, .38, .22], [x, .34, 0], colors.ivory);
+          this.ball(group, [.22, .15, .22], [x, .53, 0], colors.ivory);
+          this.ball(group, [.22, .13, .22], [x, .15, 0], colors.ivory);
+          this.tank(group, [.226, .07, .226], [x, .36, 0], colors.steel);
+          this.tank(group, [.07, .09, .07], [x, .63, 0], colors.dark);
+          this.box(group, [.14, .025, .04], [x, .68, 0], colors.amber);
+          this.box(group, [.08, .11, .02], [x, .45, .115], steel);
         }
-        this.box(group, [.35, .035, .04], [0, .57, 0], colors.steel);
+        this.box(group, [.44, .04, .035], [0, .39, .14], colors.dark);
+        this.box(group, [.44, .04, .035], [0, .39, -.14], colors.dark);
       } else {
-        const color = entity.itemType === 'battery' ? colors.signal : colors.ivory;
-        this.box(group, [.52, .3, .4], [0, .24, 0], colors.dark);
-        this.box(group, [.54, .06, .42], [0, .43, 0], steel);
-        this.box(group, [.4, .17, .02], [0, .26, .215], color);
-        for (const x of [-.19, .19]) this.box(group, [.055, .31, .42], [x, .26, 0], steel);
-        this.box(group, [.24, .045, .045], [0, .53, 0], colors.dark);
-        for (const x of [-.1, .1]) this.box(group, [.035, .09, .045], [x, .48, 0], colors.dark);
         if (entity.itemType === 'repair') {
-          this.box(group, [.2, .045, .025], [0, .28, .232], colors.dark);
-          this.box(group, [.045, .15, .025], [0, .28, .236], colors.dark);
-        } else this.glow(group, [.16, .025, .025], [0, .28, .235], colors.signal);
+          this.box(group, [.64, .31, .46], [0, .24, 0], steel);
+          this.box(group, [.66, .085, .48], [0, .44, 0], colors.ivory);
+          this.box(group, [.5, .025, .035], [0, .39, .244], colors.dark);
+          for (const x of [-.23, .23]) this.box(group, [.065, .15, .035], [x, .39, .26], colors.dark);
+          this.box(group, [.26, .045, .06], [0, .58, 0], colors.dark);
+          for (const x of [-.1, .1]) this.box(group, [.04, .11, .06], [x, .52, 0], colors.dark);
+          this.box(group, [.2, .045, .025], [0, .25, .245], colors.amber);
+          this.box(group, [.045, .15, .025], [0, .25, .249], colors.amber);
+        } else {
+          this.box(group, [.45, .5, .35], [0, .33, 0], colors.dark);
+          for (const x of [-.21, .21]) this.box(group, [.075, .47, .39], [x, .33, 0], steel);
+          this.box(group, [.36, .24, .025], [0, .33, .19], colors.signal);
+          this.box(group, [.38, .07, .38], [0, .6, 0], steel);
+          for (const x of [-.11, .11]) this.tank(group, [.07, .065, .07], [x, .67, 0], colors.amber);
+          for (const x of [-.09, 0, .09]) this.glow(group, [.04, .07, .025], [x, .32, .215], colors.ivory);
+        }
       }
     } else if (entity.type === 'door') {
-      this.box(group, [.12, .88, .46], [-.38, .45, 0], steel);
-      this.box(group, [.12, .88, .46], [.38, .45, 0], steel);
-      this.box(group, [.88, .13, .48], [0, .92, 0], colors.dark);
-      if (entity.state !== 'opened') {
-        for (const x of [-.15, .15]) {
-          this.box(group, [.27, .7, .17], [x, .41, 0], steel);
-          this.box(group, [.2, .055, .025], [x, .32, .1], colors.dark);
+      group.rotation.y = Math.PI / 2;
+      this.box(group, [.94, .045, .55], [0, .035, 0], colors.dark);
+      for (const x of [-.39, .39]) {
+        this.box(group, [.16, .96, .46], [x, .52, 0], steel);
+        for (const side of [-1, 1]) {
+          this.box(group, [.075, .75, .035], [x, .55, side * .25], colors.dark);
+          this.box(group, [.1, .15, .045], [x, .2, side * .26], colors.amber);
         }
-        this.box(group, [.035, .64, .025], [0, .4, .11], colors.dark);
       }
-      for (const x of [-.38, .38]) this.box(group, [.07, .17, .03], [x, .2, .25], colors.amber);
-      this.glow(group, [.29, .045, .03], [0, .94, .26], entity.state === 'opened' ? colors.signal : colors.amber);
+      this.box(group, [.96, .15, .5], [0, 1.02, 0], colors.ivory);
+      for (const sign of [-1, 1]) {
+        const x = sign * (entity.state === 'opened' ? .34 : .15);
+        this.box(group, [entity.state === 'opened' ? .09 : .28, .77, .18], [x, .49, 0], steel);
+        if (entity.state !== 'opened') {
+          for (const side of [-1, 1]) this.box(group, [.21, .075, .025], [x, .48, side * .11], colors.dark);
+        }
+      }
+      for (const side of [-1, 1]) this.glow(group, [.32, .045, .03], [0, 1.03, side * .27], entity.state === 'opened' ? colors.signal : colors.amber);
     } else if (entity.type === 'cabinet') {
-      this.box(group, [.61, .87, .43], [0, .46, 0], steel);
-      this.box(group, [.48, .7, .04], [0, .46, .236], colors.dark);
+      this.box(group, [.68, .91, .5], [0, .51, 0], steel);
+      this.box(group, [.53, .77, .045], [0, .52, .265], colors.dark);
+      for (const x of [-.3, .3]) this.box(group, [.05, .82, .04], [x, .5, .29], colors.ivory);
       if (entity.state === 'opened') {
-        this.box(group, [.42, .035, .03], [0, .35, .27], colors.ivory);
-        const door = this.box(group, [.4, .7, .035], [.35, .46, .4], steel); door.rotation.y = -.8;
+        for (const y of [.3, .55]) this.box(group, [.48, .025, .16], [0, y, .29], colors.ivory);
+        const door = this.box(group, [.49, .77, .045], [.39, .52, .45], steel); door.rotation.y = -.95;
       } else {
-        const face = this.box(group, [.48, .72, .025], [0, .46, .267], steel);
+        const face = this.box(group, [.52, .77, .04], [0, .52, .3], steel);
         face.material = this.surface('vent', steel);
-        this.box(group, [.04, .18, .035], [.15, .47, .297], colors.dark);
+        this.box(group, [.04, .2, .05], [.17, .48, .345], colors.dark);
       }
-      this.glow(group, [.12, .035, .03], [-.12, .78, .29], colors.signal);
-      this.box(group, [.64, .06, .46], [0, .94, 0], colors.dark);
+      this.glow(group, [.12, .035, .03], [-.13, .85, .33], colors.signal);
+      this.box(group, [.71, .07, .53], [0, 1.01, 0], colors.dark);
+      this.box(group, [.71, .07, .53], [0, .06, 0], colors.dark);
     } else if (entity.type === 'obstacle') {
       const bar = this.box(group, [.87, .16, .24], [0, .19, 0], steel); bar.rotation.y = .6;
       const beam = this.box(group, [.19, .31, .7], [.08, .23, .08], 0x7e8267); beam.rotation.z = .35;
       this.box(group, [.3, .2, .3], [-.23, .17, -.2], colors.dark);
       const stripe = this.box(group, [.26, .018, .2], [0, .286, 0], colors.amber); stripe.rotation.y = .6;
+      const panel = this.box(group, [.47, .035, .36], [-.18, .33, -.05], steel); panel.rotation.set(.3, -.5, .25);
+      for (const z of [-.24, .24]) {
+        const brace = this.box(group, [.72, .06, .06], [0, .13, z], colors.dark); brace.rotation.y = .6;
+      }
     } else if (entity.type === 'hazard') {
       this.box(group, [.77, .065, .62], [0, .07, 0], colors.dark);
       for (const x of [-.31, .31]) this.box(group, [.09, .03, .57], [x, .12, 0], colors.amber);
       for (let i = 0; i < 3; i++) {
-        const cable = this.box(group, [.055, .04, .48], [-.18 + i * .18, .15, 0], steel); cable.rotation.y = -.18;
-        this.glow(group, [.07, .04, .13], [-.18 + i * .18, .17, .09], entity.state === 'active' ? colors.red : 0x657147);
+        const x = -.18 + i * .18;
+        const cable = this.tank(group, [.055, .47, .055], [x, .16, 0], steel); cable.rotation.set(Math.PI / 2, 0, -.12);
+        for (const z of [-.21, .21]) this.box(group, [.09, .09, .075], [x, .16, z], colors.ivory);
+        this.glow(group, [.07, .05, .09], [x, .18, .07], entity.state === 'active' ? colors.red : 0x657147);
       }
     } else if (entity.type === 'airlock') {
-      this.box(group, [.67, .15, .5], [0, .12, 0], colors.dark);
-      this.box(group, [.45, .51, .36], [0, .43, 0], steel);
-      const screen = this.box(group, [.55, .31, .085], [0, .77, .05], colors.dark); screen.rotation.x = -.2;
-      this.glow(group, [.42, .15, .035], [0, .8, .108], entity.state === 'repaired' ? colors.signal : colors.amber);
-      for (const x of [-.15, 0, .15]) this.box(group, [.065, .025, .06], [x, .7, .16], colors.ivory);
-      this.box(group, [.52, .05, .03], [0, .3, .205], colors.amber);
+      this.box(group, [.74, .13, .57], [0, .1, 0], colors.dark);
+      this.box(group, [.5, .53, .4], [0, .43, 0], steel);
+      this.box(group, [.38, .29, .035], [0, .39, .22], colors.dark);
+      for (const x of [-.29, .29]) this.tank(group, [.07, .48, .07], [x, .4, -.06], colors.ivory);
+      const console = new THREE.Group(); console.position.set(0, .79, .06); console.rotation.x = -.3;
+      this.box(console, [.65, .39, .1], [0, 0, 0], colors.ivory);
+      this.box(console, [.55, .29, .025], [0, .015, .06], colors.dark);
+      const status = entity.state === 'repaired' ? colors.signal : colors.amber;
+      this.glow(console, [.36, .1, .02], [-.04, .04, .08], status);
+      for (let i = 0; i < 3; i++) this.glow(console, [.04, .025, .02], [.21, .08 - i * .055, .08], status);
+      this.box(console, [.3, .018, .02], [-.04, -.06, .08], colors.steel);
+      group.add(console);
+      const keyboard = this.box(group, [.6, .055, .2], [0, .61, .23], colors.dark); keyboard.rotation.x = -.15;
+      for (const x of [-.18, -.06, .06, .18]) this.box(group, [.065, .02, .07], [x, .65, .25], colors.ivory);
+      this.box(group, [.52, .04, .03], [0, .29, .245], colors.amber);
     } else {
-      this.box(group, [.54, .54, .37], [0, .3, 0], steel);
-      this.box(group, [.39, .37, .035], [0, .32, .205], colors.dark);
-      this.box(group, [.21, .16, .03], [0, .39, .23], colors.ivory);
-      const handle = this.box(group, [.045, .2, .055], [0, .38, .27], colors.dark);
+      this.box(group, [.61, .08, .46], [0, .075, 0], colors.dark);
+      this.box(group, [.55, .57, .38], [0, .37, 0], steel);
+      this.box(group, [.43, .41, .04], [0, .38, .215], colors.ivory);
+      this.box(group, [.28, .23, .025], [0, .41, .25], colors.dark);
+      this.tank(group, [.16, .035, .16], [0, .42, .28], colors.steel).rotation.x = Math.PI / 2;
+      const handle = this.box(group, [.055, .21, .065], [0, .43, .32], colors.dark);
       handle.rotation.z = entity.state === 'on' ? -.6 : .6;
-      this.glow(group, [.15, .035, .035], [0, .18, .235], entity.state === 'on' ? colors.signal : colors.amber);
-      this.box(group, [.59, .06, .4], [0, .6, 0], colors.dark);
+      this.ball(group, [.1, .1, .1], [entity.state === 'on' ? .06 : -.06, .515, .32], colors.amber);
+      this.glow(group, [.15, .035, .025], [0, .23, .25], entity.state === 'on' ? colors.signal : colors.amber);
+      this.box(group, [.6, .065, .43], [0, .69, 0], colors.dark);
     }
     this.objects.add(group);
   }
@@ -433,8 +537,9 @@ export class StationRenderer {
         const near = sensed.has(`${x},${y}`);
         const radar = Math.abs(x - p.robot.position.x) + Math.abs(y - p.robot.position.y) <= p.rules.radarRadius;
         const wall = p.level.tiles[y][x] === '#';
-        const color = wall ? 0x30372b : near ? (x + y) % 2 ? 0x687345 : 0x737d4b : radar ? (x + y) % 2 ? 0x454e35 : 0x4b543b : (x + y) % 2 ? 0x353e2c : 0x3b4331;
-        this.floor!.setColorAt(y * this.width + x, new THREE.Color(color));
+        const color = new THREE.Color(wall ? 0x29352d : near ? 0x667064 : radar ? 0x3e4b40 : 0x2c382f);
+        if ((Math.floor((x - 1) / 2) + Math.floor((y - 1) / 2)) % 2) color.multiplyScalar(.96);
+        this.floor!.setColorAt(y * this.width + x, color);
       }
       this.floor!.instanceColor!.needsUpdate = true;
       // Outline the actual sensor footprint. Decorations never imply unseen objects.
@@ -601,8 +706,9 @@ export class StationRenderer {
   private resize() {
     const rect = this.canvas.getBoundingClientRect();
     if (!rect.width || !rect.height || this.disposed) return;
-    // Keep pixel edges, with enough samples to read metal plates and character silhouettes.
-    this.renderer.setSize(Math.max(1, Math.round(rect.width * .75)), Math.max(1, Math.round(rect.height * .75)), false);
+    // Match the display while bounding GPU cost on high-density screens.
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setSize(Math.max(1, Math.round(rect.width)), Math.max(1, Math.round(rect.height)), false);
     this.fitCamera(); this.draw();
   }
 
@@ -627,7 +733,7 @@ export class StationRenderer {
     document.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('blur', this.cancelGesture);
     for (const group of [this.terrain, this.objects, this.robot, this.human, this.selection, this.hover]) this.clear(group);
-    this.cube.dispose(); this.cylinder.dispose();
+    this.cube.dispose(); this.deck.dispose(); this.cylinder.dispose(); this.sphere.dispose();
     this.materials.forEach(material => material.dispose()); this.surfaces.forEach(material => material.dispose());
     this.textures.forEach(texture => texture.dispose());
     this.renderer.dispose();

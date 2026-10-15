@@ -36,7 +36,7 @@ textarea { resize: none; }
 .map-panel { position: absolute; inset: 10.6%; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 45% 30%, #59613b 0, #293a2d 46%, #15271e 80%); box-shadow: inset 0 0 90px #070b08; }
 .map-wrap { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; }
 .map-wrap::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 45px #060c0699; pointer-events: none; }
-canvas { display: block; width: 100%; height: 100%; border-radius: 50%; image-rendering: pixelated; touch-action: manipulation; }
+canvas { display: block; width: 100%; height: 100%; border-radius: 50%; touch-action: manipulation; }
 canvas[data-render-mode="3d"] { touch-action: none; cursor: grab; }
 canvas[data-dragging="true"] { cursor: grabbing !important; }
 .instrument-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; filter: drop-shadow(0 2px 1px #050905); }
