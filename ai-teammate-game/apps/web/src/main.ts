@@ -95,6 +95,12 @@ function render() {
     $(id).style.background = p.human.oxygen < 25 ? '#ef817c' : '#66ddce';
   }
   $('battery-bar').style.width = `${p.robot.battery / p.rules.batteryMax * 100}%`;
+  $('human-oxygen-max').textContent = ` / ${p.rules.oxygenMax}`;
+  $('robot-battery-bar').style.width = `${p.robot.battery / p.rules.batteryMax * 100}%`;
+  $('robot-battery-max').textContent = ` / ${p.rules.batteryMax}`;
+  document.querySelector<HTMLElement>('.robot-card')!.dataset.lowBattery = String(p.robot.battery / p.rules.batteryMax < .25);
+  $('robot-summary').textContent = `${frames ? '回放 · ' : ''}${!frames && view.pendingAuthorization ? '等待你的授权' : phaseNames[p.phase]}`;
+  $('robot-location').textContent = `坐标 (${p.robot.position.x}, ${p.robot.position.y}) · ${p.human.carried ? '搬运伤员中' : `物资 ${p.robot.inventory.length} / ${p.rules.inventorySlots}`}`;
   $('human-status').textContent = `${p.human.carried ? '正在由 R-07 搬运' : '受伤 · 无法移动'} / 每 TU 消耗 ${p.human.oxygenRate} 氧气`;
   $('robot-status').textContent = `${phaseNames[p.phase]} / 坐标 (${p.robot.position.x}, ${p.robot.position.y})`;
   $('circuit-state').textContent = p.circuitOn ? '已通电 · 故障可能带电' : '已断电';
