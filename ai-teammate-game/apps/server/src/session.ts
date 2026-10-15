@@ -56,6 +56,9 @@ const interactionUsage: Record<string, string> = {
 };
 
 const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气有限，你有电量限制。只使用收到的机器人知识和人类明确发送的信息；雷达模糊回波不是物品身份。
+historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0,0)，x 向右增大，y 向下增大；tiles[y][x] 表示坐标 (x,y) 的格子，每个字符串是一整行，数组索引是 y，字符串字符索引是 x。图例：# 是墙，不可通行；. 是历史地面，可作为候选路线；D 是历史门位，当前开闭与供电状态需靠近确认；X 是历史障碍位，不代表永久不可通行；E 是撤离出口，能到达不等于满足撤离条件。rooms 是历史房间名称与参考坐标，不提供当前设施状态或可交互实体 ID。
+当前设施状态以 knownEntities 和最新工具结果为准，优先于历史地图符号及此前的推测：障碍 state=cleared 表示已清除，不再阻挡；门 state=opened 表示已打开，可以通过；已知关闭的门、未清除的障碍和柜体仍阻挡移动。历史可通行格可能存在尚未发现的阻挡或危险，需以逐格执行结果确认；不要把未知状态直接判为无路。
+move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.position 为准，不要把部分移动视为抵达。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。仅在实际工具结果支持结束整项委托时调用 finish_task；该工具只结束自动行动，游戏胜负仍由规则引擎判断。
 保持人类委托的目标与约束，允许一轮最多6个工具串行调用，基于已知对象生成有限批次。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
@@ -430,10 +433,10 @@ export class GameSession {
     const position = Type.Object({ x: Type.Integer({ minimum: 0, maximum: 11 }), y: Type.Integer({ minimum: 0, maximum: 11 }) }, { additionalProperties: false });
     return [
       {
-        name: 'move_to', label: '移动', description: '沿已知布局移向坐标，每格检查关键变化，最多12格，可中断。', executionMode: 'sequential',
-        parameters: Type.Object({ target: position, maxSteps: Type.Optional(Type.Integer({ minimum: 1, maximum: 12 })) }, { additionalProperties: false }),
+        name: 'move_to', label: '移动', description: '自动沿历史布局和已知阻挡寻路至最终目标坐标，无需拆分中间坐标，无单次格数上限；逐格检查关键变化、资源与自动运行剩余 TU 预算，可中断。', executionMode: 'sequential',
+        parameters: Type.Object({ target: position }, { additionalProperties: false }),
         execute: async (id, raw, signal) => {
-          const input = raw as { target: Position; maxSteps?: number };
+          const input = raw as { target: Position };
           let outcome: ActionOutcome | null = null;
           let steps = 0;
           let costTU = 0;
@@ -441,7 +444,7 @@ export class GameSession {
           const generation = this.commandRevision;
           const external = this.externalRevision;
           this.engine.state.phase = 'executing';
-          for (let index = 0; index < (input.maxSteps ?? 12); index++) {
+          for (let index = 0; ; index++) {
             if (signal?.aborted || generation !== this.commandRevision || external !== this.externalRevision || this.control !== 'continue') { if (this.control === 'continue') this.control = 'redecide'; break; }
             if (samePosition(this.engine.state.robot.position, input.target)) break;
             const path = this.engine.knownPath(input.target, this.executionConstraints());
@@ -538,7 +541,7 @@ export class GameSession {
     if (!task) return [{ name: 'ask_player', arguments: { question: '请给我一个目标。' } }];
     if (!task.goal || !task.demoSupported) return [{ name: 'ask_player', arguments: { question: demoHelp } }];
     const goal = task.goal;
-    const go = (target: Position): ToolIntent => ({ name: 'move_to', arguments: { target, maxSteps: 12 } });
+    const go = (target: Position): ToolIntent => ({ name: 'move_to', arguments: { target } });
     const interact = (operation: string, targetId?: string, itemId?: string): ToolIntent => ({ name: 'interact', arguments: { operation, ...(targetId ? { targetId } : {}), ...(itemId ? { itemId } : {}) } });
     if (this.taskSatisfied()) return [{ name: 'finish_task', arguments: { reason: '本次目标已完成。' } }];
     if (goal.kind === 'goto' && goal.position) return [go(goal.position)];
@@ -576,7 +579,7 @@ export class GameSession {
   private demoCircuitIntents(on: boolean, device?: ObservedEntity): ToolIntent[] {
     const knownSwitch = Object.values(this.engine.state.knowledge.entities).find(e => e.type === 'switch');
     if (knownSwitch) return [
-      { name: 'move_to', arguments: { target: this.approach(knownSwitch), maxSteps: 12 } },
+      { name: 'move_to', arguments: { target: this.approach(knownSwitch) } },
       { name: 'set_circuit', arguments: { targetId: knownSwitch.id, on } },
     ];
     // Explore reachable floor around the known device/room; never consult hidden switch entities.
@@ -593,7 +596,7 @@ export class GameSession {
       if (path?.length && newCells > 0) candidates.push({ target, length: path.length, newCells });
     }
     candidates.sort((a, b) => a.length - b.length || b.newCells - a.newCells);
-    if (candidates[0]) return [{ name: 'move_to', arguments: { target: candidates[0].target, maxSteps: 12 } }];
+    if (candidates[0]) return [{ name: 'move_to', arguments: { target: candidates[0].target } }];
     return [{ name: 'ask_player', arguments: { question: '尚未发现可触及的辅助电路开关，请指示我继续搜索的位置。' } }];
   }
 

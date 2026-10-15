@@ -65,7 +65,8 @@ canvas[data-dragging="true"] { cursor: grabbing !important; }
 .scene-resources { position: absolute; left: 17%; top: 48%; z-index: 3; display: grid; gap: 3px; color: #c3caa2; opacity: .7; font-size: 8px; pointer-events: none; }
 .target-summary { position: absolute; z-index: 3; left: 50%; bottom: 21%; transform: translateX(-50%); border: 0; border-bottom: 1px solid #a2ad6666; background: #131d12bb; font-size: 11px; padding: 6px 11px; min-height: 30px; max-width: 50%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #e3e7c6; }
 .target-summary { margin: 0; pointer-events: none; }
-.map-inspector { position: absolute; z-index: 7; left: 50%; bottom: calc(50% - var(--dial) * .29); transform: translateX(-50%); width: min(460px, calc(var(--dial) * .60)); padding: 10px 14px 12px; border: 1px solid #8b9860; border-top: 2px solid #d5dd44; background: #1b2619f5; box-shadow: 0 8px 24px #02080288; }
+.map-inspector { position: absolute; z-index: 7; left: 50%; bottom: calc(50% - var(--dial) * .29); transform: translateX(-50%); width: min(460px, calc(var(--dial) * .60)); padding: 10px 14px 12px; border: 1px solid #8b9860; border-top: 2px solid #d5dd44; background: #1b2619c7; box-shadow: 0 8px 24px #02080255; }
+.map-inspector:has(.marker-form:not([hidden])) { position: fixed; bottom: max(228px, calc(50dvh - var(--dial) * .29)); }
 .selection-heading { display: flex; align-items: center; gap: 8px; }
 .selection-heading strong { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
 .selection-heading button { flex-shrink: 0; min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; font-size: 22px; }
@@ -74,7 +75,8 @@ canvas[data-dragging="true"] { cursor: grabbing !important; }
 .selection-actions button, .marker-actions button { flex: 1; min-width: 0; min-height: 44px; }
 #toggle-marker { display: flex; align-items: center; justify-content: center; gap: 6px; }
 #toggle-marker .icon { width: 18px; height: 18px; }
-.map-inspector .marker-form { position: absolute; bottom: calc(100% + 8px); left: -1px; right: -1px; padding: 16px; border: 1px solid #8b9860; background: #1b2619fc; box-shadow: 0 -8px 24px #02080266; }
+.map-inspector .marker-form { position: absolute; top: calc(100% + 8px); left: -1px; right: -1px; gap: 8px; margin: 0; padding: 12px; border: 1px solid #8b9860; border-top: 2px solid #d5dd44; background: #1b2619c7; box-shadow: 0 8px 24px #02080255; }
+.map-inspector #marker-note { background: #172019cc; }
 body:has(.map-inspector:not([hidden])) .toast { top: max(16px, env(safe-area-inset-top)); bottom: auto; width: max-content; }
 .camera-aux { position: absolute; z-index: 4; bottom: 24%; right: 13%; display: flex; gap: 4px; }
 .camera-aux button { background: #1a2314b0; border-color: #939b4859; width: 36px; min-height: 36px; padding: 2px; font-size: 19px; color: #d1d69a; }
@@ -284,8 +286,8 @@ footer > span { display: block; font-size: 9px; color: #8e9a85; letter-spacing: 
   .coordinate-label, .scene-resources { display: none; }
   .target-summary { font-size: 9px; min-height: 30px; padding: 5px 8px; bottom: 24%; max-width: 58%; }
   .map-inspector { position: fixed; left: 0; bottom: 0; transform: none; width: 100%; max-height: 65dvh; overflow-y: auto; padding: 10px 16px max(14px, env(safe-area-inset-bottom)); border-left: 0; border-right: 0; box-shadow: 0 -8px 30px #02080299; }
-  .map-inspector .marker-form { position: static; margin-top: 12px; padding: 12px 0 0; border: 0; border-top: 1px solid #83946455; background: transparent; box-shadow: none; }
-  .map-inspector:has(.marker-form:not([hidden])) .selection-actions { display: none; }
+  .map-inspector:has(.marker-form:not([hidden])) { bottom: calc(228px + env(safe-area-inset-bottom)); overflow: visible; }
+  .map-inspector .marker-form { left: 0; right: 0; border-left: 0; border-right: 0; }
   .map-inspector #marker-note { font-size: 16px; }
   .camera-aux { right: 12%; bottom: 32%; flex-direction: column; gap: 3px; }.camera-aux button { width: 44px; min-height: 44px; background: #1c2817cc; font-size: 19px; }
   .action-dock { width: 62%; height: 16%; left: 19%; bottom: 6%; }

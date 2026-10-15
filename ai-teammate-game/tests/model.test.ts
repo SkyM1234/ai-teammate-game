@@ -49,7 +49,7 @@ function completion(res: ServerResponse, calls: { name: string; arguments: unkno
 test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把结果送入下一请求', async t => {
   const { config, requests } = await endpoint(t, (res, index) => completion(res, index === 0 ? [
     { name: 'get_status', arguments: {} },
-    { name: 'move_to', arguments: { target: { x: 3, y: 9 }, maxSteps: 1 } },
+    { name: 'move_to', arguments: { target: { x: 3, y: 9 } } },
     { name: 'report', arguments: { text: '已移动一格。' } },
   ] : [{ name: 'finish_task', arguments: { reason: '检查结束。' } }], index === 0 ? '开始检查附近通道。' : ''));
   const session = new GameSession(level, { adapter: await liveModel(config, secret), delayMs: 0 });
@@ -64,7 +64,7 @@ test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把�
   assert.ok(session.messages.some(m => m.text === '开始检查附近通道。'));
   const calls = session.view().messages.filter(message => message.kind === 'tool');
   assert.deepEqual(calls.map(message => message.tool?.name), ['get_status', 'move_to', 'report', 'finish_task']);
-  assert.deepEqual(calls[1].tool?.arguments, { target: { x: 3, y: 9 }, maxSteps: 1 });
+  assert.deepEqual(calls[1].tool?.arguments, { target: { x: 3, y: 9 } });
   assert.ok(calls.every(message => message.tool?.status === 'done'));
   assert.ok(session.messages.findIndex(message => message.text === '开始检查附近通道。') < session.messages.findIndex(message => message.kind === 'tool'));
   assert.deepEqual(session.save().messages.filter(message => message.kind === 'tool'), calls);
@@ -83,7 +83,7 @@ test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把�
   const secondContext = await readFile(join(directory, 'models', contexts[1]), 'utf8');
   assert.ok(secondContext.includes('newDiscoveries')); assert.ok(secondContext.includes('toolCallId'));
   const firstLog = await readFile(join(directory, 'models', logs[0]), 'utf8');
-  assert.ok(firstLog.includes('完整请求上下文')); assert.ok(firstLog.includes('系统提示')); assert.ok(firstLog.includes('开始检查附近通道。')); assert.ok(firstLog.includes('"maxSteps": 1'));
+  assert.ok(firstLog.includes('完整请求上下文')); assert.ok(firstLog.includes('系统提示')); assert.ok(firstLog.includes('开始检查附近通道。'));
   assert.ok(firstLog.includes('工具调用结果')); assert.ok(firstLog.includes('本轮决策结束'));
   const events = await readFile(join(directory, 'events.md'), 'utf8');
   assert.ok(events.includes('玩家对话')); assert.ok(events.includes('游戏动作')); assert.ok(events.includes('自动运行结束'));
@@ -95,7 +95,7 @@ test('DeepSeek 目录和兼容入口保留完整模型参数，pi-agent 正确�
     for (const provider of ['deepseek', 'compatible'] as const) {
       const { config: mock, requests } = await endpoint(t, (res, index) => completion(res, index === 0 ? [
         { name: 'get_status', arguments: {} },
-        { name: 'move_to', arguments: { target: { x: 3, y: 9 }, maxSteps: 1 } },
+        { name: 'move_to', arguments: { target: { x: 3, y: 9 } } },
       ] : [{ name: 'finish_task', arguments: { reason: '检查完成。' } }], '', 'mock-reasoning-for-tool-round'));
       const config = validateModelConfig({ ...defaultModelConfig, mode: 'live', provider, modelId, baseUrl: `https://api.deepseek.com${provider === 'compatible' ? '/v1' : ''}` });
       const adapter = await liveModel(config, secret);
@@ -155,7 +155,7 @@ test('上游鉴权错误和超时暂停任务，不泄露上游错误内容或�
 
 test('执行一批动作后的下一次请求失败，仅保留已提交动作，恢复继续时不重放旧批次', async t => {
   const { config, requests } = await endpoint(t, (res, index) => {
-    if (index === 0) completion(res, [{ name: 'move_to', arguments: { target: { x: 3, y: 9 }, maxSteps: 1 } }]);
+    if (index === 0) completion(res, [{ name: 'move_to', arguments: { target: { x: 3, y: 9 } } }]);
     else if (index === 1) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'server failure' } })); }
     else completion(res, [{ name: 'finish_task', arguments: { reason: '检查结束。' } }]);
   });

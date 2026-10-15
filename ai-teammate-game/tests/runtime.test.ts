@@ -208,6 +208,33 @@ test('每轮行动预算在逐格边界停止，继续后不重复旧动作', as
   assert.equal(session.engine.state.elapsedTU, 3); assert.equal(session.task?.status, 'completed');
 });
 
+test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停止', async () => {
+  for (const budget of [30, 13]) {
+    const longRoute = structuredClone(level);
+    longRoute.robotStart = { x: 1, y: 10 };
+    longRoute.entities = [];
+    longRoute.rules.actionTULimit = budget;
+    const session = new GameSession(longRoute, { delayMs: 0, adapter: {
+      mode: 'test', label: 'long route', model: demoModel,
+      streamFn: () => toolStream([move(10, 1)]),
+    } });
+    await session.command('前往 (10,1)'); await session.settled();
+    const steps = Math.min(18, budget);
+    assert.equal(session.metrics.requests, 1);
+    assert.equal(session.metrics.executedTools, 1);
+    assert.equal(session.engine.state.elapsedTU, steps);
+    assert.equal(session.engine.state.robot.battery, longRoute.rules.battery - steps);
+    assert.equal(session.engine.state.human.oxygen, longRoute.rules.oxygen - steps * longRoute.rules.oxygenRate);
+    const result = session.agent.state.messages.find(message => message.role === 'toolResult');
+    assert.ok(result?.role === 'toolResult' && result.content[0].type === 'text');
+    const outcome = JSON.parse(result.content[0].text);
+    assert.equal(outcome.executedSteps, steps);
+    assert.equal(outcome.targetReached, budget >= 18);
+    assert.equal(session.task?.status, budget >= 18 ? 'completed' : 'paused');
+    if (budget >= 18) assert.deepEqual(session.engine.state.robot.position, { x: 10, y: 1 });
+  }
+});
+
 test('一个响应最多放行六个工具，超额调用跳过且不产生报告', async () => {
   const { session } = scripted([[...Array.from({ length: 6 }, () => report), { name: 'report', arguments: { text: '超额报告' } }], [{ name: 'ask_player', arguments: { question: '批次结束' } }]]);
   await session.command('探索'); await session.settled();
