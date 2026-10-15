@@ -469,6 +469,7 @@ function renderMessages() {
   const pinned = area.scrollHeight - area.scrollTop - area.clientHeight < 70;
   const scrollTop = area.scrollTop;
   const oldAuthorization = area.querySelector<HTMLElement>('[data-authorization-id]')?.dataset.authorizationId;
+  const expandedTools = new Set(lastMessages ? [...area.querySelectorAll<HTMLDetailsElement>('.tool-details[open]')].map(el => el.dataset.messageId) : []);
   const authorizationMessage = pending ? view.messages.findLast(message => message.role === 'robot' && message.text === pending.description) : undefined;
   area.replaceChildren();
   const addAuthorization = (el: HTMLElement) => {
@@ -487,14 +488,16 @@ function renderMessages() {
   for (const message of view.messages) {
     const el = document.createElement('div'); el.className = `message ${message.role}${message.kind ? ` ${message.kind}` : ''}`;
     const label = document.createElement('small'); label.textContent = `${message.role === 'human' ? '你' : message.role === 'robot' ? 'R-07' : '系统'}${message.kind === 'tool' ? ' · 工具调用' : ''} / ${message.at} TU`;
-    el.append(label);
+    let content: HTMLElement = el;
     if (message.tool) {
       const statuses = { queued: '待执行', running: '处理中', waiting: '等待玩家决定', done: '已完成', partial: '部分执行，未到达目标', failed: '执行失败', skipped: '未执行', cancelled: '已取消' };
+      const details = document.createElement('details'); details.className = 'tool-details'; details.dataset.messageId = message.id; details.open = expandedTools.has(message.id);
+      const summary = document.createElement('summary');
       const title = document.createElement('strong'); title.textContent = `${message.tool.name} · ${statuses[message.tool.status]}`;
       const args = document.createElement('pre'); args.className = 'tool-arguments'; args.textContent = JSON.stringify(message.tool.arguments, null, 2);
-      el.append(title, args);
-    }
-    if (message.text) { const text = document.createElement('span'); text.textContent = message.text; el.append(text); }
+      summary.append(title); details.append(summary, label, args); el.append(details); content = details;
+    } else el.append(label);
+    if (message.text) { const text = document.createElement('span'); text.textContent = message.text; content.append(text); }
     if (message.id === authorizationMessage?.id) addAuthorization(el);
     area.append(el);
   }

@@ -224,7 +224,9 @@ footer > span { display: block; font-size: 9px; color: #8e9a85; letter-spacing: 
 .message small { display: block; font-size: 10px; color: #cadcae; margin-bottom: 5px; }
 .message.human { margin-left: 24px; background: #4c5831; border-color: #d1df69; }
 .message.system { font-size: 11px; color: #acbea0; background: transparent; border: 1px dashed #5f7750; }
-.message.tool { background: #1d2c1d; }
+.message.tool { background: #1d2c1d; padding: 8px 10px; }
+.tool-details > summary { cursor: pointer; }
+.tool-details[open] > summary { margin-bottom: 8px; }
 .tool-arguments { background: #101c12; padding: 10px; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-form { display: flex; align-items: stretch; gap: 8px; }
 .chat-form textarea { flex: 1; font-size: 13px; line-height: 1.5; }
