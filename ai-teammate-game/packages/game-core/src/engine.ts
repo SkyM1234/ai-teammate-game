@@ -302,6 +302,7 @@ export class GameEngine {
       historicalMap: { width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       telemetry: { human: this.state.human, robot: this.state.robot, circuitOn: this.state.circuitOn, elapsedTU: this.state.elapsedTU },
       knownEntities: Object.values(this.state.knowledge.entities), sharedMarkers: this.state.knowledge.markers,
+      radar: this.state.radarHistory,
     });
   }
 

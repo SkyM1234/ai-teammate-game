@@ -4,7 +4,7 @@ import test from 'node:test';
 import { diffKnowledge, GameEngine } from '../packages/game-core/src/engine.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
-import type { Action } from '../packages/game-core/src/types.ts';
+import type { Action, RadarEcho } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
 
@@ -125,11 +125,54 @@ test('玩家视图和机器人上下文不包含隐藏对象，雷达不带对�
   const robot = JSON.stringify(engine.robotContext());
   assert.ok(!player.includes('s-04'));
   assert.ok(!robot.includes('s-04'));
-  assert.ok(!robot.includes('echo-'));
+  const context = engine.robotContext() as { radar: RadarEcho[] };
+  assert.deepEqual(context.radar, engine.playerView().radar);
   assert.ok(engine.playerView().radar.length > 0);
-  for (const echo of engine.playerView().radar) { assert.ok(!('type' in echo)); assert.ok(!('entityId' in echo)); }
+  for (const echo of context.radar) {
+    assert.deepEqual(Object.keys(echo).sort(), ['historical', 'id', 'observedAt', 'position', 'shape', 'strength']);
+  }
   assert.equal(engine.perform({ kind: 'collect', targetId: 's-04' }).code, 'UNKNOWN_TARGET');
   assert.equal(engine.state.elapsedTU, 0);
+});
+
+test('回波不能用于扫描或拾取，靠近识别后才能扫描实体', () => {
+  const engine = new GameEngine(level);
+  const context = engine.robotContext() as { radar: RadarEcho[] };
+  const echo = context.radar.find(e => e.position.x === 3 && e.position.y === 8)!;
+  assert.ok(echo);
+  assert.equal(Object.hasOwn(engine.state.knowledge.entities, 's-01'), false);
+  for (const targetId of [echo.id, 's-01']) {
+    assert.equal(engine.perform({ kind: 'scan', targetId }).code, 'UNKNOWN_TARGET');
+    assert.equal(engine.perform({ kind: 'collect', targetId }).code, 'UNKNOWN_TARGET');
+  }
+  assert.equal(engine.state.elapsedTU, 0);
+  assert.equal(engine.state.robot.battery, level.rules.battery);
+  assert.equal(engine.state.human.oxygen, level.rules.oxygen);
+  const moved = engine.perform({ kind: 'move', target: { x: 3, y: 9 } });
+  assert.ok(moved.delta.newDiscoveries.some(e => e.id === 's-01' && e.type === 'supply' && !e.scanned));
+  assert.equal(engine.perform({ kind: 'scan', targetId: echo.id }).code, 'UNKNOWN_TARGET');
+  assert.equal(engine.perform({ kind: 'scan', targetId: 's-01' }).accepted, true);
+  assert.equal(engine.state.knowledge.entities['s-01'].scanned, true);
+});
+
+test('机器人与玩家共享更新后的回波和历史时间，快照恢复保留回波', () => {
+  const engine = new GameEngine(level);
+  const readRadar = () => (engine.robotContext() as { radar: RadarEcho[] }).radar;
+  const initial = readRadar().find(e => e.position.x === 3 && e.position.y === 8)!;
+  for (const target of [{ x: 3, y: 9 }, { x: 4, y: 9 }, { x: 4, y: 8 }, { x: 4, y: 7 }, { x: 4, y: 6 }, { x: 4, y: 5 }, { x: 4, y: 4 }]) {
+    assert.equal(engine.perform({ kind: 'move', target }).accepted, true);
+    assert.deepEqual(readRadar(), engine.playerView().radar);
+  }
+  const lastSeen = readRadar().find(e => e.id === initial.id)!;
+  assert.equal(lastSeen.historical, false);
+  assert.equal(lastSeen.observedAt, engine.state.elapsedTU);
+  assert.equal(engine.perform({ kind: 'move', target: { x: 4, y: 3 } }).accepted, true);
+  const historical = readRadar().find(e => e.id === initial.id)!;
+  assert.equal(historical.historical, true);
+  assert.equal(historical.observedAt, lastSeen.observedAt);
+  assert.deepEqual(readRadar(), engine.playerView().radar);
+  const restored = new GameEngine(level); restored.restore(engine.snapshot());
+  assert.deepEqual(restored.robotContext(), engine.robotContext());
 });
 
 test('重复观察归为旧引用，扫描新属性归为状态变化', () => {

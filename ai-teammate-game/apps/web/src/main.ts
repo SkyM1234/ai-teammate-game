@@ -163,14 +163,18 @@ function render() {
 }
 function renderSelection() {
   const p = current(); if (!p) return;
+  $('map-inspector').hidden = !selected;
+  $('selection-hint').hidden = !!selected;
   $<HTMLButtonElement>('go-selected').disabled = !selected || !!frames || ['success', 'failure'].includes(p.phase);
   $<HTMLButtonElement>('add-marker').disabled = !selected || !!frames;
+  $<HTMLButtonElement>('toggle-marker').disabled = !selected || !!frames;
   const markers = selected ? p.markers.filter(marker => same(marker.position, selected!)) : [];
   $('selection-markers').hidden = markers.length === 0;
   $('selection-markers').textContent = markers.map(marker => `标记（${marker.shared ? '已共享' : '仅自己可见'}）：${marker.note || '未填写说明'}`).join('\n');
   const editorKey = JSON.stringify([view?.sessionId, selected, !!frames, markers]);
   // Refresh on a different cell or saved marker, while preserving drafts during telemetry updates.
   if (editorKey !== markerEditorKey) {
+    setMarkerEditor(false);
     const latest = markers.at(-1);
     $<HTMLInputElement>('marker-note').value = latest?.note ?? '';
     $<HTMLInputElement>('marker-shared').checked = latest?.shared ?? true;
@@ -178,12 +182,18 @@ function renderSelection() {
   }
   $<HTMLInputElement>('marker-note').disabled = !selected || !!frames;
   $<HTMLInputElement>('marker-shared').disabled = !selected || !!frames;
-  $('target-summary').textContent = selected ? `(${selected.x}, ${selected.y}) · 查看情报 ↗` : '点击格子查看情报 ↗';
-  if (!selected) { $('selection-title').textContent = '选择一个回波或格子'; $('selection-detail').textContent = '雷达显示较远的信号；靠近后才能确认对象。'; return; }
+  if (!selected) return;
   const object = p.observed.find(e => same(e.position, selected!) && !['cleared', 'inventory'].includes(e.state));
   const echo = p.radar.find(e => same(e.position, selected!));
   $('selection-title').textContent = `(${selected.x}, ${selected.y}) · ${object?.name ?? (echo ? '未知雷达回波' : p.level.tiles[selected.y][selected.x] === '#' ? '历史图上的墙体' : '历史图上的地面')}`;
   $('selection-detail').textContent = object ? `${stateNames[object.state]} / 最近观察 ${object.observedAt} TU${object.details ? ` · ${object.details}` : ' · 靠近后可进一步检查'}` : echo ? `${echo.strength === 'strong' ? '强' : '弱'}信号 / ${echo.shape === 'flickering' ? '闪烁' : '稳定'} / ${echo.historical ? '历史回波，当前未覆盖' : '当前雷达覆盖'}；具体对象未知。` : '选中的位置尚无确认对象；地图记录可能已过时。';
+  $('selection-detail').title = $('selection-detail').textContent;
+  $('selection-markers').title = $('selection-markers').textContent ?? '';
+}
+function setMarkerEditor(open: boolean) {
+  $('marker-form').hidden = !open;
+  $('toggle-marker').setAttribute('aria-expanded', String(open));
+  if (open) $('marker-note').focus();
 }
 function geometry() {
   const { width, height } = canvas.getBoundingClientRect();
@@ -270,13 +280,15 @@ $('map-zoom-out').onclick = () => station?.zoomBy(-.2);
 $('map-reset').onclick = () => station?.reset();
 window.addEventListener('pagehide', event => { if (!event.persisted) station?.dispose(); });
 const drawer = $<HTMLDialogElement>('console-drawer');
-const panelTitles: Record<string, string> = { nearby: '附近操作', inventory: '物资管理', status: '生命监测', objective: '救援目标', selection: '共享标记', ledger: '行动记录', comms: '机器人通信', guide: '操作指南' };
+let drawerTrigger: HTMLElement | null = null;
+const panelTitles: Record<string, string> = { nearby: '附近操作', inventory: '物资管理', status: '生命监测', objective: '救援目标', ledger: '行动记录', comms: '机器人通信', guide: '操作指南' };
 function openPanel(panel: string) {
   if (!panelTitles[panel]) return;
+  if (document.activeElement instanceof HTMLElement && !drawer.contains(document.activeElement)) drawerTrigger = document.activeElement;
   drawer.dataset.panel = panel;
   $('drawer-title').textContent = panelTitles[panel];
   document.querySelectorAll<HTMLElement>('.drawer-panel').forEach(section => { section.hidden = section.dataset.panel !== panel; });
-  if (!drawer.open) drawer.showModal();
+  if (!drawer.open) drawer.show();
   if (panel === 'comms') {
     $('messages').scrollTop = $('messages').scrollHeight;
     if (view?.pendingAuthorization && !frames) $('authorization-approve').focus();
@@ -285,15 +297,32 @@ function openPanel(panel: string) {
 }
 document.querySelectorAll<HTMLButtonElement>('[data-open]').forEach(button => { button.onclick = () => openPanel(button.dataset.open!); });
 $('drawer-close').onclick = () => drawer.close();
-drawer.addEventListener('click', event => {
-  const rect = drawer.getBoundingClientRect();
-  if (event.target === drawer && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) drawer.close();
+drawer.addEventListener('close', () => drawerTrigger?.focus());
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Escape' || !drawer.open || document.querySelector('.game-dialog[open]')) return;
+  event.preventDefault(); drawer.close();
 });
 async function command(text: string) { if (!text.trim() || frames) return; sending = true; render(); await post('command', { text, ...(selected ? { selected } : {}) }); sending = false; render(); }
 $('chat-form').onsubmit = event => { event.preventDefault(); const input = $<HTMLTextAreaElement>('command'); const text = input.value; input.value = ''; void command(text); };
 $('command').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $<HTMLFormElement>('chat-form').requestSubmit(); } };
 $('go-selected').onclick = () => { if (selected) { openPanel('comms'); void command(`前往 (${selected.x},${selected.y})`); } };
-$('marker-form').onsubmit = event => { event.preventDefault(); if (selected && !frames) void post('marker', { position: selected, note: $<HTMLInputElement>('marker-note').value, shared: $<HTMLInputElement>('marker-shared').checked }); };
+$('toggle-marker').onclick = () => setMarkerEditor($('marker-form').hidden === true);
+$('cancel-marker').onclick = () => { setMarkerEditor(false); $('toggle-marker').focus(); };
+$('clear-selection').onclick = () => { selected = null; renderSelection(); drawMap(); canvas.focus(); };
+$('marker-form').onsubmit = async event => {
+  event.preventDefault();
+  if (!selected || frames) return;
+  const shared = $<HTMLInputElement>('marker-shared').checked;
+  if (await post('marker', { position: selected, note: $<HTMLInputElement>('marker-note').value, shared })) {
+    setMarkerEditor(false); $('toggle-marker').focus(); toast(shared ? '标记已共享给 R-07。' : '已保存仅自己可见的标记。');
+  }
+};
+document.addEventListener('keydown', event => {
+  if (event.defaultPrevented || event.key !== 'Escape' || document.querySelector('dialog[open]') || !selected) return;
+  event.preventDefault();
+  if (!$('marker-form').hidden) { setMarkerEditor(false); $('toggle-marker').focus(); }
+  else $('clear-selection').click();
+});
 $('stop').onclick = () => void post('stop'); $('continue').onclick = () => void post('continue');
 $('save').onclick = async () => { if (await post('save')) toast('当前进度已保存。'); };
 $('new-game').onclick = async () => { try { if (view?.running) await post('stop'); attach(await api<SessionView>('/api/sessions', {})); toast('新的一局已准备好。'); } catch (error) { toast(String(error)); } };
@@ -347,7 +376,7 @@ $('load-form').onsubmit = async event => {
 function step(dx: number, dy: number) { if (view && !frames) void manual({ kind: 'move', target: { x: view.robot.position.x + dx, y: view.robot.position.y + dy } }); }
 document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.onclick = () => step(Number(el.dataset.dx), Number(el.dataset.dy)); });
 document.addEventListener('keydown', event => {
-  if (document.querySelector('.game-dialog[open]') || drawer.open && drawer.dataset.panel !== 'nearby') return;
+  if (document.querySelector('.game-dialog[open]') || drawer.open && drawer.contains(document.activeElement) && drawer.dataset.panel !== 'nearby') return;
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.ctrlKey || event.altKey || event.metaKey) return;
   const directions: Record<string, [number, number]> = { w: [0, -1], ArrowUp: [0, -1], a: [-1, 0], ArrowLeft: [-1, 0], s: [0, 1], ArrowDown: [0, 1], d: [1, 0], ArrowRight: [1, 0] };
   const direction = directions[event.key]; if (direction) { event.preventDefault(); if (!event.repeat) step(...direction); }

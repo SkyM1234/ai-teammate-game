@@ -156,7 +156,26 @@ test('无进展循环有限终止，任务上下文不泄露未见的气闸或�
   assert.equal(session.task?.status, 'paused');
   assert.equal(session.engine.state.elapsedTU, 0);
   for (const context of contexts) {
-    assert.ok(!context.includes('a-01')); assert.ok(!context.includes('s-04')); assert.ok(!context.includes('echo-'));
+    assert.ok(!context.includes('a-01')); assert.ok(!context.includes('s-04')); assert.ok(context.includes('echo-'));
+  }
+});
+
+test('模型请求和状态工具包含共享回波，移动后下次请求刷新回波并识别近处对象', async () => {
+  const { session, contexts } = scripted([[{ name: 'get_status', arguments: {} }, move(3, 9)], [{ name: 'ask_player', arguments: { question: '已识别附近对象' } }]]);
+  const initialRadar = session.engine.playerView().radar;
+  await session.command('调查附近回波'); await session.settled();
+  assert.equal(contexts.length, 2);
+  const knowledge = contexts.map(context => JSON.parse(JSON.parse(context).messages[0].content.split('当前机器人知识与任务（仅可见事实）：\n')[1]));
+  assert.deepEqual(knowledge[0].radar, initialRadar);
+  assert.deepEqual(knowledge[0].knownEntities, []);
+  assert.deepEqual(knowledge[1].radar, session.engine.playerView().radar);
+  assert.notDeepEqual(knowledge[1].radar, initialRadar);
+  assert.ok(knowledge[1].knownEntities.some((e: { id: string }) => e.id === 's-01'));
+  const status = session.agent.state.messages.find(m => m.role === 'toolResult' && m.toolName === 'get_status');
+  assert.ok(status?.role === 'toolResult' && status.content[0].type === 'text');
+  assert.deepEqual(JSON.parse(status.content[0].text).radar, initialRadar);
+  for (const context of contexts) {
+    assert.ok(!context.includes('s-04')); assert.ok(!context.includes('c-01'));
   }
 });
 
