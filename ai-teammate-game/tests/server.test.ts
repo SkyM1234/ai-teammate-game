@@ -84,6 +84,26 @@ test('HTTP 动作去重、版本冲突、并发提交及非法参数都不重复
   assert.ok(!JSON.stringify(final.data).includes('s-04'));
 });
 
+test('HTTP 手动移动不能进入喷气出口，维修后同一出口恢复通行', async t => {
+  const { call, sessions, initial } = await fixture(t);
+  const session = sessions.get(initial.sessionId)!;
+  session.engine.state.robot.position = { x: 10, y: 2 }; session.engine.observe();
+  const path = `/api/sessions/${initial.sessionId}/action`;
+  const move = () => call(path, { requestId: crypto.randomUUID(), expectedRevision: session.engine.state.stateRevision, allowHazard: true, action: { kind: 'move', target: level.exit } });
+  const blocked = await move();
+  assert.equal(blocked.data.exitStatus, 'leaking');
+  assert.deepEqual(blocked.data.robot.position, { x: 10, y: 2 });
+  assert.equal(blocked.data.elapsedTU, 0); assert.equal(blocked.data.robot.battery, initial.robot.battery);
+  session.engine.state.robot.position = { x: 9, y: 8 };
+  const material = session.engine.state.entities.find(e => e.id === 's-01')!; material.taken = true;
+  session.engine.state.robot.inventory.push(material.id); session.engine.observe();
+  assert.equal(session.engine.perform({ kind: 'repair', targetId: 'a-01' }).accepted, true);
+  session.engine.state.robot.position = { x: 10, y: 2 };
+  const allowed = await move();
+  assert.equal(allowed.status, 200); assert.equal(allowed.data.exitStatus, 'safe');
+  assert.deepEqual(allowed.data.robot.position, level.exit);
+});
+
 test('SSE 发送的玩家投影不含隐藏实体，跨来源请求被拒绝', async t => {
   const { base, initial } = await fixture(t);
   const controller = new AbortController();

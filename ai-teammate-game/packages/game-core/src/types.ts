@@ -78,6 +78,7 @@ export interface GameState {
 }
 export interface PlayerView {
   level: Pick<Level, 'id' | 'name' | 'width' | 'height' | 'tiles' | 'rooms' | 'exit'>;
+  exitStatus: 'leaking' | 'safe';
   phase: Phase; stateRevision: number; elapsedTU: number; circuitOn: boolean;
   human: GameState['human']; robot: Omit<GameState['robot'], 'inventory'> & { inventory: ObservedEntity[] };
   rules: Rules; observed: ObservedEntity[]; radar: RadarEcho[]; markers: Marker[];

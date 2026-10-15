@@ -14,7 +14,7 @@ export function sensorCells(level: Level, start: Position, radius: number): Posi
   return found;
 }
 
-export function findKnownPath(level: Pick<Level, 'width' | 'height' | 'tiles'>, knowledge: Knowledge, start: Position, target: Position, circuitOn: boolean, authorizedHazardIds: string[] = []): Position[] | null {
+export function findKnownPath(level: Pick<Level, 'width' | 'height' | 'tiles' | 'exit'>, knowledge: Knowledge, start: Position, target: Position, circuitOn: boolean, authorizedHazardIds: string[] = [], exitBlocked = false): Position[] | null {
   if (!Number.isInteger(target.x) || !Number.isInteger(target.y) || target.x < 0 || target.y < 0 || target.x >= level.width || target.y >= level.height || level.tiles[target.y][target.x] === '#') return null;
   const queue: Position[] = [start];
   const previous = new Map<string, Position | null>([[positionKey(start), null]]);
@@ -28,6 +28,7 @@ export function findKnownPath(level: Pick<Level, 'width' | 'height' | 'tiles'>, 
     }
     for (const p of [{ x: current.x, y: current.y - 1 }, { x: current.x + 1, y: current.y }, { x: current.x, y: current.y + 1 }, { x: current.x - 1, y: current.y }]) {
       if (p.x < 0 || p.x >= level.width || p.y < 0 || p.y >= level.height || level.tiles[p.y][p.x] === '#' || previous.has(positionKey(p))) continue;
+      if (exitBlocked && samePosition(p, level.exit)) continue;
       const blocked = Object.values(knowledge.entities).some(e => samePosition(e.position, p) && (
         e.type === 'cabinet' || (e.type === 'door' && e.state !== 'opened') || (e.type === 'obstacle' && e.state !== 'cleared') ||
         (e.type === 'hazard' && circuitOn && !authorizedHazardIds.includes(e.id))

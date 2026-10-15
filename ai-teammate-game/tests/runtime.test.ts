@@ -18,6 +18,41 @@ function scripted(rounds: ToolIntent[][], delayMs = 0) {
 const move = (x: number, y: number): ToolIntent => ({ name: 'move_to', arguments: { target: { x, y } } });
 const report: ToolIntent = { name: 'report', arguments: { text: '状态报告' } };
 
+test('模型明确获知出口喷气规则，move_to 拒绝进入且不扣资源，修复后可进入', async () => {
+  const finish: ToolIntent = { name: 'finish_task', arguments: { reason: '本次检查结束。' } };
+  const { session, contexts } = scripted([[move(10, 1)], [finish], [move(10, 1), finish]]);
+  session.engine.state.robot.position = { x: 10, y: 2 }; session.engine.observe();
+  await session.command('前往出口'); await session.settled();
+  assert.equal(session.engine.state.elapsedTU, 0);
+  assert.deepEqual(session.engine.state.robot.position, { x: 10, y: 2 });
+  assert.ok(contexts[0].includes('exitStatus')); assert.ok(contexts[0].includes('leaking'));
+  assert.ok(contexts[0].includes('出口这一格禁止进入或穿越')); assert.ok(!contexts[0].includes('a-01'));
+  assert.ok(session.messages.some(message => message.tool?.name === 'move_to' && message.tool.status === 'failed' && /漏气/.test(message.text)));
+  session.engine.state.entities.find(e => e.type === 'airlock')!.repaired = true;
+  await session.command('前往出口'); await session.settled();
+  assert.deepEqual(session.engine.state.robot.position, level.exit);
+  assert.equal(session.engine.state.elapsedTU, 1);
+});
+
+test('规则演示遇到喷气出口明确提示先维修，不重复尝试进入或撤离', async () => {
+  for (const command of ['前往 (10,1)', '撤离']) {
+    const session = new GameSession(level, { delayMs: 0 });
+    await session.command(command); await session.settled();
+    assert.equal(session.task?.status, 'waiting'); assert.match(session.task.question!, /漏气.*修复气闸/);
+    assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.metrics.requests, 1);
+  }
+});
+
+test('规则演示按气闸室范围寻找未识别控制器，修复后停止出口漏气', async () => {
+  const session = new GameSession(level, { delayMs: 0 });
+  session.engine.state.robot.position = { x: 8, y: 8 };
+  const material = session.engine.state.entities.find(e => e.id === 's-01')!; material.taken = true;
+  session.engine.state.robot.inventory.push(material.id); session.engine.observe();
+  assert.equal(session.engine.state.knowledge.entities['a-01'], undefined);
+  await session.command('维修气闸控制器'); await session.settled();
+  assert.equal(session.task?.status, 'completed'); assert.equal(session.engine.exitStatus, 'safe');
+});
+
 test('日志中的氧气交互错误返回参数说明，下一轮可纠正并实际补充氧气', async () => {
   const invalidArguments: ToolIntent['arguments'][] = [
     { operation: 'use_item', targetId: 's-03', itemId: 's-03' },
@@ -224,6 +259,7 @@ test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停�
     const longRoute = structuredClone(level);
     longRoute.robotStart = { x: 1, y: 10 };
     longRoute.entities = [];
+    longRoute.exit = { x: 10, y: 10 };
     longRoute.rules.actionTULimit = budget;
     const session = new GameSession(longRoute, { delayMs: 0, adapter: {
       mode: 'test', label: 'long route', model: demoModel,

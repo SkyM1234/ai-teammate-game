@@ -19,6 +19,8 @@ export class StationRenderer {
   private readonly human = new THREE.Group();
   private readonly selection = new THREE.Group();
   private readonly hover = new THREE.Group();
+  private readonly exitLeak = new THREE.Group();
+  private readonly exitGas: THREE.Sprite[] = [];
   private readonly cube = new RoundedBoxGeometry(1, 1, 1, 1, .08);
   private readonly deck = new THREE.BoxGeometry(1, 1, 1);
   private readonly cylinder = new THREE.CylinderGeometry(.5, .5, 1, 20);
@@ -41,6 +43,7 @@ export class StationRenderer {
   private readonly gestures = new Map<number, { x: number; y: number }>();
   private suppressSelection = false;
   private animation = 0;
+  private leakAnimation = 0;
   private width = 12;
   private height = 12;
   private disposed = false;
@@ -52,7 +55,7 @@ export class StationRenderer {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.scene.add(this.terrain, this.objects, this.robot, this.human, this.selection, this.hover);
+    this.scene.add(this.terrain, this.objects, this.robot, this.human, this.selection, this.hover, this.exitLeak);
     this.scene.add(new THREE.HemisphereLight(0xe8eee9, 0x25332c, 1.6));
     const light = new THREE.DirectionalLight(0xf5f1e7, 2.8);
     light.position.set(-8, 18, 6);
@@ -84,6 +87,7 @@ export class StationRenderer {
     this.controls.addEventListener('change', this.onCameraChange);
     this.buildRobot();
     this.buildHuman();
+    this.buildExitLeak();
     this.buildReticle(this.selection, colors.signal, .94);
     this.buildReticle(this.hover, colors.ivory, .9);
     for (const group of [this.robot, this.human, this.selection, this.hover]) this.batchMeshes(group);
@@ -246,6 +250,23 @@ export class StationRenderer {
 
   private world(position: Position) {
     return new THREE.Vector3(position.x - (this.width - 1) / 2, 0, position.y - (this.height - 1) / 2);
+  }
+
+  private buildExitLeak() {
+    this.exitLeak.name = 'exit-leak'; this.exitLeak.visible = false;
+    this.buildReticle(this.exitLeak, colors.red, .95);
+    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 64;
+    const context = canvas.getContext('2d')!;
+    const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gradient.addColorStop(0, '#f1fdff'); gradient.addColorStop(.4, '#c6e7f0cc'); gradient.addColorStop(1, '#c1e5eb00');
+    context.fillStyle = gradient; context.fillRect(0, 0, 64, 64);
+    const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+    this.textures.set('exit-gas', texture);
+    for (let i = 0; i < 18; i++) {
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+      this.exitGas.push(sprite); this.exitLeak.add(sprite);
+    }
+    this.label(this.exitLeak, '漏气 · 禁入', '#ffb298', 1.9, .55);
   }
 
   private buildRobot() {
@@ -545,6 +566,10 @@ export class StationRenderer {
   }
 
   update(p: PlayerView, selected: Position | null) {
+    this.exitLeak.position.copy(this.world(p.level.exit));
+    this.exitLeak.visible = p.exitStatus === 'leaking';
+    this.canvas.dataset.exitStatus = p.exitStatus;
+    if (!this.exitLeak.visible) { cancelAnimationFrame(this.leakAnimation); this.leakAnimation = 0; }
     const levelKey = JSON.stringify([p.level.id, p.level.tiles, p.level.rooms]);
     const changedLevel = levelKey !== this.levelKey;
     if (changedLevel) { this.buildTerrain(p); this.levelKey = levelKey; this.signature = ''; }
@@ -713,12 +738,13 @@ export class StationRenderer {
   private onPointerLeave = () => { if (this.hover.visible) { this.hover.visible = false; this.draw(); } };
   private onContextLost = (event: Event) => {
     event.preventDefault(); cancelAnimationFrame(this.animation);
+    cancelAnimationFrame(this.leakAnimation); this.leakAnimation = 0;
     this.canvas.dataset.renderMode = 'recovering';
     document.getElementById('map-render-status')!.textContent = '画面暂时中断，正在恢复…';
   };
   private onContextRestored = () => { this.canvas.dataset.renderMode = '3d'; document.getElementById('map-render-status')!.textContent = '点击选格 · 拖动观察 · 滚轮缩放'; this.resize(); };
   private onVisibilityChange = () => {
-    if (document.hidden) { cancelAnimationFrame(this.animation); this.cancelGesture(); }
+    if (document.hidden) { cancelAnimationFrame(this.animation); cancelAnimationFrame(this.leakAnimation); this.leakAnimation = 0; this.cancelGesture(); }
     else if (this.state) { this.robot.position.copy(this.world(this.state.robot.position)); this.signature = ''; this.update(this.state, this.selection.visible ? { x: Math.round(this.selection.position.x + (this.width - 1) / 2), y: Math.round(this.selection.position.z + (this.height - 1) / 2) } : null); }
   };
 
@@ -732,7 +758,7 @@ export class StationRenderer {
   }
 
   private draw() {
-    if (this.disposed || document.hidden) return;
+    if (this.disposed || document.hidden || this.canvas.dataset.renderMode === 'recovering') return;
     const rect = this.canvas.getBoundingClientRect();
     if (!rect.height) return;
     const labelHeight = (this.camera.top - this.camera.bottom) / this.camera.zoom / rect.height * 14;
@@ -740,12 +766,23 @@ export class StationRenderer {
       const texture = label.material.map as THREE.CanvasTexture;
       label.scale.set(labelHeight * texture.image.width / texture.image.height, labelHeight, 1);
     }
+    if (this.exitLeak.visible) {
+      const time = this.reducedMotion.matches ? 0 : performance.now() / 1050;
+      this.exitGas.forEach((sprite, i) => {
+        const phase = (time + (i % 6) / 6 + Math.floor(i / 6) * .13) % 1;
+        const stream = Math.floor(i / 6) - 1;
+        sprite.position.set(stream * (.18 + phase * .12) + Math.sin(phase * 7 + i) * phase * .08, .12 + phase * 1.7, -.25 + phase * .65);
+        sprite.scale.setScalar(.24 + phase * .85);
+        sprite.material.opacity = (1 - phase) * .9;
+      });
+      if (!this.reducedMotion.matches && !this.leakAnimation) this.leakAnimation = requestAnimationFrame(() => { this.leakAnimation = 0; this.draw(); });
+    }
     this.renderer.render(this.scene, this.camera);
     this.canvas.dataset.drawCalls = String(this.renderer.info.render.calls);
   }
 
   dispose() {
-    this.disposed = true; cancelAnimationFrame(this.animation); this.observer.disconnect();
+    this.disposed = true; cancelAnimationFrame(this.animation); cancelAnimationFrame(this.leakAnimation); this.observer.disconnect();
     this.controls.removeEventListener('change', this.onCameraChange); this.controls.dispose();
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointercancel', this.onPointerCancel);
@@ -758,7 +795,7 @@ export class StationRenderer {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     document.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('blur', this.cancelGesture);
-    for (const group of [this.terrain, this.objects, this.robot, this.human, this.selection, this.hover]) this.clear(group);
+    for (const group of [this.terrain, this.objects, this.robot, this.human, this.selection, this.hover, this.exitLeak]) this.clear(group);
     this.cube.dispose(); this.deck.dispose(); this.cylinder.dispose(); this.sphere.dispose();
     this.materials.forEach(material => material.dispose()); this.surfaces.forEach(material => material.dispose());
     this.textures.forEach(texture => texture.dispose());

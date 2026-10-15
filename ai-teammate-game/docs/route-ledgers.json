@@ -27,7 +27,7 @@
       "actions": [
         {
           "sequence": 1,
-          "actionId": "fcc9be21-f629-4976-9ebf-ac609cbf4dfc",
+          "actionId": "6855212e-16f4-4888-b9a2-83d645d68b1e",
           "action": {
             "kind": "move",
             "target": {
@@ -59,7 +59,7 @@
         },
         {
           "sequence": 2,
-          "actionId": "57f9c7d2-df08-4ec7-8486-a0f9d451a4cf",
+          "actionId": "33129c07-576d-4b6a-abbf-8eb2d7557a9e",
           "action": {
             "kind": "collect",
             "targetId": "s-01"
@@ -88,7 +88,7 @@
         },
         {
           "sequence": 3,
-          "actionId": "0f7a07d6-3edc-40c3-b963-f35741bacdc0",
+          "actionId": "7b041476-8b57-462b-b76f-56fde4d05455",
           "action": {
             "kind": "move",
             "target": {
@@ -120,7 +120,7 @@
         },
         {
           "sequence": 4,
-          "actionId": "28094cc4-639c-49eb-ab0a-1dcdbc6452a7",
+          "actionId": "73d54559-5d4b-4977-ad0a-acb0ed58f1b4",
           "action": {
             "kind": "collect",
             "targetId": "s-02"
@@ -149,7 +149,7 @@
         },
         {
           "sequence": 5,
-          "actionId": "1c453756-5997-4375-8ee6-2b527304f3c1",
+          "actionId": "f8d046b8-f141-4b99-9418-ada3a8c70d56",
           "action": {
             "kind": "move",
             "target": {
@@ -181,7 +181,7 @@
         },
         {
           "sequence": 6,
-          "actionId": "49c9f7e8-cca6-4477-bcee-fab61551f2c8",
+          "actionId": "fc03cf6d-95d6-4609-9b62-cd87f363e2c5",
           "action": {
             "kind": "move",
             "target": {
@@ -213,7 +213,7 @@
         },
         {
           "sequence": 7,
-          "actionId": "cfae889f-fe40-49eb-8d24-a49f5bc3fcfa",
+          "actionId": "dac1da18-5236-4acf-9928-4e519aa6a804",
           "action": {
             "kind": "repair",
             "targetId": "human"
@@ -242,7 +242,7 @@
         },
         {
           "sequence": 8,
-          "actionId": "321f0619-a430-4f6e-aed6-0a2bcc76dabd",
+          "actionId": "d2751101-b047-4e4f-8ce2-fb35c85edf5e",
           "action": {
             "kind": "move",
             "target": {
@@ -274,7 +274,7 @@
         },
         {
           "sequence": 9,
-          "actionId": "fc960e25-3c9f-4fb1-84fb-8f3e4ed52628",
+          "actionId": "c3df831c-38db-4f6d-b809-8afd87cc2e7b",
           "action": {
             "kind": "move",
             "target": {
@@ -306,7 +306,7 @@
         },
         {
           "sequence": 10,
-          "actionId": "3c3d74b1-e30b-447a-9a25-18e4edea020a",
+          "actionId": "b2750ceb-6de0-4579-869c-8f35e0069d04",
           "action": {
             "kind": "move",
             "target": {
@@ -338,7 +338,7 @@
         },
         {
           "sequence": 11,
-          "actionId": "e9dd69dc-047c-4c5d-badf-565448679992",
+          "actionId": "1b1d5cb6-156d-480a-a1a2-6bd4b3779c80",
           "action": {
             "kind": "move",
             "target": {
@@ -370,7 +370,7 @@
         },
         {
           "sequence": 12,
-          "actionId": "e48290d7-8b28-4e1e-8c82-ec8f078f54c4",
+          "actionId": "b9eaa934-164b-4b5a-b34b-0a01ad4874e7",
           "action": {
             "kind": "move",
             "target": {
@@ -402,7 +402,7 @@
         },
         {
           "sequence": 13,
-          "actionId": "1121443e-9d40-49f2-b58e-28e719443a1f",
+          "actionId": "8d4dc042-be98-446c-8dc0-e3e5960a2f35",
           "action": {
             "kind": "move",
             "target": {
@@ -434,7 +434,7 @@
         },
         {
           "sequence": 14,
-          "actionId": "62e7bc41-cf92-4da7-a770-6371301fa971",
+          "actionId": "0021a1d2-85bb-4a5e-898e-c1aa21df8509",
           "action": {
             "kind": "move",
             "target": {
@@ -466,7 +466,7 @@
         },
         {
           "sequence": 15,
-          "actionId": "9e2d35ce-5e42-42d8-b223-79305cf714b3",
+          "actionId": "0a208207-bbd1-4069-b548-8ed70ef57025",
           "action": {
             "kind": "move",
             "target": {
@@ -498,7 +498,7 @@
         },
         {
           "sequence": 16,
-          "actionId": "60ee84e5-9e80-4829-bcdb-5a1134e2b6e3",
+          "actionId": "b9b87271-c081-47ab-8430-a031ec38f318",
           "action": {
             "kind": "scan",
             "targetId": "c-01"
@@ -527,7 +527,7 @@
         },
         {
           "sequence": 17,
-          "actionId": "61910c7b-6efd-40e1-abda-71b15f7ca681",
+          "actionId": "898bb384-c420-47b0-bc52-bd1acbd99a2b",
           "action": {
             "kind": "move",
             "target": {
@@ -559,7 +559,7 @@
         },
         {
           "sequence": 18,
-          "actionId": "f18e02cf-209b-4311-a48b-eddf3ea74cc4",
+          "actionId": "14fb6641-7ad0-4585-97f7-e94ef9b22740",
           "action": {
             "kind": "move",
             "target": {
@@ -591,7 +591,7 @@
         },
         {
           "sequence": 19,
-          "actionId": "f5e91a95-34a5-4195-b479-3becdc07497a",
+          "actionId": "de482d37-3095-4799-b0b2-7ed2b04fb6b3",
           "action": {
             "kind": "move",
             "target": {
@@ -623,7 +623,7 @@
         },
         {
           "sequence": 20,
-          "actionId": "766a6363-6937-41cc-a3ce-3359d90cb481",
+          "actionId": "ec7789d8-bab3-4c7b-8e67-6704958cf980",
           "action": {
             "kind": "circuit",
             "targetId": "sw-01",
@@ -657,7 +657,7 @@
         },
         {
           "sequence": 21,
-          "actionId": "9ab30f78-7725-4724-93c1-a98ce4f05913",
+          "actionId": "f13e8e9d-17f6-4810-b9d5-86e0312517d3",
           "action": {
             "kind": "move",
             "target": {
@@ -689,7 +689,7 @@
         },
         {
           "sequence": 22,
-          "actionId": "7f6ddd1b-42f9-48f5-8a5e-90b5e88ab46f",
+          "actionId": "e85d9cfd-dfcc-4e02-b1f5-6efbb657343c",
           "action": {
             "kind": "open",
             "targetId": "c-01"
@@ -718,7 +718,7 @@
         },
         {
           "sequence": 23,
-          "actionId": "5402bf1f-3f63-41fc-addb-1257d39ccb61",
+          "actionId": "cef90d2e-a050-4cee-a529-8aa871f2887a",
           "action": {
             "kind": "collect",
             "targetId": "s-04"
@@ -747,7 +747,7 @@
         },
         {
           "sequence": 24,
-          "actionId": "0bab66b3-72f2-4465-a2e8-e4af921eebb4",
+          "actionId": "de094133-38af-4578-9cca-a1f1f63cb5fc",
           "action": {
             "kind": "use_item",
             "itemId": "s-04",
@@ -777,7 +777,7 @@
         },
         {
           "sequence": 25,
-          "actionId": "4581cc09-31b8-4aad-bdbb-ad65af0892d9",
+          "actionId": "fe7d54b5-16d5-4984-a400-0c7d2758c03f",
           "action": {
             "kind": "move",
             "target": {
@@ -809,7 +809,7 @@
         },
         {
           "sequence": 26,
-          "actionId": "4e14e9a8-8c72-40f3-93b2-86e256be7af9",
+          "actionId": "5a2669da-3ee9-4229-8165-0099374a06cb",
           "action": {
             "kind": "move",
             "target": {
@@ -841,7 +841,7 @@
         },
         {
           "sequence": 27,
-          "actionId": "a01bb7b0-8939-48bf-bd1d-72ffb0eb1fe7",
+          "actionId": "e96f395d-cda2-4192-871c-d042af27e43a",
           "action": {
             "kind": "open",
             "targetId": "d-01"
@@ -870,7 +870,7 @@
         },
         {
           "sequence": 28,
-          "actionId": "bbaaca5d-1231-4c8b-81c3-9265f3d74bf3",
+          "actionId": "f109fe40-a0a9-4e22-82e2-094474b1d60a",
           "action": {
             "kind": "move",
             "target": {
@@ -902,7 +902,7 @@
         },
         {
           "sequence": 29,
-          "actionId": "1267c8e8-3107-4b4e-84db-cf94006f3944",
+          "actionId": "c3d1f604-c1d4-414d-ae32-f29e532e1802",
           "action": {
             "kind": "circuit",
             "targetId": "sw-01",
@@ -936,7 +936,7 @@
         },
         {
           "sequence": 30,
-          "actionId": "8503e658-e159-4f6f-a7be-bb3b58c1ac08",
+          "actionId": "38ae3a34-972d-4228-ae94-79d792e2fbd3",
           "action": {
             "kind": "move",
             "target": {
@@ -968,7 +968,7 @@
         },
         {
           "sequence": 31,
-          "actionId": "11f4be68-e242-4690-b823-546ea59d4b84",
+          "actionId": "1b62b9a7-b60b-46a4-a9e1-9fcb7799743b",
           "action": {
             "kind": "move",
             "target": {
@@ -1000,7 +1000,7 @@
         },
         {
           "sequence": 32,
-          "actionId": "62201ca6-e867-49e0-993f-1708fa4dafc2",
+          "actionId": "c9d02956-cf46-49f2-be91-4535da551342",
           "action": {
             "kind": "move",
             "target": {
@@ -1032,7 +1032,7 @@
         },
         {
           "sequence": 33,
-          "actionId": "a682bb30-2bb2-4ada-8f8c-6843d532e993",
+          "actionId": "a14172b5-5488-4b8b-a617-ead8efe5d425",
           "action": {
             "kind": "move",
             "target": {
@@ -1064,7 +1064,7 @@
         },
         {
           "sequence": 34,
-          "actionId": "33e96778-cb97-4bfc-9f43-93265d01e9a6",
+          "actionId": "b9d6c853-9ec9-4e8c-954d-4038f785f023",
           "action": {
             "kind": "move",
             "target": {
@@ -1096,7 +1096,7 @@
         },
         {
           "sequence": 35,
-          "actionId": "3ad538da-7f8b-4a9e-8a7c-9e1c63eb4b5f",
+          "actionId": "a4875382-f6be-478f-a938-784dab80cf29",
           "action": {
             "kind": "move",
             "target": {
@@ -1128,7 +1128,7 @@
         },
         {
           "sequence": 36,
-          "actionId": "f0f680a6-e53e-49ff-9af9-27a744482dda",
+          "actionId": "78eb071c-f133-4b34-ac98-64da17aab606",
           "action": {
             "kind": "move",
             "target": {
@@ -1160,7 +1160,7 @@
         },
         {
           "sequence": 37,
-          "actionId": "62716eee-a337-470f-8d64-2360f46c4866",
+          "actionId": "2543b777-336f-4b33-ae7a-f6059c6a3406",
           "action": {
             "kind": "move",
             "target": {
@@ -1192,7 +1192,7 @@
         },
         {
           "sequence": 38,
-          "actionId": "d9eae08f-0696-4701-84a3-a8642be5f610",
+          "actionId": "f299ec2d-421d-4fac-98e6-97e5969e0670",
           "action": {
             "kind": "move",
             "target": {
@@ -1224,7 +1224,7 @@
         },
         {
           "sequence": 39,
-          "actionId": "8ce53132-85aa-4070-a8e0-28e016b9b19f",
+          "actionId": "96645c24-28e3-4eb2-b205-7dd15dc75560",
           "action": {
             "kind": "move",
             "target": {
@@ -1256,7 +1256,7 @@
         },
         {
           "sequence": 40,
-          "actionId": "a664de23-a7d1-4d3e-b90f-8116fffd3c1a",
+          "actionId": "5cb49258-c1cd-47e8-a555-f0104a0519e4",
           "action": {
             "kind": "move",
             "target": {
@@ -1288,7 +1288,7 @@
         },
         {
           "sequence": 41,
-          "actionId": "8cc5cc1c-bbda-418c-88ee-8fe3af8aac93",
+          "actionId": "61c7f8c5-b905-4433-acac-43f583791598",
           "action": {
             "kind": "move",
             "target": {
@@ -1320,7 +1320,7 @@
         },
         {
           "sequence": 42,
-          "actionId": "19880a27-72d4-412d-85cb-4d5e7ed9131f",
+          "actionId": "4a1605e1-41a6-45ba-8a35-21013ea0f077",
           "action": {
             "kind": "pickup_human"
           },
@@ -1348,7 +1348,7 @@
         },
         {
           "sequence": 43,
-          "actionId": "da16dab0-4985-483c-bf35-2c8236605fe1",
+          "actionId": "9ce3698b-b73f-4a28-ac68-5e4ef9899afd",
           "action": {
             "kind": "move",
             "target": {
@@ -1380,7 +1380,7 @@
         },
         {
           "sequence": 44,
-          "actionId": "c36107b9-23d8-4f78-b348-eeb21ecc3334",
+          "actionId": "7f55549d-fd7d-4333-af6c-ac07241e5d76",
           "action": {
             "kind": "move",
             "target": {
@@ -1412,7 +1412,7 @@
         },
         {
           "sequence": 45,
-          "actionId": "697cfc10-aeb7-4493-b40c-7dd3a7ef70a7",
+          "actionId": "dec1856e-62f4-4697-8678-9fe51362df04",
           "action": {
             "kind": "move",
             "target": {
@@ -1444,7 +1444,7 @@
         },
         {
           "sequence": 46,
-          "actionId": "2652ef27-c678-4a05-8dc7-8e077e6f9f3a",
+          "actionId": "9cb53f2f-2fa6-462d-9cb1-e8b40c4510cc",
           "action": {
             "kind": "move",
             "target": {
@@ -1476,7 +1476,7 @@
         },
         {
           "sequence": 47,
-          "actionId": "33b2099e-be32-4958-ac49-3b1c9fc930ee",
+          "actionId": "f89e1289-a2e5-44e5-986f-8c8e528573fa",
           "action": {
             "kind": "move",
             "target": {
@@ -1508,7 +1508,7 @@
         },
         {
           "sequence": 48,
-          "actionId": "93455b8d-0373-4f8b-8b4f-46ab8828ee08",
+          "actionId": "fd31e7a6-e298-448f-8111-cd3491181a85",
           "action": {
             "kind": "move",
             "target": {
@@ -1540,7 +1540,7 @@
         },
         {
           "sequence": 49,
-          "actionId": "04d1427b-74ab-41a0-8032-405e94d51124",
+          "actionId": "afe8613f-af3d-4395-9e9b-7b33823f67e8",
           "action": {
             "kind": "move",
             "target": {
@@ -1572,7 +1572,7 @@
         },
         {
           "sequence": 50,
-          "actionId": "bdd3e804-4ea8-4260-91f4-7bb2792cba00",
+          "actionId": "d10d1f0c-6fb7-4c22-9d04-9d5a82f622fd",
           "action": {
             "kind": "move",
             "target": {
@@ -1604,7 +1604,7 @@
         },
         {
           "sequence": 51,
-          "actionId": "23357860-a663-4365-a4e7-0cba4e9a42cc",
+          "actionId": "65c74c40-e247-470c-880d-104d7c80b739",
           "action": {
             "kind": "move",
             "target": {
@@ -1636,7 +1636,7 @@
         },
         {
           "sequence": 52,
-          "actionId": "fb11d143-c1b5-4a48-998c-3845d99be1f0",
+          "actionId": "e78f46f2-abd7-4cb4-9e17-6a0b9bc1b49e",
           "action": {
             "kind": "move",
             "target": {
@@ -1668,7 +1668,7 @@
         },
         {
           "sequence": 53,
-          "actionId": "565d1e23-d915-45e9-b094-bb7b493608cf",
+          "actionId": "e1db7dd6-3bf9-4278-9fa1-f0907a4b0b83",
           "action": {
             "kind": "move",
             "target": {
@@ -1700,7 +1700,7 @@
         },
         {
           "sequence": 54,
-          "actionId": "0e1baf28-c2e6-48e8-bd5f-1563415b6af3",
+          "actionId": "a29fff0f-027e-4b14-b5e3-6d4bd0255e09",
           "action": {
             "kind": "move",
             "target": {
@@ -1732,7 +1732,7 @@
         },
         {
           "sequence": 55,
-          "actionId": "1a241d85-4ea0-43b2-8724-ef653589afed",
+          "actionId": "db0c1c72-8654-4b53-9670-f543400c90dd",
           "action": {
             "kind": "move",
             "target": {
@@ -1764,7 +1764,7 @@
         },
         {
           "sequence": 56,
-          "actionId": "07e8df2a-7614-4068-a0f1-6e69b371f1b5",
+          "actionId": "20176502-b071-4acc-bafa-ac87d6cd7ba8",
           "action": {
             "kind": "move",
             "target": {
@@ -1796,7 +1796,7 @@
         },
         {
           "sequence": 57,
-          "actionId": "273eb74a-160d-4c9d-9842-e5600c319c99",
+          "actionId": "0fe27769-bdf9-4b17-bf13-902fd4afc9be",
           "action": {
             "kind": "move",
             "target": {
@@ -1828,7 +1828,7 @@
         },
         {
           "sequence": 58,
-          "actionId": "790679fc-c4aa-4023-96af-6ab3eaeed8cd",
+          "actionId": "26c67377-37ab-4a90-8dd8-4898ae7f4b41",
           "action": {
             "kind": "move",
             "target": {
@@ -1860,7 +1860,7 @@
         },
         {
           "sequence": 59,
-          "actionId": "88b10d73-daa4-4d01-b80b-c68bd496d376",
+          "actionId": "3fb18f3c-34e6-44d2-8895-0394fb3cfe00",
           "action": {
             "kind": "move",
             "target": {
@@ -1892,7 +1892,7 @@
         },
         {
           "sequence": 60,
-          "actionId": "1802f3b9-cc3e-4716-82cc-d4be492b7757",
+          "actionId": "ff90e3f3-a80b-4164-b8a3-471eb3a41abd",
           "action": {
             "kind": "move",
             "target": {
@@ -1924,7 +1924,7 @@
         },
         {
           "sequence": 61,
-          "actionId": "2ff611d9-8fb2-446a-9752-0403476d3047",
+          "actionId": "9adadef3-2d0c-4e68-953d-c101987a84d4",
           "action": {
             "kind": "move",
             "target": {
@@ -1956,7 +1956,7 @@
         },
         {
           "sequence": 62,
-          "actionId": "16824cba-9991-4b93-8d6a-d4f52e23b98e",
+          "actionId": "e072949b-69e5-4d20-a887-1e91aa31cc66",
           "action": {
             "kind": "repair",
             "targetId": "a-01"
@@ -1985,7 +1985,7 @@
         },
         {
           "sequence": 63,
-          "actionId": "ecdefc61-11e1-452c-91f7-6bb4209986cd",
+          "actionId": "9b912fdc-b9e2-44c7-8af5-e33d43882b46",
           "action": {
             "kind": "move",
             "target": {
@@ -2017,7 +2017,7 @@
         },
         {
           "sequence": 64,
-          "actionId": "94c296a7-ee31-456e-9943-47ec2170f47e",
+          "actionId": "459cfa4e-3d71-4968-819c-34f5ca122687",
           "action": {
             "kind": "move",
             "target": {
@@ -2049,7 +2049,7 @@
         },
         {
           "sequence": 65,
-          "actionId": "7daee5c8-dd70-4a08-b84f-77d6fab18136",
+          "actionId": "6a4eb5c6-c843-444f-ac3d-e8708920f7c0",
           "action": {
             "kind": "move",
             "target": {
@@ -2081,7 +2081,7 @@
         },
         {
           "sequence": 66,
-          "actionId": "f2060098-f303-46bd-871d-dcf009156d45",
+          "actionId": "43f99abd-dbdd-4d29-a718-2d832aa7da14",
           "action": {
             "kind": "move",
             "target": {
@@ -2113,7 +2113,7 @@
         },
         {
           "sequence": 67,
-          "actionId": "8d161b84-3d49-4779-9b4d-f33dcb395fb5",
+          "actionId": "463535c3-8865-4433-8b53-1c0959b60183",
           "action": {
             "kind": "move",
             "target": {
@@ -2145,7 +2145,7 @@
         },
         {
           "sequence": 68,
-          "actionId": "47d71fae-c376-4420-bcff-3ae30242e09b",
+          "actionId": "6d8bb0ac-3c8d-4f5d-97ad-34fa7e182328",
           "action": {
             "kind": "move",
             "target": {
@@ -2177,7 +2177,7 @@
         },
         {
           "sequence": 69,
-          "actionId": "9565862e-5908-46d9-8ade-535c423f0153",
+          "actionId": "f62d4bfb-7db4-4c86-b7e5-566799d4b0df",
           "action": {
             "kind": "move",
             "target": {
@@ -2209,7 +2209,7 @@
         },
         {
           "sequence": 70,
-          "actionId": "d7aa15cd-4791-4150-8cdd-7e95f2968d16",
+          "actionId": "af47bc54-9794-431b-a3b7-49a4f970fd43",
           "action": {
             "kind": "move",
             "target": {
@@ -2241,7 +2241,7 @@
         },
         {
           "sequence": 71,
-          "actionId": "35079494-bb9c-41da-a66c-e617eb0a5a4d",
+          "actionId": "52569ad0-677c-4090-9300-9779d9d3b829",
           "action": {
             "kind": "move",
             "target": {
@@ -2273,7 +2273,7 @@
         },
         {
           "sequence": 72,
-          "actionId": "329ab9fd-cdbc-40ee-a56c-975afca04852",
+          "actionId": "e98be4ea-b304-4c26-8673-129d86e6a1dc",
           "action": {
             "kind": "move",
             "target": {
@@ -2305,7 +2305,7 @@
         },
         {
           "sequence": 73,
-          "actionId": "b6ada158-5a84-43e7-a6aa-7bdb2af5dec8",
+          "actionId": "bb3021e5-c208-478c-948e-54fe3804d963",
           "action": {
             "kind": "extract"
           },
@@ -2341,7 +2341,7 @@
       "actions": [
         {
           "sequence": 1,
-          "actionId": "4daaf312-c670-4a5f-8566-a3248b978e8b",
+          "actionId": "a60a10be-78d2-4ba7-a8fb-f23d37a4a6f0",
           "action": {
             "kind": "move",
             "target": {
@@ -2373,7 +2373,7 @@
         },
         {
           "sequence": 2,
-          "actionId": "8df58846-4db7-4eee-9106-4a2c28f77217",
+          "actionId": "dbad24ed-e1f4-4e4a-af8a-a815a2ee5304",
           "action": {
             "kind": "collect",
             "targetId": "s-01"
@@ -2402,7 +2402,7 @@
         },
         {
           "sequence": 3,
-          "actionId": "c292c41c-5835-4b8d-a6eb-c04bd1c3ffe1",
+          "actionId": "b8f23092-efc7-476b-b199-91af397aadf0",
           "action": {
             "kind": "move",
             "target": {
@@ -2434,7 +2434,7 @@
         },
         {
           "sequence": 4,
-          "actionId": "01ab9092-38c3-4ca4-907c-7930c42da1e4",
+          "actionId": "ea374bf8-9a14-496b-abda-8e18e4540cdb",
           "action": {
             "kind": "collect",
             "targetId": "s-02"
@@ -2463,7 +2463,7 @@
         },
         {
           "sequence": 5,
-          "actionId": "ab13bb0e-8c2b-4fd4-86c4-d02115c30982",
+          "actionId": "994e6425-54aa-4b84-b3cf-942b5ed0969e",
           "action": {
             "kind": "move",
             "target": {
@@ -2495,7 +2495,7 @@
         },
         {
           "sequence": 6,
-          "actionId": "c369035f-59a8-4500-8619-afd1c0fb1d4c",
+          "actionId": "102b5039-6912-4b2b-b70e-c2b999acefd6",
           "action": {
             "kind": "move",
             "target": {
@@ -2527,7 +2527,7 @@
         },
         {
           "sequence": 7,
-          "actionId": "8d8468de-5ba4-4744-a796-fc06557caaa6",
+          "actionId": "db987cc8-223f-49af-95c4-4f9e712082d8",
           "action": {
             "kind": "repair",
             "targetId": "human"
@@ -2556,7 +2556,7 @@
         },
         {
           "sequence": 8,
-          "actionId": "14f51a84-6790-43f6-b59b-a99482f554ae",
+          "actionId": "6ab92049-5925-4b2b-829c-f6c8c9fb7a03",
           "action": {
             "kind": "move",
             "target": {
@@ -2588,7 +2588,7 @@
         },
         {
           "sequence": 9,
-          "actionId": "eef33ba9-ceed-4bfb-9ea3-7a8328192865",
+          "actionId": "8647e339-5a9d-4abf-8829-ebfc37907082",
           "action": {
             "kind": "move",
             "target": {
@@ -2620,7 +2620,7 @@
         },
         {
           "sequence": 10,
-          "actionId": "7db998c2-dd91-40f1-8414-fbbc67713d0b",
+          "actionId": "bb1cb6cd-6404-4f26-88bc-d57e8fb52ab0",
           "action": {
             "kind": "move",
             "target": {
@@ -2652,7 +2652,7 @@
         },
         {
           "sequence": 11,
-          "actionId": "9c7ccf0b-9bae-47f2-9085-37722f61bfbc",
+          "actionId": "b1597a33-32b0-4e24-b53b-2c3f42a19421",
           "action": {
             "kind": "move",
             "target": {
@@ -2684,7 +2684,7 @@
         },
         {
           "sequence": 12,
-          "actionId": "201f3266-dc25-417f-aacf-3904ab7f4b37",
+          "actionId": "5d564050-ec44-46ef-8408-1ee30e53647c",
           "action": {
             "kind": "move",
             "target": {
@@ -2716,7 +2716,7 @@
         },
         {
           "sequence": 13,
-          "actionId": "2b754f07-a962-4577-9c86-865070f83f58",
+          "actionId": "3364a479-73a9-4d15-ba3f-2a64b8d1c6a2",
           "action": {
             "kind": "move",
             "target": {
@@ -2748,7 +2748,7 @@
         },
         {
           "sequence": 14,
-          "actionId": "166f8cf9-e6d8-488e-92a8-755a8a5e576d",
+          "actionId": "9a7dbec1-7ced-495b-a683-ae30be011a76",
           "action": {
             "kind": "move",
             "target": {
@@ -2780,7 +2780,7 @@
         },
         {
           "sequence": 15,
-          "actionId": "4d8adcc9-1a75-4c93-b0d8-e2cf526c6412",
+          "actionId": "6a134a99-fdfa-466d-ab44-78d145c5e094",
           "action": {
             "kind": "move",
             "target": {
@@ -2812,7 +2812,7 @@
         },
         {
           "sequence": 16,
-          "actionId": "757818ef-42bc-4ce0-a1c3-8f82f4ab149f",
+          "actionId": "7ad8605d-660a-4636-a95f-3544dbc52d10",
           "action": {
             "kind": "scan",
             "targetId": "c-01"
@@ -2841,7 +2841,7 @@
         },
         {
           "sequence": 17,
-          "actionId": "e89ae2d3-6f5a-4d9e-babb-06ab306d9064",
+          "actionId": "1129fa7d-26f2-4af2-bbd7-9613b13b4b74",
           "action": {
             "kind": "move",
             "target": {
@@ -2873,7 +2873,7 @@
         },
         {
           "sequence": 18,
-          "actionId": "53cb5586-de19-4116-bee5-49e2c9a374b9",
+          "actionId": "8695fa61-f598-489c-a85d-ac9b1dea5183",
           "action": {
             "kind": "move",
             "target": {
@@ -2905,7 +2905,7 @@
         },
         {
           "sequence": 19,
-          "actionId": "41e431eb-8582-4a0f-9930-5859abc064bf",
+          "actionId": "b2b8be48-243f-422f-92c8-c87a932641cb",
           "action": {
             "kind": "move",
             "target": {
@@ -2937,7 +2937,7 @@
         },
         {
           "sequence": 20,
-          "actionId": "6e90fbe6-ed8d-4b5e-a10e-861aa65ef4d8",
+          "actionId": "91d8f1f8-1863-4a0e-844a-4858323acbaf",
           "action": {
             "kind": "circuit",
             "targetId": "sw-01",
@@ -2971,7 +2971,7 @@
         },
         {
           "sequence": 21,
-          "actionId": "cf842902-ec07-42d1-85f3-1830154ace09",
+          "actionId": "0802696c-90a7-485a-9f6b-115b5051233c",
           "action": {
             "kind": "move",
             "target": {
@@ -3003,7 +3003,7 @@
         },
         {
           "sequence": 22,
-          "actionId": "811bbcb3-159a-436f-931e-94aea4aa5124",
+          "actionId": "230c06de-ee48-44a9-ac85-23b9dc40d1ab",
           "action": {
             "kind": "open",
             "targetId": "c-01"
@@ -3032,7 +3032,7 @@
         },
         {
           "sequence": 23,
-          "actionId": "20339d2d-c165-421f-8f3d-ccf398c516f4",
+          "actionId": "b4dec0ba-028b-46fe-a2f2-933ebc0dd8ee",
           "action": {
             "kind": "collect",
             "targetId": "s-04"
@@ -3061,7 +3061,7 @@
         },
         {
           "sequence": 24,
-          "actionId": "39fe405f-9a00-4264-bb8c-adff8f5d8091",
+          "actionId": "6b22dc5b-2a99-483a-856e-e2b4b809669f",
           "action": {
             "kind": "use_item",
             "itemId": "s-04",
@@ -3091,7 +3091,7 @@
         },
         {
           "sequence": 25,
-          "actionId": "22285e02-0a6a-4968-99b8-0313d0fa93b2",
+          "actionId": "664b59b0-5444-4f57-83ab-d575f5faff36",
           "action": {
             "kind": "move",
             "target": {
@@ -3123,7 +3123,7 @@
         },
         {
           "sequence": 26,
-          "actionId": "33bb1a3c-f57a-4128-8c1a-addcfffbe627",
+          "actionId": "8f2986f4-58b5-4808-a943-bf8d14c6108d",
           "action": {
             "kind": "circuit",
             "targetId": "sw-01",
@@ -3157,7 +3157,7 @@
         },
         {
           "sequence": 27,
-          "actionId": "d24900b2-d4ea-426a-8a70-13fcec9e666f",
+          "actionId": "41c270cf-64cb-494b-90ce-40c0e85b2326",
           "action": {
             "kind": "move",
             "target": {
@@ -3189,7 +3189,7 @@
         },
         {
           "sequence": 28,
-          "actionId": "ba5fccc9-3bb4-4eac-9b03-8b1e18dbeef8",
+          "actionId": "ba34c5b9-d6fe-4526-8a3b-90267871e28a",
           "action": {
             "kind": "move",
             "target": {
@@ -3221,7 +3221,7 @@
         },
         {
           "sequence": 29,
-          "actionId": "16f1b358-f0cf-477f-86c9-4c9bea2507af",
+          "actionId": "2ad0b0e6-9bd8-4b7a-9256-12d3c4d609c4",
           "action": {
             "kind": "move",
             "target": {
@@ -3253,7 +3253,7 @@
         },
         {
           "sequence": 30,
-          "actionId": "2b001080-3ffa-47f7-932f-66f7925f1e5e",
+          "actionId": "4ac2a0d2-1e4a-433f-a2c4-a5ce5d8dced6",
           "action": {
             "kind": "move",
             "target": {
@@ -3285,7 +3285,7 @@
         },
         {
           "sequence": 31,
-          "actionId": "0e3ac0f4-e136-4b26-8554-7e168b4a334b",
+          "actionId": "025ee1e0-edd3-4b33-aea4-b45b0f0aad49",
           "action": {
             "kind": "move",
             "target": {
@@ -3317,7 +3317,7 @@
         },
         {
           "sequence": 32,
-          "actionId": "03d68b11-9ca7-4089-b0d8-5b13f59118a6",
+          "actionId": "1b15e224-b91a-4689-b3f4-e3e994ebb994",
           "action": {
             "kind": "move",
             "target": {
@@ -3349,7 +3349,7 @@
         },
         {
           "sequence": 33,
-          "actionId": "0cbea85b-766f-4da8-83d2-68a3d149245b",
+          "actionId": "674aa68e-7a40-45bb-aa68-8a99d3cde29c",
           "action": {
             "kind": "move",
             "target": {
@@ -3381,7 +3381,7 @@
         },
         {
           "sequence": 34,
-          "actionId": "22a8008e-3db1-4574-af19-b97ef9201d7d",
+          "actionId": "2f4a189c-258b-402c-83f6-f0ac5d61a675",
           "action": {
             "kind": "move",
             "target": {
@@ -3413,7 +3413,7 @@
         },
         {
           "sequence": 35,
-          "actionId": "0ff44846-ef26-4d50-b698-73068cf984f2",
+          "actionId": "72dfcbc4-03a1-43ab-b56a-7f90d48eeeff",
           "action": {
             "kind": "move",
             "target": {
@@ -3445,7 +3445,7 @@
         },
         {
           "sequence": 36,
-          "actionId": "3c1c884d-5e94-49b0-89c5-dd340d50bceb",
+          "actionId": "327f101b-b8b8-4bfe-abf6-9afee6a16d16",
           "action": {
             "kind": "move",
             "target": {
@@ -3477,7 +3477,7 @@
         },
         {
           "sequence": 37,
-          "actionId": "885714f2-014d-4303-be0c-0ecab58dff31",
+          "actionId": "4cd0fe82-b076-49c6-8b40-2c2cc76d63d3",
           "action": {
             "kind": "move",
             "target": {
@@ -3509,7 +3509,7 @@
         },
         {
           "sequence": 38,
-          "actionId": "a01a26d2-7b43-4c89-8ba7-80c7c2a1542f",
+          "actionId": "0e09ac03-a184-47ed-8580-eada5c0c693c",
           "action": {
             "kind": "move",
             "target": {
@@ -3541,7 +3541,7 @@
         },
         {
           "sequence": 39,
-          "actionId": "eb72d313-043c-4490-838b-eb3810291e92",
+          "actionId": "4d5bf1e8-de2f-454e-b8b3-3d8a8e2a8c27",
           "action": {
             "kind": "clear",
             "targetId": "o-01"
@@ -3570,7 +3570,7 @@
         },
         {
           "sequence": 40,
-          "actionId": "6882f727-bf51-47ba-aa54-6eba128ed47b",
+          "actionId": "a566b6ea-d5be-43dc-95cb-9af0f13b5b9f",
           "action": {
             "kind": "move",
             "target": {
@@ -3602,7 +3602,7 @@
         },
         {
           "sequence": 41,
-          "actionId": "b8efaeb0-a9af-414c-b2ca-5c7093e5dbcb",
+          "actionId": "f9a19fc0-caf0-4c7a-acf7-373f8f841b96",
           "action": {
             "kind": "move",
             "target": {
@@ -3634,7 +3634,7 @@
         },
         {
           "sequence": 42,
-          "actionId": "f3dce5a6-3bd6-4622-a290-d8741bbd2fd5",
+          "actionId": "7483b4c4-794a-4706-8be2-d6b008cded94",
           "action": {
             "kind": "move",
             "target": {
@@ -3666,7 +3666,7 @@
         },
         {
           "sequence": 43,
-          "actionId": "d3daffd0-3c0f-4e68-9af8-9b2c598cd7fd",
+          "actionId": "f08f5843-c85f-41a4-982b-ce1bb3b57fa4",
           "action": {
             "kind": "repair",
             "targetId": "a-01"
@@ -3695,7 +3695,7 @@
         },
         {
           "sequence": 44,
-          "actionId": "e894d890-3b48-40c2-91ae-a771a4b941dc",
+          "actionId": "ba3d790f-b3f6-45cc-acdb-64a90b5e774f",
           "action": {
             "kind": "move",
             "target": {
@@ -3727,7 +3727,7 @@
         },
         {
           "sequence": 45,
-          "actionId": "7bc49b03-3629-4830-9804-f24f835234c2",
+          "actionId": "f7a4b762-332e-46e6-a444-546919122660",
           "action": {
             "kind": "move",
             "target": {
@@ -3759,7 +3759,7 @@
         },
         {
           "sequence": 46,
-          "actionId": "4b46a156-9c8b-4fbe-809f-c1267a0f7206",
+          "actionId": "97ba5d7e-e990-40be-b42e-c61328f3617b",
           "action": {
             "kind": "move",
             "target": {
@@ -3791,7 +3791,7 @@
         },
         {
           "sequence": 47,
-          "actionId": "cd59ed54-1498-4b1f-80ab-b94c6fd6b5a2",
+          "actionId": "b9516d26-08ee-4369-9c03-7f9648b425dc",
           "action": {
             "kind": "move",
             "target": {
@@ -3823,7 +3823,7 @@
         },
         {
           "sequence": 48,
-          "actionId": "2fddf200-6dc4-4a55-a5eb-c75f23f46f97",
+          "actionId": "6026de8e-f832-4ae1-addd-cebf7109d78c",
           "action": {
             "kind": "move",
             "target": {
@@ -3855,7 +3855,7 @@
         },
         {
           "sequence": 49,
-          "actionId": "4637d64e-18a9-448c-8e5e-93cc52bcd0c2",
+          "actionId": "02b10fc3-9370-4a90-ad58-167fb7409d92",
           "action": {
             "kind": "move",
             "target": {
@@ -3887,7 +3887,7 @@
         },
         {
           "sequence": 50,
-          "actionId": "631b9ccc-cacd-4d78-924d-0ca31af776a1",
+          "actionId": "220f4414-14f4-42ea-a611-11efd97eb197",
           "action": {
             "kind": "move",
             "target": {
@@ -3919,7 +3919,7 @@
         },
         {
           "sequence": 51,
-          "actionId": "59deae3f-959f-43a0-a324-2b2d2fb30df8",
+          "actionId": "003db4cc-e14e-47fd-a070-9fd174941ec4",
           "action": {
             "kind": "move",
             "target": {
@@ -3951,7 +3951,7 @@
         },
         {
           "sequence": 52,
-          "actionId": "eee24690-6d05-4b98-8454-c7f285f4c7b5",
+          "actionId": "508bfc74-52b7-4419-badd-9239f000ae9d",
           "action": {
             "kind": "move",
             "target": {
@@ -3983,7 +3983,7 @@
         },
         {
           "sequence": 53,
-          "actionId": "49c28b04-2803-460b-9d7e-d253fb9243f5",
+          "actionId": "e1602b84-6222-4cbd-843c-0de494ec6668",
           "action": {
             "kind": "pickup_human"
           },
@@ -4011,7 +4011,7 @@
         },
         {
           "sequence": 54,
-          "actionId": "7b8912e0-b9ce-4ecf-b526-5cb3f8e3ee13",
+          "actionId": "6bc8edac-17fd-4d38-8cea-5fde6361cb35",
           "action": {
             "kind": "move",
             "target": {
@@ -4043,7 +4043,7 @@
         },
         {
           "sequence": 55,
-          "actionId": "04493a18-4088-4623-847a-3714c09ff879",
+          "actionId": "cc261cbc-b384-4eff-a7d6-b921728d4ea7",
           "action": {
             "kind": "move",
             "target": {
@@ -4075,7 +4075,7 @@
         },
         {
           "sequence": 56,
-          "actionId": "2875ebde-f583-44bf-a266-7b87fdd40aca",
+          "actionId": "26da39f4-4119-4a68-9c2f-a304076046b0",
           "action": {
             "kind": "move",
             "target": {
@@ -4107,7 +4107,7 @@
         },
         {
           "sequence": 57,
-          "actionId": "729c4060-bc93-4a1b-a00d-2715b91c5e35",
+          "actionId": "8ba5cd9a-c19d-48b8-9972-40776946dbe1",
           "action": {
             "kind": "move",
             "target": {
@@ -4139,7 +4139,7 @@
         },
         {
           "sequence": 58,
-          "actionId": "cea02841-ab06-49fd-9b90-19126789c4c2",
+          "actionId": "f2ff65fa-f20e-4f1a-9bdf-97954f87a3ea",
           "action": {
             "kind": "move",
             "target": {
@@ -4171,7 +4171,7 @@
         },
         {
           "sequence": 59,
-          "actionId": "281350a9-5392-4e29-b616-ac457fe0386c",
+          "actionId": "126104a9-2c3f-4678-b0c7-cace5ff3a8e2",
           "action": {
             "kind": "move",
             "target": {
@@ -4203,7 +4203,7 @@
         },
         {
           "sequence": 60,
-          "actionId": "15e71e15-a5bd-401c-a99a-134438786864",
+          "actionId": "a7aeaf54-1f65-4038-8883-91f95c0c7494",
           "action": {
             "kind": "move",
             "target": {
@@ -4235,7 +4235,7 @@
         },
         {
           "sequence": 61,
-          "actionId": "6d486095-4104-499f-afe8-c6115362edf5",
+          "actionId": "cdbaaa98-b182-4011-a586-c2533d14d332",
           "action": {
             "kind": "move",
             "target": {
@@ -4267,7 +4267,7 @@
         },
         {
           "sequence": 62,
-          "actionId": "03da6a97-85f8-4e38-a81f-f0ca1fe05574",
+          "actionId": "5cbf12e7-2de7-45ac-a17f-e0378b675665",
           "action": {
             "kind": "move",
             "target": {
@@ -4299,7 +4299,7 @@
         },
         {
           "sequence": 63,
-          "actionId": "9b2d52f1-e6fe-420d-8c60-fa91f7801754",
+          "actionId": "0c507cb9-1110-4c37-aea2-6f818abcb0d9",
           "action": {
             "kind": "move",
             "target": {
@@ -4331,7 +4331,7 @@
         },
         {
           "sequence": 64,
-          "actionId": "8f6faca5-dc71-4a5c-a659-551c71f9c3ce",
+          "actionId": "7e173b93-4cff-4376-863f-1f98968c1fc1",
           "action": {
             "kind": "move",
             "target": {
@@ -4363,7 +4363,7 @@
         },
         {
           "sequence": 65,
-          "actionId": "00166d1c-d083-4e17-be3e-61a9a89921d7",
+          "actionId": "7cd1fde1-93d6-41d4-8dc6-9edde2a4a827",
           "action": {
             "kind": "move",
             "target": {
@@ -4395,7 +4395,7 @@
         },
         {
           "sequence": 66,
-          "actionId": "85bfa568-18ae-42f4-a558-02393c789fc3",
+          "actionId": "a5c148d8-4943-4f2a-a435-c694e7fa4d9c",
           "action": {
             "kind": "move",
             "target": {
@@ -4427,7 +4427,7 @@
         },
         {
           "sequence": 67,
-          "actionId": "f6b690d2-5146-46e4-b0d5-3110eea3a84e",
+          "actionId": "53fc5d55-65ab-44dd-98f3-eef5a2b5055b",
           "action": {
             "kind": "move",
             "target": {
@@ -4459,7 +4459,7 @@
         },
         {
           "sequence": 68,
-          "actionId": "4f85bd63-f00d-4ef9-9345-2d12a866936b",
+          "actionId": "b85abe55-d594-4669-8310-78bdb24114a4",
           "action": {
             "kind": "move",
             "target": {
@@ -4491,7 +4491,7 @@
         },
         {
           "sequence": 69,
-          "actionId": "b5bf9611-2cd3-4f75-bd00-a3631e3e3c19",
+          "actionId": "0c8f979c-370f-4906-bd18-03548003abad",
           "action": {
             "kind": "move",
             "target": {
@@ -4523,7 +4523,7 @@
         },
         {
           "sequence": 70,
-          "actionId": "d3638abe-9580-4bb9-951d-be46f461f488",
+          "actionId": "5a39a99f-ba02-477a-b6ef-c31d3d32bf2f",
           "action": {
             "kind": "move",
             "target": {
@@ -4555,7 +4555,7 @@
         },
         {
           "sequence": 71,
-          "actionId": "37cd0d48-6ee0-45ee-a6c4-7fc0e1b68e03",
+          "actionId": "3c705b21-f96e-47ea-8dd1-077ca5b2e832",
           "action": {
             "kind": "move",
             "target": {
@@ -4587,7 +4587,7 @@
         },
         {
           "sequence": 72,
-          "actionId": "4cff53fd-71e0-4975-b6c1-ef599a2d1f14",
+          "actionId": "4416c68f-32b7-4144-9683-7da71a2483c4",
           "action": {
             "kind": "move",
             "target": {
@@ -4619,7 +4619,7 @@
         },
         {
           "sequence": 73,
-          "actionId": "2baa2f16-f910-4be4-84a9-8be0a6d0435d",
+          "actionId": "e9b210f2-71d6-4e8b-a110-3aa98aa29306",
           "action": {
             "kind": "extract"
           },

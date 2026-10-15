@@ -128,6 +128,47 @@ test('两条固定救援路线均成功且有资源余量', () => {
   }
 });
 
+test('出口喷气时空载和搬运均禁止进入，不扣资源；实际维修后解除并可恢复', () => {
+  for (const carried of [false, true]) {
+    const engine = new GameEngine(level);
+    engine.state.robot.position = { x: 10, y: 2 }; engine.state.human.carried = carried;
+    const before = engine.snapshot();
+    const outcome = engine.perform({ kind: 'move', target: level.exit }, crypto.randomUUID(), { reserveReturnBattery: false, reserveMargin: 0, authorizedHazardIds: ['h-01'], stopOnHazard: false, allowedRepairs: ['airlock'] });
+    assert.equal(outcome.code, 'EXIT_LEAK_ACTIVE'); assert.equal(outcome.accepted, false);
+    assert.deepEqual(outcome.cost, { tu: 0, battery: 0, oxygen: 0 });
+    assert.deepEqual(engine.state.robot, before.robot); assert.deepEqual(engine.state.human, before.human);
+    assert.equal(engine.state.elapsedTU, 0); assert.equal(engine.state.stateRevision, 0); assert.equal(engine.state.ledger.length, 0);
+    assert.equal(engine.knownPath(level.exit), null);
+    assert.equal(engine.playerView().exitStatus, 'leaking');
+    assert.equal((engine.robotContext() as { exitStatus: string }).exitStatus, 'leaking');
+    assert.ok(!JSON.stringify(engine.robotContext()).includes('a-01'));
+    engine.state.robot.position = { x: 9, y: 8 };
+    const material = engine.state.entities.find(e => e.id === 's-01')!; material.taken = true;
+    engine.state.robot.inventory.push(material.id); engine.observe();
+    assert.equal(engine.perform({ kind: 'repair', targetId: 'a-01' }).accepted, true);
+    assert.equal(engine.exitStatus, 'safe');
+    const restored = new GameEngine(level); restored.restore(engine.snapshot());
+    assert.equal(restored.playerView().exitStatus, 'safe');
+    assert.equal((restored.robotContext() as { exitStatus: string }).exitStatus, 'safe');
+    restored.state.robot.position = { x: 10, y: 2 };
+    assert.deepEqual(restored.knownPath(level.exit), [level.exit]);
+    assert.equal(restored.perform({ kind: 'move', target: level.exit }).accepted, true);
+  }
+});
+
+test('寻路不能穿过喷气出口，但仍可到达出口附近；修复后可穿过', () => {
+  const corridor = structuredClone(level);
+  corridor.width = 5; corridor.height = 4; corridor.tiles = ['#####', '#...#', '#...#', '#####'];
+  corridor.exit = { x: 2, y: 1 }; corridor.robotStart = { x: 1, y: 1 }; corridor.humanStart = { x: 1, y: 1 };
+  corridor.entities = corridor.entities.filter(e => e.type === 'airlock');
+  const engine = new GameEngine(corridor);
+  const route = engine.knownPath({ x: 3, y: 1 });
+  assert.ok(route); assert.equal(route.length, 4);
+  assert.ok(!route.some(p => p.x === corridor.exit.x && p.y === corridor.exit.y));
+  engine.state.entities[0].repaired = true;
+  assert.equal(engine.knownPath({ x: 3, y: 1 })?.length, 2);
+});
+
 test('拒绝非法移动，不扣资源；有效动作重复请求只扣一次', () => {
   const engine = new GameEngine(level);
   assert.equal(engine.perform({ kind: 'move', target: { x: 11, y: 11 } }).accepted, false);

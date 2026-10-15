@@ -42,6 +42,8 @@ export class GameEngine {
 
   get terminal(): boolean { return this.state.phase === 'success' || this.state.phase === 'failure'; }
 
+  get exitStatus(): PlayerView['exitStatus'] { return this.state.entities.some(e => e.type === 'airlock' && e.repaired) ? 'safe' : 'leaking'; }
+
   private getEntity(id: string): Entity | undefined { return this.state.entities.find(e => e.id === id); }
 
   private reachable(p: Position): boolean {
@@ -72,7 +74,7 @@ export class GameEngine {
       if (entity.powerRequired) result.powerRequired = true;
       if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
       else if (entity.type === 'switch') result.details = '机器人须在同格或相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
-      else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，可在气闸位置启动撤离。' : '控制器损坏，需要一份维修材料。';
+      else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : '控制器损坏导致出口喷气，出口格不可进入；需要一份维修材料修复。';
       else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${this.level.rules.leakCost} 电量。`;
       else if (entity.itemType === 'battery') result.details = `可恢复 ${this.level.rules.batteryRefill} 电量。`;
       else if (entity.itemType === 'oxygen') result.details = `可恢复 ${this.level.rules.oxygenRefill} 氧气。`;
@@ -108,7 +110,7 @@ export class GameEngine {
   }
 
   knownPath(target: Position, constraints: Constraints = defaultConstraints()): Position[] | null {
-    return findKnownPath(this.level, this.state.knowledge, this.state.robot.position, target, this.state.circuitOn, constraints.authorizedHazardIds);
+    return findKnownPath(this.level, this.state.knowledge, this.state.robot.position, target, this.state.circuitOn, constraints.authorizedHazardIds, this.exitStatus === 'leaking');
   }
 
   perform(action: Action, actionId: string = crypto.randomUUID(), constraints: Constraints = defaultConstraints()): ActionOutcome {
@@ -166,6 +168,7 @@ export class GameEngine {
       case 'move': {
         const target = action.target;
         if (!Number.isInteger(target.x) || !Number.isInteger(target.y) || distance(this.state.robot.position, target) !== 1 || this.level.tiles[target.y]?.[target.x] === undefined || this.level.tiles[target.y][target.x] === '#') return reject('INVALID_MOVE', '只能向可通行的相邻格移动。');
+        if (samePosition(target, this.level.exit) && this.exitStatus === 'leaking') return reject('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法进入；请先修复气闸控制器。');
         const blocker = this.state.entities.find(e => samePosition(e.position, target) && !e.removed && (e.type === 'cabinet' || e.type === 'door' && !e.opened || e.type === 'obstacle'));
         if (blocker) return reject('BLOCKED', '前方无法通行，请检查附近设施。');
         const hazard = this.state.entities.find(e => e.type === 'hazard' && samePosition(e.position, target) && this.state.circuitOn);
@@ -240,6 +243,7 @@ export class GameEngine {
         cost = { tu: 1, battery: 0, oxygen: 0 }; message = `${action.on ? '开启' : '关闭'}辅助电路`; effect = () => { this.state.circuitOn = action.on; };
         break;
       case 'extract':
+        if (this.exitStatus === 'leaking') return reject('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法撤离；请先修复气闸控制器。');
         if (!this.state.human.carried || !samePosition(this.state.robot.position, this.level.exit) || !this.state.entities.some(e => e.type === 'airlock' && e.repaired)) return reject('PRECONDITION_FAILED', '需要修复气闸，并将玩家搬运到出口。');
         cost = { tu: 2, battery: 2, oxygen: 0 }; message = '气闸接管救援，撤离成功'; effect = () => { this.state.phase = 'success'; };
         break;
@@ -289,6 +293,7 @@ export class GameEngine {
   playerView(): PlayerView {
     return structuredClone({
       level: { id: this.level.id, name: this.level.name, width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
+      exitStatus: this.exitStatus,
       phase: this.state.phase, stateRevision: this.state.stateRevision, elapsedTU: this.state.elapsedTU, circuitOn: this.state.circuitOn,
       human: this.state.human,
       robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => this.state.knowledge.entities[id]).filter((e): e is ObservedEntity => !!e) },
@@ -300,6 +305,7 @@ export class GameEngine {
   robotContext(): object {
     return structuredClone({
       historicalMap: { width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
+      exitStatus: this.exitStatus,
       telemetry: { human: this.state.human, robot: this.state.robot, circuitOn: this.state.circuitOn, elapsedTU: this.state.elapsedTU },
       knownEntities: Object.values(this.state.knowledge.entities), sharedMarkers: this.state.knowledge.markers,
       radar: this.state.radarHistory,

@@ -9,6 +9,8 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 let canvas = $<HTMLCanvasElement>('map');
 let station: StationRenderer | null = null;
 let flatContext: CanvasRenderingContext2D | null = null;
+let flatAnimation = 0;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 try { station = new StationRenderer(canvas); }
 catch {
   const replacement = canvas.cloneNode() as HTMLCanvasElement;
@@ -85,7 +87,8 @@ function render() {
   $('map-battery').textContent = String(p.robot.battery);
   $('map-phase').textContent = frames ? '历史回放' : phaseNames[p.phase];
   document.querySelector<HTMLElement>('.shell')!.dataset.danger = String(p.human.oxygen < 25);
-  const milestones = [p.human.oxygenRate === p.rules.repairedOxygenRate, p.observed.some(entity => entity.type === 'airlock' && entity.state === 'repaired'), p.phase === 'success'];
+  const milestones = [p.human.oxygenRate === p.rules.repairedOxygenRate, p.exitStatus === 'safe', p.phase === 'success'];
+  $('exit-status').textContent = p.exitStatus === 'leaking' ? '出口漏气喷射中 · 修复气闸控制器后才可进入。' : '出口已密封 · 可将伤员搬运至 EXIT 撤离。';
   const firstIncomplete = milestones.indexOf(false);
   document.querySelectorAll<HTMLElement>('[data-milestone]').forEach((step, i) => {
     step.classList.toggle('complete', milestones[i]);
@@ -172,7 +175,7 @@ function renderSelection() {
   const p = current(); if (!p) return;
   $('map-inspector').hidden = !selected;
   $('selection-hint').hidden = !!selected;
-  $<HTMLButtonElement>('go-selected').disabled = !selected || !!frames || ['success', 'failure'].includes(p.phase);
+  $<HTMLButtonElement>('go-selected').disabled = !selected || !!frames || ['success', 'failure'].includes(p.phase) || same(selected, p.level.exit) && p.exitStatus === 'leaking';
   $<HTMLButtonElement>('add-marker').disabled = !selected || !!frames;
   $<HTMLButtonElement>('toggle-marker').disabled = !selected || !!frames;
   const markers = selected ? p.markers.filter(marker => same(marker.position, selected!)) : [];
@@ -199,6 +202,11 @@ function renderSelection() {
   $('selection-title').textContent = `(${selected.x}, ${selected.y}) · ${object?.name ?? (echo ? '未知雷达回波' : p.level.tiles[selected.y][selected.x] === '#' ? '历史图上的墙体' : '历史图上的地面')}`;
   $('selection-detail').textContent = object ? `${stateNames[object.state]} / 最近观察 ${object.observedAt} TU${object.details ? ` · ${object.details}` : ' · 靠近后可进一步检查'}` : echo ? `${echo.strength === 'strong' ? '强' : '弱'}信号 / ${echo.shape === 'flickering' ? '闪烁' : '稳定'} / ${echo.historical ? '历史回波，当前未覆盖' : '当前雷达覆盖'}；具体对象未知。` : '选中的位置尚无确认对象；地图记录可能已过时。';
   $('selection-detail').title = $('selection-detail').textContent;
+  if (same(selected, p.level.exit)) {
+    $('selection-title').textContent = `(${selected.x}, ${selected.y}) · 撤离出口`;
+    $('selection-detail').textContent = p.exitStatus === 'leaking' ? '漏气喷射中，禁止进入。需先找到并修复气闸控制器；附近安全格仍可通行。' : '漏气已停止，可以进入。将伤员搬到此处后启动撤离。';
+    $('selection-detail').title = $('selection-detail').textContent;
+  }
   $('selection-markers').title = $('selection-markers').textContent ?? '';
 }
 function setMarkerEditor(open: boolean) {
@@ -217,7 +225,9 @@ function drawMap() {
   const p = current(); if (!p) return;
   if (station) station.update(p, selected); else drawFlatMap();
 }
+document.addEventListener('visibilitychange', () => { if (!station && !document.hidden) drawMap(); });
 function drawFlatMap() {
+  cancelAnimationFrame(flatAnimation); flatAnimation = 0;
   const p = current(); if (!p) return;
   const context = flatContext; if (!context) return;
   const { width, height, size, offsetX, offsetY, padding, cell } = geometry();
@@ -237,7 +247,19 @@ function drawFlatMap() {
   }
   context.fillStyle = '#5a7383';
   for (let i = 0; i < 12; i++) { context.fillText(String(i), padding + (i + .5) * cell, 12); context.fillText(String(i), 12, padding + (i + .5) * cell); }
-  const exit = center(p.level.exit); context.fillStyle = '#2f716b'; context.fillRect(exit.x - cell * .35, exit.y - cell * .35, cell * .7, cell * .7); context.fillStyle = '#a1d8cc'; context.font = `${Math.max(9, cell * .24)}px monospace`; context.fillText('EXIT', exit.x, exit.y);
+  const exit = center(p.level.exit), leaking = p.exitStatus === 'leaking';
+  canvas.dataset.exitStatus = p.exitStatus;
+  context.fillStyle = leaking ? '#8f4035' : '#2f716b'; context.fillRect(exit.x - cell * .35, exit.y - cell * .35, cell * .7, cell * .7);
+  if (leaking) {
+    const time = reducedMotion.matches ? 0 : performance.now() / 1050;
+    for (let i = 0; i < 12; i++) {
+      const phase = (time + (i % 6) / 6) % 1;
+      context.fillStyle = `rgba(208,237,240,${(1 - phase) * .55})`;
+      context.beginPath(); context.ellipse(exit.x + (Math.floor(i / 6) - .5) * cell * (.2 + phase * .3), exit.y - phase * cell, cell * (.08 + phase * .2), cell * (.16 + phase * .25), 0, 0, Math.PI * 2); context.fill();
+    }
+    if (!reducedMotion.matches && !document.hidden) flatAnimation = requestAnimationFrame(drawFlatMap);
+  }
+  context.fillStyle = leaking ? '#ffc0a6' : '#a1d8cc'; context.font = `${Math.max(9, cell * .24)}px monospace`; context.fillText('EXIT', exit.x, exit.y);
   p.level.rooms.forEach((room, index) => {
     const { minX, minY, maxX, maxY } = room.bounds;
     const color = `#${roomColors[index % roomColors.length].toString(16).padStart(6, '0')}`;
