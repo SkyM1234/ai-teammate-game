@@ -61,6 +61,7 @@ historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0
 exitStatus 是玩家与机器人共享的出口实时状态：leaking 表示出口正在漏气喷射，出口这一格禁止进入或穿越，搬运与危险授权均不能绕过；safe 表示修复气闸后漏气已停止，出口恢复通行。出口位置仍以 historicalMap.exit 为准，气闸控制器的位置与 ID 必须靠近识别，不能由出口位置推断。需先寻找气闸控制器、取得维修材料并修复，再把人类搬到出口并 interact extract；前往出口附近可选择可达的安全相邻格，不要将出口漏气误判为整个附近区域不可达。
 move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.position 为准，不要把部分移动视为抵达。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
+sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。仅在实际工具结果支持结束整项委托时调用 finish_task；该工具只结束自动行动，游戏胜负仍由规则引擎判断。
 保持人类委托的目标与约束，允许一轮最多6个工具串行调用，基于已知对象生成有限批次。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至同格或相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回可触及的开关，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
@@ -246,7 +247,7 @@ export class GameSession {
       }
       if (event.type === 'turn_end') await this.journal?.record('本轮决策结束', { control: this.control, phase: this.engine.state.phase, elapsedTU: this.engine.state.elapsedTU, runTU: this.runTU, requestCount: this.requestCount, noProgressTurns: this.noProgressTurns, telemetry: this.engine.robotContext(), toolResults: event.toolResults }, true);
     });
-    this.say('robot', 'R-07 在线。你的供氧管正在泄漏，我的电量有限。请标记雷达回波，或告诉我下一步。');
+    this.say('robot', 'R-07 在线。你的供氧管正在泄漏，我的电量有限。请告诉我下一步该怎么做。');
   }
 
   private demoAdapter(config: ModelConfig = defaultModelConfig): ModelAdapter {
@@ -505,7 +506,7 @@ export class GameSession {
         },
       },
       {
-        name: 'get_status', label: '状态', description: '查询机器人已有知识和共同遥测，不查询隐藏实体。', executionMode: 'sequential', parameters: Type.Object({}, { additionalProperties: false }),
+        name: 'get_status', label: '状态', description: '查询机器人已有知识、当前有效的共享标记 sharedMarkers 和共同遥测；已移除及私有标记不在列表中，不查询隐藏实体。', executionMode: 'sequential', parameters: Type.Object({}, { additionalProperties: false }),
         execute: async () => ({ content: [{ type: 'text', text: JSON.stringify(this.engine.robotContext()) }], details: undefined }),
       },
       {
@@ -697,6 +698,17 @@ export class GameSession {
       this.resolveAuthorization('stale');
       this.engine.state.knowledge.markers = this.engine.state.markers.filter(marker => marker.shared);
       this.say('human', `标记 (${position.x}, ${position.y})：${note || '请检查此处'}。回波的具体对象尚未确认。`);
+    }
+    this.emit();
+  }
+
+  removeMarker(id: string): void {
+    const marker = this.engine.removeMarker(id);
+    this.record('玩家移除标记', { ...marker, elapsedTU: this.engine.state.elapsedTU });
+    if (marker.shared) {
+      this.externalRevision++;
+      this.resolveAuthorization('stale');
+      this.say('human', `已移除共享标记 (${marker.position.x}, ${marker.position.y})：${marker.note || '未填写说明'}。请以当前共享标记列表为准。`);
     }
     this.emit();
   }

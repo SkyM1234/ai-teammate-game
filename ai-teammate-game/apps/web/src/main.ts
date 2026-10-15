@@ -1,7 +1,7 @@
 import type { SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
-import type { Action, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
+import type { Action, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { roomColors, StationRenderer } from './station-renderer.ts';
 
@@ -71,7 +71,17 @@ function button(label: string, action: Action) {
   el.disabled = !!frames || !view || ['success', 'failure'].includes(view.phase);
   el.onclick = () => void manual(action); return el;
 }
-function itemTitle(item: ObservedEntity) { return `${item.itemType === 'battery' ? '▥' : item.itemType === 'oxygen' ? 'O₂' : '＋'} ${item.name}`; }
+function itemArt(kind: string) {
+  const art = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  art.setAttribute('viewBox', '0 0 80 88'); art.setAttribute('aria-hidden', 'true'); art.classList.add('item-art');
+  const shapes: Record<string, string> = {
+    battery: '<path d="M30 9h20v9H30z" fill="#aebaa4"/><rect x="21" y="18" width="38" height="58" rx="5" fill="#93a18b"/><path d="M25 23h30v44H25z" fill="#263b32"/><path d="m43 28-12 21h10l-3 13 12-22H40z" fill="#dfe66c"/><path d="M28 72h24" stroke="#c7d1bc" stroke-width="2"/>',
+    oxygen: '<path d="M34 8h12v10H34zM29 8h22" stroke="#b9c5b2" stroke-width="4"/><rect x="23" y="18" width="34" height="59" rx="15" fill="#a7c4b6"/><path d="M24 39h32v25H24z" fill="#2c5c50"/><text x="40" y="56" text-anchor="middle" fill="#d6eee1" font-size="14">O₂</text><path d="M29 30v8" stroke="#e3efdf" stroke-width="3"/>',
+    repair: '<path d="M29 22v-9h22v9" fill="none" stroke="#bac5ab" stroke-width="5"/><rect x="13" y="24" width="54" height="47" rx="4" fill="#a7ad7b"/><path d="M13 40h54v8H13z" fill="#57634a"/><path d="M36 35h8v20h-8z" fill="#dbe396"/><path d="M18 65h44" stroke="#d1d4ac" stroke-width="2"/>'
+  };
+  art.innerHTML = shapes[kind] ?? '<path d="M15 25h50v43H15zM25 15h30v10M27 41h26M27 52h26" fill="none" stroke="currentColor" stroke-width="3"/>';
+  return art;
+}
 function render() {
   if (!view) return;
   const p = current()!;
@@ -90,8 +100,12 @@ function render() {
   const milestones = [p.human.oxygenRate === p.rules.repairedOxygenRate, p.exitStatus === 'safe', p.phase === 'success'];
   $('exit-status').textContent = p.exitStatus === 'leaking' ? '出口漏气喷射中 · 修复气闸控制器后才可进入。' : '出口已密封 · 可将伤员搬运至 EXIT 撤离。';
   const firstIncomplete = milestones.indexOf(false);
+  $('mission-progress').textContent = `${milestones.filter(Boolean).length} / ${milestones.length}`;
+  $('mission-progress-bar').style.width = `${milestones.filter(Boolean).length / milestones.length * 100}%`;
+  $('exit-status').dataset.safe = String(p.exitStatus === 'safe');
   document.querySelectorAll<HTMLElement>('[data-milestone]').forEach((step, i) => {
     step.classList.toggle('complete', milestones[i]);
+    step.querySelector('.milestone-state')!.textContent = milestones[i] ? '已完成' : i === firstIncomplete ? '当前阶段' : '待完成';
     if (i === firstIncomplete) step.setAttribute('aria-current', 'step'); else step.removeAttribute('aria-current');
   });
   for (const id of ['oxygen-bar', 'monitor-oxygen-bar']) {
@@ -102,6 +116,18 @@ function render() {
   $('human-oxygen-max').textContent = ` / ${p.rules.oxygenMax}`;
   $('robot-battery-bar').style.width = `${p.robot.battery / p.rules.batteryMax * 100}%`;
   $('robot-battery-max').textContent = ` / ${p.rules.batteryMax}`;
+  $('monitor-oxygen-max').textContent = ` / ${p.rules.oxygenMax}`;
+  $('monitor-battery-max').textContent = ` / ${p.rules.batteryMax}`;
+  $('oxygen-rate').textContent = `${p.human.oxygenRate} / TU`;
+  $('oxygen-condition').textContent = p.human.oxygen < 25 ? '氧气不足' : p.human.oxygenRate === p.rules.repairedOxygenRate ? '供氧管已修复' : '供氧管受损';
+  $('oxygen-advice').textContent = p.human.oxygenRate === p.rules.repairedOxygenRate ? '供氧消耗已降低，继续准备撤离。' : '修补供氧管可降低每次行动消耗。';
+  document.querySelector<HTMLElement>('.telemetry')!.dataset.lowOxygen = String(p.human.oxygen < 25);
+  document.querySelector<HTMLElement>('.telemetry')!.dataset.lowBattery = String(p.robot.battery / p.rules.batteryMax < .25);
+  $('battery-condition').textContent = p.robot.battery / p.rules.batteryMax < .25 ? '电量不足' : '电量监测';
+  $('circuit-lamp').dataset.on = String(p.circuitOn);
+  $('control-position').textContent = `(${p.robot.position.x}, ${p.robot.position.y})`;
+  $('inventory-count').textContent = `${p.robot.inventory.length} / ${p.rules.inventorySlots}`;
+  $('drawer-clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${frames ? ' / 回放' : ''}`;
   document.querySelector<HTMLElement>('.robot-card')!.dataset.lowBattery = String(p.robot.battery / p.rules.batteryMax < .25);
   $('robot-summary').textContent = `${frames ? '回放 · ' : ''}${!frames && view.pendingAuthorization ? '等待你的授权' : phaseNames[p.phase]}`;
   $('robot-location').textContent = `坐标 (${p.robot.position.x}, ${p.robot.position.y}) · ${p.human.carried ? '搬运伤员中' : `物资 ${p.robot.inventory.length} / ${p.rules.inventorySlots}`}`;
@@ -117,12 +143,26 @@ function render() {
   for (let i = 0; i < p.rules.inventorySlots; i++) {
     const slot = document.createElement('div'); slot.className = 'slot';
     const item = p.robot.inventory[i];
-    if (!item) { slot.classList.add('empty'); slot.textContent = `${String(i + 1).padStart(2, '0')} / 空置`; }
+    const number = document.createElement('span'); number.className = 'slot-number'; number.textContent = `SLOT ${String(i + 1).padStart(2, '0')}`; slot.append(number);
+    if (!item) {
+      slot.classList.add('empty');
+      const placeholder = document.createElement('div'); placeholder.className = 'slot-placeholder'; placeholder.textContent = '+'; placeholder.setAttribute('aria-hidden', 'true');
+      const label = document.createElement('strong'); label.textContent = '空置仓位';
+      const hint = document.createElement('p'); hint.textContent = '可携带一件物资'; slot.append(placeholder, label, hint);
+    }
     else {
-      const name = document.createElement('span'); name.textContent = itemTitle(item); slot.append(name);
-      if (item.itemType === 'battery') slot.append(button('安装', { kind: 'use_item', itemId: item.id, targetId: 'robot' }));
-      if (item.itemType === 'oxygen' && dist(p.human.position, p.robot.position) <= 1) slot.append(button('补氧', { kind: 'use_item', itemId: item.id, targetId: 'human' }));
-      slot.append(button('放下', { kind: 'drop_item', itemId: item.id }));
+      slot.dataset.item = item.itemType;
+      const name = document.createElement('strong'); name.textContent = item.name;
+      const hint = document.createElement('p'); hint.textContent = item.itemType === 'battery' ? '安装以补充机器人电量' : item.itemType === 'oxygen' ? '靠近伤员后可补氧' : '用于修补与设备维修';
+      const controls = document.createElement('div'); controls.className = 'slot-controls';
+      if (item.itemType === 'battery') controls.append(button('安装', { kind: 'use_item', itemId: item.id, targetId: 'robot' }));
+      if (item.itemType === 'oxygen') {
+        const use = button('补氧', { kind: 'use_item', itemId: item.id, targetId: 'human' });
+        if (dist(p.human.position, p.robot.position) > 1) { use.disabled = true; use.title = '需要靠近伤员'; }
+        controls.append(use);
+      }
+      controls.append(button('放下', { kind: 'drop_item', itemId: item.id }));
+      slot.append(itemArt(item.itemType ?? 'repair'), name, hint, controls);
     }
     $('inventory').append(slot);
   }
@@ -130,7 +170,9 @@ function render() {
   const near = p.observed.filter(e => !['cleared', 'inventory'].includes(e.state) && p.sensorCells.some(cell => same(cell, e.position)) && dist(e.position, p.robot.position) <= 1);
   for (const e of near) {
     const group = document.createElement('div'); group.className = 'action-group';
-    const title = document.createElement('p'); title.textContent = `${e.name} · ${stateNames[e.state] ?? e.state}`; group.append(title);
+    const title = document.createElement('p'); title.textContent = e.name;
+    const state = document.createElement('span'); state.className = 'object-state'; state.textContent = `${stateNames[e.state] ?? e.state} · (${e.position.x}, ${e.position.y})`;
+    group.append(itemArt(e.itemType ?? e.type), title, state);
     if (!e.scanned) group.append(button('检查', { kind: 'scan', targetId: e.id }));
     if (e.type === 'supply' && e.state === 'available') group.append(button('拾取', { kind: 'collect', targetId: e.id }));
     if (['cabinet', 'door'].includes(e.type) && e.state === 'closed') group.append(button('开启', { kind: 'open', targetId: e.id }));
@@ -143,10 +185,12 @@ function render() {
   if (same(p.human.position, p.robot.position)) $('nearby').append(button(p.human.carried ? '放下你' : '抱起你', { kind: p.human.carried ? 'drop_human' : 'pickup_human' }));
   if (p.human.carried && same(p.robot.position, p.level.exit)) $('nearby').append(button('启动气闸 · 撤离', { kind: 'extract' }));
   if (!$('nearby').childElementCount) { const hint = document.createElement('p'); hint.className = 'subtle'; hint.textContent = '附近没有已确认的可操作对象。'; $('nearby').append(hint); }
+  $('nearby-count').textContent = `${$('nearby').querySelectorAll('button').length} 项操作`;
   document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.disabled = terminal || !!frames; });
   const task = view.task;
   $('task').replaceChildren();
   const taskStatus = task?.status === 'completed' && task.interpretation === 'model' ? '已结束' : task ? { active: '执行中', paused: '暂停', waiting: '待决定', completed: '已完成' }[task.status] : '待命';
+  $('comms-state').textContent = !frames && view.pendingAuthorization ? '等待授权' : frames ? '历史回放' : taskStatus;
   const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${taskStatus}`;
   const taskText = document.createElement('p'); taskText.textContent = task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
   if (task?.question) { const question = document.createElement('p'); question.className = 'question'; question.textContent = task.question; $('task').append(question); }
@@ -156,12 +200,15 @@ function render() {
   renderMessages();
   const m = view.metrics; $('metrics').textContent = `模型请求 ${m.requests} / 工具 ${m.executedTools} / 跳过 ${m.skippedTools} / 中断 ${m.interrupts}\nTokens ${m.inputTokens} in · ${m.outputTokens} out / 结果 ${(m.resultBytes / 1024).toFixed(1)} KB`;
   $('ledger').replaceChildren();
+  $('ledger-mode').textContent = frames ? '历史回放' : '实时';
+  $('ledger-mode').dataset.replay = String(!!frames);
   for (const entry of [...p.ledger].reverse()) {
     const row = document.createElement('div'); row.className = 'ledger-entry';
     const time = document.createElement('span'); time.className = 'tu'; time.textContent = `${entry.elapsedTU} TU`;
     const title = document.createElement('span'); title.textContent = entry.message;
+    const glyph = document.createElement('span'); glyph.className = 'ledger-glyph'; glyph.setAttribute('aria-hidden', 'true'); glyph.textContent = entry.action.kind === 'move' ? '↗' : entry.action.kind === 'repair' ? '+' : entry.action.kind === 'scan' ? '◎' : '•';
     const cost = document.createElement('span'); cost.className = 'cost'; cost.textContent = `O₂ −${entry.cost.oxygen} / B −${entry.cost.battery}`;
-    row.append(time, title, cost); $('ledger').append(row);
+    row.append(time, glyph, title, cost); $('ledger').append(row);
   }
   if (!p.ledger.length) $('ledger').textContent = '等待第一次行动。';
   $('end-state').hidden = !terminal;
@@ -173,14 +220,31 @@ function render() {
 }
 function renderSelection() {
   const p = current(); if (!p) return;
-  $('map-inspector').hidden = !selected;
   $('selection-hint').hidden = !!selected;
   $<HTMLButtonElement>('go-selected').disabled = !selected || !!frames || ['success', 'failure'].includes(p.phase) || same(selected, p.level.exit) && p.exitStatus === 'leaking';
   $<HTMLButtonElement>('add-marker').disabled = !selected || !!frames;
   $<HTMLButtonElement>('toggle-marker').disabled = !selected || !!frames;
   const markers = selected ? p.markers.filter(marker => same(marker.position, selected!)) : [];
   $('selection-markers').hidden = markers.length === 0;
-  $('selection-markers').textContent = markers.map(marker => `标记（${marker.shared ? '已共享' : '仅自己可见'}）：${marker.note || '未填写说明'}`).join('\n');
+  $('selection-markers').replaceChildren();
+  for (const marker of markers) {
+    const row = document.createElement('div'); row.className = 'selection-marker';
+    const content = document.createElement('div');
+    const visibility = document.createElement('span'); visibility.className = 'marker-visibility'; visibility.textContent = marker.shared ? '已共享给 R-07' : '仅自己可见';
+    const note = document.createElement('p'); note.textContent = marker.note || '未填写说明';
+    const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '移除';
+    remove.setAttribute('aria-label', `移除标记：${marker.note || '未填写说明'}`);
+    remove.disabled = !!frames;
+    remove.onclick = async () => {
+      remove.disabled = true;
+      if (await post('remove-marker', { markerId: marker.id })) {
+        if (drawer.open && drawer.dataset.panel === 'selection' && selected && same(selected, marker.position)) $('toggle-marker').focus();
+        toast(marker.shared ? '已移除标记，并同步给 R-07。' : '已移除私有标记。');
+      }
+      else remove.disabled = !!frames;
+    };
+    content.append(visibility, note); row.append(content, remove); $('selection-markers').append(row);
+  }
   const editorKey = JSON.stringify([view?.sessionId, selected, !!frames, markers]);
   // Refresh on a different cell or saved marker, while preserving drafts during telemetry updates.
   if (editorKey !== markerEditorKey) {
@@ -192,22 +256,22 @@ function renderSelection() {
   }
   $<HTMLInputElement>('marker-note').disabled = !selected || !!frames;
   $<HTMLInputElement>('marker-shared').disabled = !selected || !!frames;
-  if (!selected) return;
+  if (!selected) { if (drawer.open && drawer.dataset.panel === 'selection') drawer.close(); return; }
+  $('selection-position').textContent = `(${selected.x}, ${selected.y})`;
   const object = p.observed.find(e => same(e.position, selected!) && !['cleared', 'inventory'].includes(e.state));
   const echo = p.radar.find(e => same(e.position, selected!));
   const rooms = p.level.rooms.filter(({ bounds }) => selected!.x >= bounds.minX && selected!.x <= bounds.maxX && selected!.y >= bounds.minY && selected!.y <= bounds.maxY);
   $('selection-room').hidden = rooms.length === 0;
   $('selection-room').textContent = `历史区域：${rooms.map(room => room.name).join(' / ')}`;
   $('selection-room').title = rooms.map(({ name, bounds }) => `${name}：x ${bounds.minX}–${bounds.maxX}，y ${bounds.minY}–${bounds.maxY}`).join('\n');
-  $('selection-title').textContent = `(${selected.x}, ${selected.y}) · ${object?.name ?? (echo ? '未知雷达回波' : p.level.tiles[selected.y][selected.x] === '#' ? '历史图上的墙体' : '历史图上的地面')}`;
+  $('selection-title').textContent = object?.name ?? (echo ? '未知雷达回波' : p.level.tiles[selected.y][selected.x] === '#' ? '历史图上的墙体' : '历史图上的地面');
   $('selection-detail').textContent = object ? `${stateNames[object.state]} / 最近观察 ${object.observedAt} TU${object.details ? ` · ${object.details}` : ' · 靠近后可进一步检查'}` : echo ? `${echo.strength === 'strong' ? '强' : '弱'}信号 / ${echo.shape === 'flickering' ? '闪烁' : '稳定'} / ${echo.historical ? '历史回波，当前未覆盖' : '当前雷达覆盖'}；具体对象未知。` : '选中的位置尚无确认对象；地图记录可能已过时。';
   $('selection-detail').title = $('selection-detail').textContent;
   if (same(selected, p.level.exit)) {
-    $('selection-title').textContent = `(${selected.x}, ${selected.y}) · 撤离出口`;
+    $('selection-title').textContent = '撤离出口';
     $('selection-detail').textContent = p.exitStatus === 'leaking' ? '漏气喷射中，禁止进入。需先找到并修复气闸控制器；附近安全格仍可通行。' : '漏气已停止，可以进入。将伤员搬到此处后启动撤离。';
     $('selection-detail').title = $('selection-detail').textContent;
   }
-  $('selection-markers').title = $('selection-markers').textContent ?? '';
 }
 function setMarkerEditor(open: boolean) {
   $('marker-form').hidden = !open;
@@ -305,14 +369,14 @@ canvas.onclick = event => {
   if (station) {
     if (!station.selectionClickAllowed(event)) return;
     const cell = station.pick(event.clientX, event.clientY);
-    if (cell) { selected = cell; renderSelection(); drawMap(); }
+    if (cell) { selected = cell; renderSelection(); drawMap(); openPanel('selection'); }
     return;
   }
   const { padding, cell, offsetX, offsetY } = geometry(); const box = canvas.getBoundingClientRect();
   if (cell <= 0) return;
   const x = Math.floor((event.clientX - box.left - offsetX - padding) / cell); const y = Math.floor((event.clientY - box.top - offsetY - padding) / cell);
   if (x < 0 || y < 0 || x >= 12 || y >= 12) return;
-  selected = { x, y }; renderSelection(); drawMap();
+  selected = { x, y }; renderSelection(); drawMap(); openPanel('selection');
 };
 new ResizeObserver(drawMap).observe(canvas);
 $('map-rotate').onclick = () => station?.rotate();
@@ -322,13 +386,18 @@ $('map-reset').onclick = () => station?.reset();
 window.addEventListener('pagehide', event => { if (!event.persisted) station?.dispose(); });
 const drawer = $<HTMLDialogElement>('console-drawer');
 let drawerTrigger: HTMLElement | null = null;
-const panelTitles: Record<string, string> = { nearby: '附近操作', inventory: '物资管理', status: '生命监测', objective: '救援目标', ledger: '行动记录', comms: '机器人通信', guide: '操作指南' };
+const panelTitles: Record<string, string> = { nearby: '附近操作', inventory: '物资管理', status: '生命监测', objective: '救援目标', ledger: '行动记录', comms: '机器人通信', guide: '操作指南', selection: '位置情报' };
+const panelCodes: Record<string, string> = { nearby: 'R-07 / LOCAL CONTROL', inventory: 'R-07 / CARGO SYSTEM', status: 'LIFE SUPPORT / TELEMETRY', objective: 'RESCUE / MISSION CONTROL', ledger: 'BLACK BOX / ACTION LOG', comms: 'R-07 / COMMUNICATION LINK', guide: 'STATION 07 / FIELD MANUAL', selection: 'STATION MAP / SECTOR INTELLIGENCE' };
 function openPanel(panel: string) {
   if (!panelTitles[panel]) return;
-  if (document.activeElement instanceof HTMLElement && !drawer.contains(document.activeElement)) drawerTrigger = document.activeElement;
+  if (panel === 'selection') drawerTrigger = canvas;
+  else if (document.activeElement instanceof HTMLElement && !drawer.contains(document.activeElement)) drawerTrigger = document.activeElement;
   drawer.dataset.panel = panel;
   $('drawer-title').textContent = panelTitles[panel];
-  document.querySelectorAll<HTMLElement>('.drawer-panel').forEach(section => { section.hidden = section.dataset.panel !== panel; });
+  $('drawer-code').textContent = panelCodes[panel];
+  $('drawer-icon').setAttribute('href', `#icon-${{ nearby: 'tools', inventory: 'inventory', status: 'status', objective: 'objective', ledger: 'ledger', comms: 'comms', guide: 'guide', selection: 'marker' }[panel]}`);
+  document.querySelectorAll<HTMLElement>('[data-open]').forEach(trigger => { trigger.setAttribute('aria-expanded', String(trigger.dataset.open === panel)); });
+  drawer.querySelectorAll<HTMLElement>('.drawer-panel').forEach(section => { section.hidden = section.dataset.panel !== panel; });
   if (!drawer.open) drawer.show();
   if (panel === 'comms') {
     $('messages').scrollTop = $('messages').scrollHeight;
@@ -336,11 +405,17 @@ function openPanel(panel: string) {
     else $('command').focus();
   } else $('drawer-close').focus();
 }
-document.querySelectorAll<HTMLButtonElement>('[data-open]').forEach(button => { button.onclick = () => openPanel(button.dataset.open!); });
+document.querySelectorAll<HTMLButtonElement>('[data-open]').forEach(button => { button.setAttribute('aria-controls', 'console-drawer'); button.setAttribute('aria-expanded', 'false'); button.onclick = () => openPanel(button.dataset.open!); });
 $('drawer-close').onclick = () => drawer.close();
-drawer.addEventListener('close', () => drawerTrigger?.focus());
+drawer.addEventListener('close', () => {
+  document.querySelectorAll<HTMLElement>('[data-open]').forEach(trigger => { trigger.setAttribute('aria-expanded', 'false'); });
+  drawerTrigger?.focus();
+});
 document.addEventListener('keydown', event => {
-  if (event.key !== 'Escape' || !drawer.open || document.querySelector('.game-dialog[open]')) return;
+  if (event.key !== 'Escape' || !drawer.open || document.querySelector('dialog:modal')) return;
+  if (drawer.dataset.panel === 'selection' && !$('marker-form').hidden) {
+    event.preventDefault(); setMarkerEditor(false); $('toggle-marker').focus(); return;
+  }
   event.preventDefault(); drawer.close();
 });
 async function command(text: string) { if (!text.trim() || frames) return; sending = true; render(); await post('command', { text, ...(selected ? { selected } : {}) }); sending = false; render(); }
@@ -349,7 +424,7 @@ $('command').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey
 $('go-selected').onclick = () => { if (selected) { openPanel('comms'); void command(`前往 (${selected.x},${selected.y})`); } };
 $('toggle-marker').onclick = () => setMarkerEditor($('marker-form').hidden === true);
 $('cancel-marker').onclick = () => { setMarkerEditor(false); $('toggle-marker').focus(); };
-$('clear-selection').onclick = () => { selected = null; renderSelection(); drawMap(); canvas.focus(); };
+$('clear-selection').onclick = () => { selected = null; renderSelection(); drawMap(); drawer.close(); canvas.focus(); };
 $('marker-form').onsubmit = async event => {
   event.preventDefault();
   if (!selected || frames) return;
@@ -372,9 +447,11 @@ $('load').onclick = async () => {
   const dialog = $<HTMLDialogElement>('load-dialog');
   if (open.disabled || dialog.open) return;
   const select = $<HTMLSelectElement>('load-save');
+  if (drawer.open) drawer.close();
   open.disabled = true; select.disabled = true; $<HTMLButtonElement>('load-apply').disabled = true;
   select.replaceChildren(new Option('正在读取存档…', ''));
   $('load-error').hidden = true; $('load-status').textContent = '正在读取存档列表…';
+  $('load-count').textContent = '读取中';
   dialog.showModal();
   try {
     const saves = await api<{ id: string; modified: number }[]>('/api/saves');
@@ -385,10 +462,12 @@ $('load').onclick = async () => {
       return new Option(`${time} · 对局 ${save.id.slice(0, 8)}${save.id === view?.sessionId ? '（当前对局）' : ''}`, save.id);
     }));
     select.disabled = saves.length === 0;
+    $('load-count').textContent = `${saves.length} 个存档`;
     $('load-status').textContent = saves.length ? `共 ${saves.length} 个存档，按保存时间从新到旧排列。` : '还没有存档，可以先保存当前进度。';
     if (dialog.open && saves.length) select.focus();
   } catch (error) {
     select.replaceChildren(new Option('读取失败', ''));
+    $('load-count').textContent = '读取失败';
     $('load-status').textContent = '';
     $('load-error').textContent = error instanceof Error ? error.message : String(error); $('load-error').hidden = false;
   } finally { open.disabled = false; }
@@ -417,8 +496,9 @@ $('load-form').onsubmit = async event => {
 function step(dx: number, dy: number) { if (view && !frames) void manual({ kind: 'move', target: { x: view.robot.position.x + dx, y: view.robot.position.y + dy } }); }
 document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.onclick = () => step(Number(el.dataset.dx), Number(el.dataset.dy)); });
 document.addEventListener('keydown', event => {
-  if (document.querySelector('.game-dialog[open]') || drawer.open && drawer.contains(document.activeElement) && drawer.dataset.panel !== 'nearby') return;
-  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.ctrlKey || event.altKey || event.metaKey) return;
+  if (event.defaultPrevented || event.isComposing || document.querySelector('dialog:modal')) return;
+  if (event.target instanceof HTMLElement && (event.target.matches('input, textarea, select') || event.target.isContentEditable)) return;
+  if (event.ctrlKey || event.altKey || event.metaKey) return;
   const directions: Record<string, [number, number]> = { w: [0, -1], ArrowUp: [0, -1], a: [-1, 0], ArrowLeft: [-1, 0], s: [0, 1], ArrowDown: [0, 1], d: [1, 0], ArrowRight: [1, 0] };
   const direction = directions[event.key]; if (direction) { event.preventDefault(); if (!event.repeat) step(...direction); }
 });

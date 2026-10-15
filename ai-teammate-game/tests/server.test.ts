@@ -84,6 +84,43 @@ test('HTTP 动作去重、版本冲突、并发提交及非法参数都不重复
   assert.ok(!JSON.stringify(final.data).includes('s-04'));
 });
 
+test('HTTP 按标记 ID 移除，校验版本与参数、去重并同步 SSE 和存档', async t => {
+  const { call, initial, sessions, base } = await fixture(t);
+  const path = `/api/sessions/${initial.sessionId}`;
+  const add = (revision: number, note: string, shared: boolean) => call(`${path}/marker`, { requestId: crypto.randomUUID(), expectedRevision: revision, position: { x: 4, y: 7 }, note, shared });
+  const first = await add(0, '待移除的共享标记', true); assert.equal(first.status, 200);
+  const second = await add(1, '保留的私有标记', false); assert.equal(second.status, 200);
+  const markerId = first.data.markers[0].id;
+  for (const invalid of [undefined, 42, 'not-an-id']) {
+    assert.equal((await call(`${path}/remove-marker`, { requestId: crypto.randomUUID(), expectedRevision: 2, markerId: invalid })).status, 400);
+  }
+  const request = { requestId: crypto.randomUUID(), expectedRevision: 2, markerId };
+  assert.equal((await call(`${path}/remove-marker`, { ...request, requestId: crypto.randomUUID(), expectedRevision: 1 })).status, 409);
+  assert.equal((await call(`${path}/remove-marker`, { ...request, requestId: crypto.randomUUID(), markerId: crypto.randomUUID() })).status, 400);
+  const controller = new AbortController();
+  const response = await fetch(`${base}${path}/events`, { signal: controller.signal });
+  const reader = response.body!.getReader(); await reader.read();
+  try {
+    const removed = await call(`${path}/remove-marker`, request);
+    assert.equal(removed.status, 200); assert.equal(removed.data.stateRevision, 3);
+    assert.deepEqual(removed.data.markers, [second.data.markers[1]]);
+    assert.deepEqual(sessions.get(initial.sessionId)!.engine.state.knowledge.markers, []);
+    const chunk = await reader.read();
+    const event = new TextDecoder().decode(chunk.value).split('\n').find(line => line.startsWith('data:'))!;
+    assert.deepEqual(JSON.parse(event.slice(5)).markers, removed.data.markers);
+    const duplicate = await call(`${path}/remove-marker`, request);
+    assert.equal(duplicate.status, 200); assert.equal(duplicate.data.stateRevision, 3);
+    assert.equal((await call(`${path}/remove-marker`, { ...request, requestId: crypto.randomUUID(), expectedRevision: 3 })).status, 400);
+    assert.equal(removed.data.elapsedTU, initial.elapsedTU);
+    assert.equal(removed.data.human.oxygen, initial.human.oxygen);
+    assert.equal(removed.data.robot.battery, initial.robot.battery);
+    await call(`${path}/save`, { requestId: crypto.randomUUID() });
+    const restored = await call(`${path}/load`, {});
+    assert.equal(restored.status, 200); assert.deepEqual(restored.data.markers, removed.data.markers);
+    assert.deepEqual(sessions.get(initial.sessionId)!.engine.state.knowledge.markers, []);
+  } finally { controller.abort(); await reader.cancel().catch(() => undefined); }
+});
+
 test('HTTP 手动移动不能进入喷气出口，维修后同一出口恢复通行', async t => {
   const { call, sessions, initial } = await fixture(t);
   const session = sessions.get(initial.sessionId)!;

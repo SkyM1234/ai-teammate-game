@@ -299,6 +299,32 @@ test('本地标记不进入机器人上下文，显式共享不消耗时间', ()
   assert.equal(engine.state.elapsedTU, 0);
 });
 
+test('按 ID 移除标记同步玩家和机器人知识，保留同格其他标记且不消耗资源', () => {
+  const engine = new GameEngine(level);
+  const position = { x: 4, y: 7 };
+  const local = engine.addMarker(position, '私有线索', false);
+  const shared = engine.addMarker(position, '待移除的共享线索', true);
+  const retained = engine.addMarker(position, '保留的共享线索', true);
+  const before = engine.snapshot();
+  assert.equal(engine.removeMarker(shared.id).id, shared.id);
+  assert.deepEqual(engine.playerView().markers.map(marker => marker.id), [local.id, retained.id]);
+  assert.deepEqual(engine.state.knowledge.markers.map(marker => marker.id), [retained.id]);
+  assert.ok(!JSON.stringify(engine.robotContext()).includes(shared.id));
+  engine.removeMarker(local.id);
+  assert.ok(!JSON.stringify(engine.robotContext()).includes(local.id));
+  assert.equal(engine.state.stateRevision, before.stateRevision + 2);
+  assert.equal(engine.state.elapsedTU, before.elapsedTU);
+  assert.deepEqual(engine.state.human, before.human);
+  assert.deepEqual(engine.state.robot, before.robot);
+  assert.deepEqual(engine.state.ledger, before.ledger);
+  const after = engine.snapshot();
+  assert.throws(() => engine.removeMarker(shared.id), /标记不存在/);
+  assert.deepEqual(engine.snapshot(), after);
+  const restored = new GameEngine(level); restored.restore(after);
+  assert.deepEqual(restored.playerView().markers, [retained]);
+  assert.deepEqual(restored.state.knowledge.markers, [retained]);
+});
+
 test('快照恢复在动作边界暂停，按动作账本回放得到一致的结局', () => {
   const original = runRescueRoute(level, 'upper');
   const restored = new GameEngine(level); restored.restore(original.snapshot());

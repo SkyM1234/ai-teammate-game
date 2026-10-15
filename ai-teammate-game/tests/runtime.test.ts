@@ -170,6 +170,45 @@ test('共享标记在批次执行中使旧调用失效，模型看到新标记',
   assert.ok(!session.messages.some(m => m.text === '状态报告'));
 });
 
+test('移除共享标记中断旧移动批次，后续模型请求与状态工具只包含现存共享标记', async () => {
+  const status: ToolIntent = { name: 'get_status', arguments: {} };
+  const { session, contexts } = scripted([[status, move(5, 9), report], [status, { name: 'ask_player', arguments: { question: '已更新标记' } }]], 20);
+  session.marker({ x: 4, y: 7 }, '已撤销线索', true);
+  session.marker({ x: 4, y: 7 }, '保留线索', true);
+  session.marker({ x: 4, y: 7 }, '私有线索', false);
+  const removed = session.engine.state.markers[0];
+  const retained = session.engine.state.markers[1];
+  await session.command('探索');
+  await new Promise<void>(resolve => {
+    const listener = () => { if (session.engine.state.elapsedTU > 0) { session.listeners.delete(listener); resolve(); } };
+    session.listeners.add(listener); listener();
+  });
+  session.removeMarker(removed.id);
+  await session.settled();
+  assert.equal(session.engine.state.elapsedTU, 1);
+  assert.equal(session.metrics.requests, 2);
+  assert.ok(!session.messages.some(message => message.text === '状态报告'));
+  const knowledge = contexts.map(context => JSON.parse(JSON.parse(context).messages[0].content.split('当前机器人知识与任务（仅可见事实）：\n')[1]));
+  assert.deepEqual(knowledge[0].sharedMarkers.map((marker: { id: string }) => marker.id), [removed.id, retained.id]);
+  assert.deepEqual(knowledge[1].sharedMarkers.map((marker: { id: string }) => marker.id), [retained.id]);
+  assert.ok(contexts[1].includes('sharedMarkers 是当前仍有效的共享标记'));
+  assert.ok(contexts.every(context => !context.includes('私有线索')));
+  const statuses = session.agent.state.messages.filter(message => message.role === 'toolResult' && message.toolName === 'get_status');
+  const latest = statuses.at(-1)!;
+  assert.ok(latest.role === 'toolResult' && latest.content[0].type === 'text');
+  assert.deepEqual(JSON.parse(latest.content[0].text).sharedMarkers.map((marker: { id: string }) => marker.id), [retained.id]);
+});
+
+test('移除私有标记不改变机器人上下文或对话', () => {
+  const session = new GameSession(level, { delayMs: 0 });
+  session.marker({ x: 4, y: 7 }, '私有线索', false);
+  const marker = session.engine.state.markers[0];
+  const context = session.engine.robotContext(); const messages = structuredClone(session.messages);
+  session.removeMarker(marker.id);
+  assert.deepEqual(session.engine.robotContext(), context);
+  assert.deepEqual(session.messages, messages);
+});
+
 test('新指令取代旧移动，取消的工具不会在新任务中补执行', async () => {
   const { session } = scripted([[move(5, 9), report], [move(2, 9)]], 20);
   await session.command('前往 (5,9)');
@@ -359,6 +398,20 @@ function giveMaterial(session: GameSession) {
 }
 const repair: ToolIntent = { name: 'interact', arguments: { operation: 'repair', targetId: 'human' } };
 const finish: ToolIntent = { name: 'finish_task', arguments: { reason: '检查完成。' } };
+
+test('移除共享标记使待授权动作失效，并使用最新标记重新决策', async () => {
+  const { session, contexts } = scripted([[repair, report], [finish]]); giveMaterial(session);
+  session.marker({ x: 4, y: 8 }, '待撤销线索', true);
+  const marker = session.engine.state.markers[0];
+  await session.command('检查救援情况'); const pending = await authorization(session);
+  session.removeMarker(marker.id); await session.settled();
+  assert.equal(session.pendingAuthorization, null);
+  await assert.rejects(session.authorize(pending.id, true), /失效/);
+  assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.engine.state.human.oxygenRate, 2);
+  assert.ok(!session.messages.some(message => message.text === '状态报告'));
+  const current = JSON.parse(JSON.parse(contexts[1]).messages[0].content.split('当前机器人知识与任务（仅可见事实）：\n')[1]);
+  assert.deepEqual(current.sharedMarkers, []);
+});
 
 test('维修工具前暂停，授权后继续同一响应的工具，不新增模型请求', async () => {
   const { session } = scripted([[repair, report, finish]]); giveMaterial(session);

@@ -290,6 +290,15 @@ export class GameEngine {
     return marker;
   }
 
+  removeMarker(id: string): MarkerResult {
+    const marker = this.state.markers.find(marker => marker.id === id);
+    if (!marker) throw new Error('标记不存在或已移除');
+    this.state.markers = this.state.markers.filter(marker => marker.id !== id);
+    this.state.knowledge.markers = this.state.knowledge.markers.filter(marker => marker.id !== id);
+    this.state.stateRevision++;
+    return marker;
+  }
+
   playerView(): PlayerView {
     return structuredClone({
       level: { id: this.level.id, name: this.level.name, width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },

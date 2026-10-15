@@ -134,7 +134,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
         await body(req); const session = register(new GameSession(level, { ...options, ...await modelPreferences.newSessionOptions() })); await persist(session); json(res, session.view(), 201); return;
       }
-      const match = url.pathname.match(/^\/api\/sessions\/([a-f\d-]+)(?:\/(\w+))?$/i);
+      const match = url.pathname.match(/^\/api\/sessions\/([a-f\d-]+)(?:\/([\w-]+))?$/i);
       if (!match) throw new HttpError(404, '接口不存在');
       const [, id, operation] = match;
       if (req.method === 'POST' && operation === 'load') { await body(req); json(res, (await load(id)).view()); return; }
@@ -178,6 +178,9 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
           else if (operation === 'marker') {
             if (typeof input.note !== 'string' || typeof input.shared !== 'boolean') throw new HttpError(400, '标记参数不完整');
             session.marker(position(input.position), input.note, input.shared);
+          } else if (operation === 'remove-marker') {
+            if (typeof input.markerId !== 'string' || !uuidPattern.test(input.markerId)) throw new HttpError(400, '缺少有效标记 ID');
+            session.removeMarker(input.markerId);
           } else if (operation === 'save') await persist(session);
           else throw new HttpError(404, '操作不存在');
           return session.view();
