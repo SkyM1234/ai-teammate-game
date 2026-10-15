@@ -3,7 +3,7 @@ import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { Action, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
-import { StationRenderer } from './station-renderer.ts';
+import { roomColors, StationRenderer } from './station-renderer.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 let canvas = $<HTMLCanvasElement>('map');
@@ -192,6 +192,10 @@ function renderSelection() {
   if (!selected) return;
   const object = p.observed.find(e => same(e.position, selected!) && !['cleared', 'inventory'].includes(e.state));
   const echo = p.radar.find(e => same(e.position, selected!));
+  const rooms = p.level.rooms.filter(({ bounds }) => selected!.x >= bounds.minX && selected!.x <= bounds.maxX && selected!.y >= bounds.minY && selected!.y <= bounds.maxY);
+  $('selection-room').hidden = rooms.length === 0;
+  $('selection-room').textContent = `历史区域：${rooms.map(room => room.name).join(' / ')}`;
+  $('selection-room').title = rooms.map(({ name, bounds }) => `${name}：x ${bounds.minX}–${bounds.maxX}，y ${bounds.minY}–${bounds.maxY}`).join('\n');
   $('selection-title').textContent = `(${selected.x}, ${selected.y}) · ${object?.name ?? (echo ? '未知雷达回波' : p.level.tiles[selected.y][selected.x] === '#' ? '历史图上的墙体' : '历史图上的地面')}`;
   $('selection-detail').textContent = object ? `${stateNames[object.state]} / 最近观察 ${object.observedAt} TU${object.details ? ` · ${object.details}` : ' · 靠近后可进一步检查'}` : echo ? `${echo.strength === 'strong' ? '强' : '弱'}信号 / ${echo.shape === 'flickering' ? '闪烁' : '稳定'} / ${echo.historical ? '历史回波，当前未覆盖' : '当前雷达覆盖'}；具体对象未知。` : '选中的位置尚无确认对象；地图记录可能已过时。';
   $('selection-detail').title = $('selection-detail').textContent;
@@ -234,10 +238,18 @@ function drawFlatMap() {
   context.fillStyle = '#5a7383';
   for (let i = 0; i < 12; i++) { context.fillText(String(i), padding + (i + .5) * cell, 12); context.fillText(String(i), 12, padding + (i + .5) * cell); }
   const exit = center(p.level.exit); context.fillStyle = '#2f716b'; context.fillRect(exit.x - cell * .35, exit.y - cell * .35, cell * .7, cell * .7); context.fillStyle = '#a1d8cc'; context.font = `${Math.max(9, cell * .24)}px monospace`; context.fillText('EXIT', exit.x, exit.y);
-  for (const room of p.level.rooms) {
-    if (cell < 35) continue;
-    const c = center(roomCenter(room)); context.fillStyle = '#7c9caa66'; context.font = '9px "Microsoft YaHei",sans-serif'; context.fillText(room.name, c.x, c.y + cell * .35);
-  }
+  p.level.rooms.forEach((room, index) => {
+    const { minX, minY, maxX, maxY } = room.bounds;
+    const color = `#${roomColors[index % roomColors.length].toString(16).padStart(6, '0')}`;
+    context.strokeStyle = color; context.lineWidth = 1;
+    context.strokeRect(padding + (minX + .08) * cell, padding + (minY + .08) * cell, (maxX - minX + .84) * cell, (maxY - minY + .84) * cell);
+    const c = center(roomCenter(room));
+    const labelY = maxX - minX < 2 && maxY - minY < 2 ? padding + (maxY + 1.5) * cell : c.y;
+    context.font = '11px "Microsoft YaHei",sans-serif';
+    const textWidth = context.measureText(room.name).width;
+    context.fillStyle = '#19241fe8'; context.fillRect(c.x - textWidth / 2 - 4, labelY - 8, textWidth + 8, 16);
+    context.fillStyle = color; context.fillText(room.name, c.x, labelY);
+  });
   for (const echo of p.radar) {
     if (p.observed.some(e => same(e.position, echo.position) && !['cleared', 'inventory'].includes(e.state))) continue;
     const c = center(echo.position); context.strokeStyle = echo.historical ? '#6d695d' : '#f2b864'; context.setLineDash(echo.shape === 'flickering' ? [2, 3] : []);

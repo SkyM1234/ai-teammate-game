@@ -4,6 +4,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import type { ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 
 const colors = { steel: 0x718174, dark: 0x1c2724, ivory: 0xcdd1c4, signal: 0xe4eb1c, amber: 0xd3ae79, red: 0xed8165, marker: 0xd4e0c3 };
+export const roomColors = [0xd3ae79, 0xa7b8a0, 0x97bfc0, 0xc1c48b];
 const equal = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 
 /** A view of player knowledge. Never loads the authoritative level entities. */
@@ -33,6 +34,7 @@ export class StationRenderer {
   private floor: THREE.InstancedMesh | null = null;
   private walls: THREE.InstancedMesh | null = null;
   private wallCells: Position[] = [];
+  private roomLabels: THREE.Sprite[] = [];
   private state: PlayerView | null = null;
   private signature = '';
   private levelKey = '';
@@ -239,6 +241,7 @@ export class StationRenderer {
     sprite.scale.set(scale * .65 * texture.image.width / 96, scale * .65, 1);
     sprite.renderOrder = 5;
     group.add(sprite);
+    return sprite;
   }
 
   private world(position: Position) {
@@ -313,6 +316,7 @@ export class StationRenderer {
 
   private buildTerrain(p: PlayerView) {
     this.clear(this.terrain);
+    this.roomLabels = [];
     this.width = p.level.width; this.height = p.level.height;
     const count = this.width * this.height;
     this.floor = new THREE.InstancedMesh(this.deck, this.surface('deck', 0xffffff), count);
@@ -397,6 +401,21 @@ export class StationRenderer {
     for (const z of [-.27, .27]) this.glow(exit, [.28, .02, .045], [0, .07, z], colors.signal);
     this.label(exit, 'EXIT', '#e5ed91', .52, .48);
     this.terrain.add(exit);
+    p.level.rooms.forEach((room, index) => {
+      const { minX, minY, maxX, maxY } = room.bounds;
+      const width = maxX - minX + 1, height = maxY - minY + 1;
+      const color = roomColors[index % roomColors.length];
+      const group = new THREE.Group(); group.name = `room:${room.name}`;
+      group.position.copy(this.world({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 }));
+      for (const side of [-1, 1]) {
+        this.glow(group, [width - .4, .012, .035], [0, .065, side * (height / 2 - .2)], color);
+        this.glow(group, [.035, .012, height - .4], [side * (width / 2 - .2), .065, 0], color);
+      }
+      const label = this.label(group, room.name, `#${color.toString(16).padStart(6, '0')}`, .15);
+      if (width <= 2 && height <= 2) label.position.z = height / 2 + .5;
+      this.roomLabels.push(label);
+      this.terrain.add(group);
+    });
     for (const [text, position] of [['N', { x: this.width / 2 - .5, y: -.9 }], ['E', { x: this.width + .3, y: this.height / 2 - .5 }]] as const) {
       const label = new THREE.Group(); label.position.copy(this.world(position));
       this.label(label, text, '#8d9976', 0, .38); this.terrain.add(label);
@@ -526,7 +545,7 @@ export class StationRenderer {
   }
 
   update(p: PlayerView, selected: Position | null) {
-    const levelKey = JSON.stringify([p.level.id, p.level.tiles]);
+    const levelKey = JSON.stringify([p.level.id, p.level.tiles, p.level.rooms]);
     const changedLevel = levelKey !== this.levelKey;
     if (changedLevel) { this.buildTerrain(p); this.levelKey = levelKey; this.signature = ''; }
     const sensed = new Set(p.sensorCells.map(cell => `${cell.x},${cell.y}`));
@@ -714,6 +733,13 @@ export class StationRenderer {
 
   private draw() {
     if (this.disposed || document.hidden) return;
+    const rect = this.canvas.getBoundingClientRect();
+    if (!rect.height) return;
+    const labelHeight = (this.camera.top - this.camera.bottom) / this.camera.zoom / rect.height * 14;
+    for (const label of this.roomLabels) {
+      const texture = label.material.map as THREE.CanvasTexture;
+      label.scale.set(labelHeight * texture.image.width / texture.image.height, labelHeight, 1);
+    }
     this.renderer.render(this.scene, this.camera);
     this.canvas.dataset.drawCalls = String(this.renderer.info.render.calls);
   }

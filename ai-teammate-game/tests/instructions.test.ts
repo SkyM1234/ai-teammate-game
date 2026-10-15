@@ -70,7 +70,7 @@ test('规则演示拒绝否定、条件及复合句，不执行关键词指向�
 
 test('真实模式中的禁止维修文本不会产生自动授权，拒绝模型误调用不扣资源', async () => {
   const { session } = liveSession([[{ name: 'interact', arguments: { operation: 'repair', targetId: 'a-01' } }, report], [finish]]);
-  session.engine.state.robot.position = { x: 9, y: 2 }; giveMaterial(session);
+  session.engine.state.robot.position = { x: 9, y: 8 }; giveMaterial(session);
   await session.command('不要维修气闸，先回来');
   const request = await authorization(session);
   assert.equal(request.kind, 'repair'); assert.equal(session.engine.state.elapsedTU, 0);
