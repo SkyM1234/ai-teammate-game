@@ -1,0 +1,40 @@
+import type { ObservedEntity, PlayerView } from '../../../packages/game-core/src/types.ts';
+
+/** Synthetic, public observations for art review. No authoritative level entities. */
+export function galleryView(layout: 'square' | 'long', alternateState: boolean): PlayerView {
+  const width = layout === 'square' ? 12 : 9, height = layout === 'square' ? 12 : 14;
+  const definitions: Omit<ObservedEntity, 'observedAt' | 'source' | 'scanned'>[] = [
+    { id: 'oxygen', type: 'supply', name: '氧气', position: { x: 2, y: 3 }, itemType: 'oxygen', state: 'available' },
+    { id: 'battery', type: 'supply', name: '电池', position: { x: 4, y: 3 }, itemType: 'battery', state: 'available' },
+    { id: 'repair', type: 'supply', name: '维修箱', position: { x: 6, y: 3 }, itemType: 'repair', state: 'available' },
+    { id: 'door', type: 'door', name: '门', position: { x: 2, y: 6 }, state: alternateState ? 'opened' : 'closed' },
+    { id: 'cabinet', type: 'cabinet', name: '柜', position: { x: 4, y: 6 }, state: alternateState ? 'opened' : 'closed' },
+    { id: 'airlock', type: 'airlock', name: '控制器', position: { x: 6, y: 6 }, state: alternateState ? 'repaired' : 'damaged' },
+    { id: 'switch', type: 'switch', name: '开关', position: { x: 2, y: 9 }, state: alternateState ? 'on' : 'off' },
+    { id: 'hazard', type: 'hazard', name: '线缆', position: { x: 4, y: 9 }, state: alternateState ? 'inactive' : 'active' },
+    { id: 'obstacle', type: 'obstacle', name: '障碍', position: { x: 6, y: 9 }, state: 'blocked' },
+  ];
+  const observed: ObservedEntity[] = definitions.map(entity => ({ ...entity, observedAt: 0, source: 'sensor', scanned: true }));
+  const tiles = Array.from({ length: height }, (_, y) => y === 0 || y === height - 1 ? '#'.repeat(width) : `#${'.'.repeat(width - 2)}#`);
+  const sensorCells = tiles.flatMap((row, y) => [...row].flatMap((tile, x) => tile === '#' ? [] : [{ x, y }]));
+  return {
+    level: { id: `art-gallery-${layout}`, name: '美术资源展示', width, height, tiles, rooms: [], exit: { x: width - 2, y: height - 2 } },
+    exitStatus: alternateState ? 'safe' : 'leaking', phase: 'paused', stateRevision: 0, elapsedTU: 0, circuitOn: alternateState,
+    robot: { position: { x: 2, y: 1 }, battery: 90, inventory: [] },
+    human: { position: { x: alternateState ? 2 : 4, y: 1 }, oxygen: 120, oxygenRate: 2, carried: alternateState },
+    rules: {
+      oxygen: 120, oxygenMax: 180, oxygenRate: 2, repairedOxygenRate: 1,
+      battery: 90, batteryMax: 100, batteryRefill: 30, oxygenRefill: 40,
+      inventorySlots: 2, sensorRadius: 1, radarRadius: 5, leakCost: 6,
+      moveLimit: 12, toolLimit: 6, requestLimit: 8, actionTULimit: 12,
+      actionCosts: {
+        move: { tu: 1, battery: 1 }, carry_move: { tu: 1, battery: 2 }, scan: { tu: 1, battery: 1 },
+        open: { tu: 1, battery: 1 }, collect: { tu: 1, battery: 1 }, drop_item: { tu: 1, battery: 1 },
+        use_battery: { tu: 1, battery: 1 }, use_oxygen: { tu: 1, battery: 1 }, repair_human: { tu: 1, battery: 1, materials: 1 },
+        repair_airlock: { tu: 1, battery: 1, materials: 1 }, clear: { tu: 1, battery: 1 },
+        pickup_human: { tu: 1, battery: 1 }, drop_human: { tu: 1, battery: 1 }, circuit: { tu: 1, battery: 1 }, extract: { tu: 1, battery: 1 },
+      },
+    },
+    observed, radar: [], markers: [], sensorCells, ledger: [], failureReason: null,
+  };
+}

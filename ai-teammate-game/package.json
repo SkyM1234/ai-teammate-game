@@ -9,6 +9,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "dev": "node scripts/dev.mjs",
+    "art:preview": "node scripts/art-preview.mjs",
     "check": "node scripts/check.mjs",
     "verify:routes": "node scripts/verify-routes.ts",
     "test:core": "node --test tests/core.test.ts",

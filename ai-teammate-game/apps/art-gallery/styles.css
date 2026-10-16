@@ -1,0 +1,18 @@
+:root { font: 14px "Segoe UI", "Microsoft YaHei", sans-serif; color: #e2e5d8; color-scheme: dark; background: #18231e; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1200px; margin: auto; padding: 20px; }
+h1 { margin: 0; font-size: 22px; }
+p { color: #bac6b8; line-height: 1.7; }
+nav { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 20px 0; }
+label { display: flex; gap: 8px; align-items: center; }
+select, button { font: inherit; min-height: 44px; padding: 8px 12px; border: 1px solid #728675; background: #293c31; color: inherit; }
+button { cursor: pointer; }
+button:hover { background: #405840; }
+:focus-visible { outline: 2px solid #e4eb1c; outline-offset: 3px; }
+.viewport { height: min(70vh, 820px); min-height: 340px; background: #202e26; border: 1px solid #536752; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; list-style: none; padding: 0; line-height: 1.7; }
+.legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; }
+.oxygen { background: #64ced0; }.battery { background: #e4eb1c; }.repair { background: #e4a056; }
+@media (max-width: 600px) { main { padding: 12px; }.viewport { height: 58vh; } }

@@ -3,7 +3,8 @@ import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { Action, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
-import { roomColors, StationRenderer } from './station-renderer.ts';
+import { StationRenderer } from './station-renderer.ts';
+import { roomColors } from './art/themes.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 let canvas = $<HTMLCanvasElement>('map');

@@ -62,7 +62,8 @@ exitStatus 是玩家与机器人共享的出口实时状态：leaking 表示出�
 move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.position 为准，不要把部分移动视为抵达。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
 sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
-真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。仅在实际工具结果支持结束整项委托时调用 finish_task；该工具只结束自动行动，游戏胜负仍由规则引擎判断。
+真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。
+任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到“继续原任务”时先核对整项委托与最新状态：若已完成，直接调用 finish_task；若未完成，只继续未完成的部分，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
 保持人类委托的目标与约束，允许一轮最多6个工具串行调用，基于已知对象生成有限批次。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至同格或相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回可触及的开关，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
 动作结果区分newDiscoveries、stateChanges、invalidatedFacts、knownRefs。只相信实际执行结果，不声称未执行动作完成。面向玩家的解释、报告、问题均使用简体中文；工具名称、参数字段及对象ID保持原样。简短报告事实，不输出内部思考。`;
@@ -520,7 +521,7 @@ export class GameSession {
         execute: async () => ({ content: [{ type: 'text', text: JSON.stringify(this.engine.robotContext()) }], details: undefined }),
       },
       {
-        name: 'report', label: '报告', description: '给玩家简短报告，事实应来自可见观察。', executionMode: 'sequential', parameters: Type.Object({ text: Type.String({ maxLength: 800 }) }, { additionalProperties: false }),
+        name: 'report', label: '报告', description: '给玩家简短报告，事实应来自可见观察；不会结束委托。整项委托完成时直接调用 finish_task。', executionMode: 'sequential', parameters: Type.Object({ text: Type.String({ maxLength: 800 }) }, { additionalProperties: false }),
         execute: async (_id, raw) => { this.say('robot', (raw as { text: string }).text); return this.emptyResult('OK', '报告已发送。'); },
       },
       {
@@ -528,7 +529,7 @@ export class GameSession {
         execute: async (_id, raw) => { this.waitForPlayer((raw as { question: string }).question); return { ...this.emptyResult('WAIT_PLAYER', '等待玩家决定。'), terminate: true }; },
       },
       {
-        name: 'finish_task', label: '结束任务', description: '仅结束本次委托，不改变游戏胜负。', executionMode: 'sequential', parameters: Type.Object({ reason: Type.String({ maxLength: 800 }) }, { additionalProperties: false }),
+        name: 'finish_task', label: '结束任务', description: '实际工具结果或最新遥测支持整项委托完成时必须调用，在 reason 中简述完成依据；仅结束本次委托，不改变游戏胜负。', executionMode: 'sequential', parameters: Type.Object({ reason: Type.String({ maxLength: 800 }) }, { additionalProperties: false }),
         execute: async (_id, raw) => {
           if (this.task?.interpretation === 'demo' && !this.taskSatisfied()) {
             this.pause('当前目标尚未满足，任务保留。'); this.control = 'wait_player';
@@ -681,7 +682,7 @@ export class GameSession {
         const ready = this.task.waitReason === 'power' && this.engine.state.circuitOn || this.task.waitReason === 'hazard' && !this.engine.state.circuitOn;
         if (!ready) throw new Error('请先满足电路条件，或发送新指令回答机器人的问题。');
       }
-      await this.startRun(`继续原任务：${this.task.text}。使用最新知识，重新选择有效工具。`);
+      await this.startRun(`继续原任务：${this.task.text}。先核对整项委托与最新状态；若已完成，直接调用 finish_task 并说明完成依据；否则仅继续未完成的部分。需要玩家补充信息或决定时调用 ask_player。`);
     });
   }
 
