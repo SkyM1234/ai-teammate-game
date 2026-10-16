@@ -45,23 +45,36 @@ async function api<T>(path: string, payload?: unknown): Promise<T> {
   const response = await fetch(path, payload === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await response.json(); if (!response.ok) throw new Error(data.error ?? '连接失败'); return data as T;
 }
-function accept(next: SessionView) {
-  if (view && next.sessionId === view.sessionId && next.eventId < view.eventId) return;
+function isCurrent(source: EventSource | null, session: SessionView) {
+  return source === stream && session.sessionId === view?.sessionId && session.sessionInstanceId === view.sessionInstanceId;
+}
+function accept(next: SessionView, fromStream = false) {
+  if (!view || next.sessionId !== view.sessionId) return;
+  if (next.sessionInstanceId !== view.sessionInstanceId) {
+    if (!fromStream) return;
+    frames = null; selected = null; lastMessages = ''; markerEditorKey = '';
+  } else if (next.eventId < view.eventId) return;
   view = next; render();
 }
 function attach(next: SessionView) {
-  stream?.close(); frames = null; selected = null; lastMessages = ''; markerEditorKey = ''; view = null; accept(next);
-  stream = new EventSource(`/api/sessions/${next.sessionId}/events`);
-  stream.onopen = () => { $('connection').textContent = '通信正常'; $('connection').style.color = '#66ddce'; };
-  stream.onmessage = event => accept(JSON.parse(event.data));
-  stream.onerror = () => { $('connection').textContent = '通信重连中'; $('connection').style.color = '#f2b864'; };
+  stream?.close(); frames = null; selected = null; lastMessages = ''; markerEditorKey = ''; view = next; render();
+  const source = new EventSource(`/api/sessions/${next.sessionId}/events`); stream = source;
+  source.onopen = () => { if (source !== stream) return; $('connection').textContent = '通信正常'; $('connection').style.color = '#66ddce'; };
+  source.onmessage = event => { if (source === stream) accept(JSON.parse(event.data), true); };
+  source.onerror = () => { if (source !== stream) return; $('connection').textContent = '通信重连中'; $('connection').style.color = '#f2b864'; };
 }
 async function post(operation: string, payload: Record<string, unknown> = {}) {
   if (!view) return false;
-  try { const next = await api<SessionView>(`/api/sessions/${view.sessionId}/${operation}`, { requestId: crypto.randomUUID(), expectedRevision: view.stateRevision, ...payload }); accept(next); return true; }
+  const session = view; const source = stream;
+  try {
+    const next = await api<SessionView>(`/api/sessions/${session.sessionId}/${operation}`, { requestId: crypto.randomUUID(), expectedRevision: session.stateRevision, ...payload });
+    if (!isCurrent(source, session)) return false;
+    accept(next); return true;
+  }
   catch (error) {
+    if (!isCurrent(source, session)) return false;
     toast(error instanceof Error ? error.message : String(error));
-    try { accept(await api<SessionView>(`/api/sessions/${view.sessionId}`)); } catch { /* SSE will reconnect. */ }
+    try { const next = await api<SessionView>(`/api/sessions/${session.sessionId}`); if (isCurrent(source, session)) accept(next); } catch { /* SSE will reconnect. */ }
     return false;
   }
 }
@@ -504,8 +517,15 @@ document.addEventListener('keydown', event => {
 });
 $('replay').onclick = async () => {
   if (!view) return;
-  try { if (view.running) await post('stop'); frames = await api<PlayerView[]>(`/api/sessions/${view.sessionId}/replay`); replayIndex = 0; $<HTMLInputElement>('replay-slider').max = String(frames.length - 1); $<HTMLInputElement>('replay-slider').value = '0'; render(); }
-  catch (error) { toast(String(error)); }
+  const session = view; const source = stream;
+  try {
+    if (session.running) await post('stop');
+    if (!isCurrent(source, session)) return;
+    const next = await api<PlayerView[]>(`/api/sessions/${session.sessionId}/replay`);
+    if (!isCurrent(source, session)) return;
+    frames = next; replayIndex = 0; $<HTMLInputElement>('replay-slider').max = String(frames.length - 1); $<HTMLInputElement>('replay-slider').value = '0'; render();
+  }
+  catch (error) { if (isCurrent(source, session)) toast(String(error)); }
 };
 $('exit-replay').onclick = () => { frames = null; render(); };
 $('replay-slider').oninput = () => { replayIndex = Number($<HTMLInputElement>('replay-slider').value); render(); };
@@ -554,6 +574,7 @@ $('model-close').onclick = () => $<HTMLDialogElement>('model-dialog').close();
 $('model-dialog').addEventListener('close', () => { $<HTMLInputElement>('model-key').value = ''; });
 $('model-form').onsubmit = async event => {
   event.preventDefault(); if (!view) return;
+  const session = view; const source = stream;
   const config: ModelConfig = {
     mode: $<HTMLSelectElement>('model-mode').value as ModelConfig['mode'],
     provider: $<HTMLSelectElement>('model-provider').value as ModelConfig['provider'],
@@ -564,9 +585,10 @@ $('model-form').onsubmit = async event => {
   const applied = config.mode === 'demo' ? { ...(modelFormConfig ?? view.modelConfig), mode: 'demo' } : config;
   const apply = $<HTMLButtonElement>('model-apply'); apply.disabled = true; $('model-form-error').hidden = true;
   try {
-    const next = await api<SessionView>(`/api/sessions/${view.sessionId}/model`, { requestId: crypto.randomUUID(), config: applied, apiKey: $<HTMLInputElement>('model-key').value });
+    const next = await api<SessionView>(`/api/sessions/${session.sessionId}/model`, { requestId: crypto.randomUUID(), config: applied, apiKey: $<HTMLInputElement>('model-key').value });
+    if (!isCurrent(source, session)) return;
     accept(next); $<HTMLDialogElement>('model-dialog').close(); toast('模型设置已应用并记为新局默认。');
-  } catch (error) { $('model-form-error').textContent = error instanceof Error ? error.message : String(error); $('model-form-error').hidden = false; }
+  } catch (error) { if (isCurrent(source, session)) { $('model-form-error').textContent = error instanceof Error ? error.message : String(error); $('model-form-error').hidden = false; } }
   finally { apply.disabled = false; }
 };
 

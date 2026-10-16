@@ -109,6 +109,14 @@ npm run dev
 
 当前关卡版本为 2。更新后需重启服务并新建对局；旧版存档不兼容新的设施布局。
 
+## 调整数值
+
+物品、资源及动作消耗统一在 [content/levels/station-01.json](content/levels/station-01.json) 配置。`entities` 设置物品和障碍物的数量、名称、类型及位置；`rules` 设置初始资源、上限、补给量、耗氧率和漏电额外电量 `leakCost`。
+
+`rules.actionCosts` 中每项的 `tu` 是耗时，`battery` 是耗电量。`move` / `carry_move` 为普通 / 搬运移动，`scan` 扫描，`open` 开门或柜，`collect` 拾取，`drop_item` 放下物资，`use_battery` 安装电池，`use_oxygen` 补氧，`repair_human` 修补供氧管，`repair_airlock` 修复气闸，`clear` 清障，`pickup_human` / `drop_human` 抱起 / 放下玩家，`circuit` 操作开关，`extract` 撤离。两种维修的 `materials` 配置维修材料消耗份数，允许为 0。
+
+所有消耗必须是非负整数。氧气消耗统一为动作 `tu × 当前耗氧率`，修补供氧管这次仍按修补前的耗氧率结算；进入带电线路额外扣除 `leakCost` 电量。执行结算、自动行动预算、授权提示、扫描说明和模型可见规则均读取同一份配置。修改后重启服务生效；调整初始资源或物品布局时新建对局，存档保留已有进度。回放按当前配置重新执行历史动作，调整数值后旧局回放结果可能变化。
+
 ## 接入真实模型
 
 点击页面右上角 **“模型设置”**，选择“真实模型”、服务商和模型 ID 后直接应用。游戏默认复用本机 pi 用户目录 `~/.pi/agent/auth.json` 中对应服务商的 API Key 或 OAuth 登录凭据，无需再次填写。`PI_CODING_AGENT_DIR` 指定的自定义用户目录也会生效。再发送指令或点击“继续任务”，机器人就会通过 pi 请求真实模型。服务商和聊天模型列表直接来自 `pi-ai` 的内置目录，包括 DeepSeek、Anthropic、OpenAI、Google、OpenRouter 等；保留提供 Chat Completions 流式工具调用的自定义兼容接口。仅有动态目录、尚无本地模型列表的服务商不显示。

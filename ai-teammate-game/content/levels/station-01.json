@@ -37,7 +37,24 @@
     "moveLimit": 12,
     "toolLimit": 6,
     "requestLimit": 8,
-    "actionTULimit": 12
+    "actionTULimit": 12,
+    "actionCosts": {
+      "move": { "tu": 1, "battery": 1 },
+      "carry_move": { "tu": 1, "battery": 2 },
+      "scan": { "tu": 1, "battery": 2 },
+      "open": { "tu": 1, "battery": 1 },
+      "collect": { "tu": 1, "battery": 1 },
+      "drop_item": { "tu": 1, "battery": 1 },
+      "use_battery": { "tu": 1, "battery": 1 },
+      "use_oxygen": { "tu": 2, "battery": 2 },
+      "repair_human": { "tu": 6, "battery": 4, "materials": 1 },
+      "repair_airlock": { "tu": 4, "battery": 4, "materials": 1 },
+      "clear": { "tu": 3, "battery": 4 },
+      "pickup_human": { "tu": 1, "battery": 2 },
+      "drop_human": { "tu": 1, "battery": 1 },
+      "circuit": { "tu": 1, "battery": 0 },
+      "extract": { "tu": 2, "battery": 2 }
+    }
   },
   "rooms": [
     { "name": "事故舱", "bounds": { "minX": 1, "minY": 9, "maxX": 2, "maxY": 10 } },

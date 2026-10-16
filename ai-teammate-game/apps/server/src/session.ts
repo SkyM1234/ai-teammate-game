@@ -31,7 +31,7 @@ export interface PendingAuthorization {
 type AuthorizationDecision = 'approve' | 'deny' | 'cancel' | 'stale';
 export interface Metrics { requests: number; executedTools: number; skippedTools: number; inputTokens: number; outputTokens: number; resultBytes: number; interrupts: number }
 export interface SessionView extends PlayerView {
-  sessionId: string; eventId: number; task: Task | null; messages: ChatMessage[]; metrics: Metrics;
+  sessionId: string; sessionInstanceId: string; eventId: number; task: Task | null; messages: ChatMessage[]; metrics: Metrics;
   agentMode: ModelAdapter['mode']; agentLabel: string; running: boolean;
   modelConfig: ModelConfig; modelReady: boolean; modelError: string | null; modelCredentialSource: CredentialSource;
   pendingAuthorization: PendingAuthorization | null;
@@ -69,6 +69,7 @@ sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准
 
 export class GameSession {
   readonly id: string;
+  readonly instanceId = crypto.randomUUID();
   readonly engine: GameEngine;
   readonly agent: Agent;
   adapter: ModelAdapter;
@@ -302,19 +303,26 @@ export class GameSession {
   private authorizationFor(name: string, args: Record<string, unknown>): Pick<PendingAuthorization, 'kind' | 'description' | 'consequence' | 'hazardIds'> | null {
     if (name === 'interact') {
       const entity = typeof args.targetId === 'string' ? this.engine.state.knowledge.entities[args.targetId] : undefined;
-      const material = this.engine.state.robot.inventory.some(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair');
+      const materials = this.engine.state.robot.inventory.filter(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair').length;
+      const required = this.engine.level.rules.actionCosts[args.targetId === 'human' ? 'repair_human' : 'repair_airlock'].materials;
       const repairPosition = args.targetId === 'human' ? this.engine.state.human.position : entity?.position;
-      if (args.operation === 'repair' && material && repairPosition && distance(this.engine.state.robot.position, repairPosition) <= 1 && typeof args.targetId === 'string' && !this.repairAuthorized(args.targetId) && (args.targetId === 'human' || entity?.type === 'airlock')) {
-        const tu = args.targetId === 'human' ? 6 : 4;
-        return { kind: 'repair', description: `允许修复${args.targetId === 'human' ? '你的供氧管' : entity!.name}吗？`, consequence: `消耗 1 份维修材料、${tu} TU、4 电量；预计消耗 ${tu * this.engine.state.human.oxygenRate} 氧气。` };
+      if (args.operation === 'repair' && materials >= required && repairPosition && distance(this.engine.state.robot.position, repairPosition) <= 1 && typeof args.targetId === 'string' && !this.repairAuthorized(args.targetId) && (args.targetId === 'human' || entity?.type === 'airlock')) {
+        const cost = this.engine.actionCost({ kind: 'repair', targetId: args.targetId });
+        return { kind: 'repair', description: `允许修复${args.targetId === 'human' ? '你的供氧管' : entity!.name}吗？`, consequence: `消耗 ${required} 份维修材料、${cost.tu} TU、${cost.battery} 电量；预计消耗 ${cost.oxygen} 氧气。` };
       }
       const item = typeof args.itemId === 'string' && this.engine.state.robot.inventory.includes(args.itemId) ? this.engine.state.knowledge.entities[args.itemId] : undefined;
-      if (args.operation === 'drop_item' && item || args.operation === 'drop_human' && this.engine.state.human.carried) return { kind: 'drop', description: `允许在当前位置放下${args.operation === 'drop_human' ? '你' : item!.name}吗？`, consequence: `消耗 1 TU、1 电量和 ${this.engine.state.human.oxygenRate} 氧气；物资或玩家将留在当前位置。` };
+      if (args.operation === 'drop_item' && item || args.operation === 'drop_human' && this.engine.state.human.carried) {
+        const cost = this.engine.actionCost(args.operation === 'drop_human' ? { kind: 'drop_human' } : { kind: 'drop_item', itemId: item!.id });
+        return { kind: 'drop', description: `允许在当前位置放下${args.operation === 'drop_human' ? '你' : item!.name}吗？`, consequence: `消耗 ${cost.tu} TU、${cost.battery} 电量和 ${cost.oxygen} 氧气；物资或玩家将留在当前位置。` };
+      }
     }
     const demoPowerCommand = this.adapter.mode !== 'live' && this.task?.interpretation === 'demo' && this.task.demoSupported && this.task.goal?.kind === 'circuit' && this.task.goal.on === true;
     if (name === 'set_circuit' && args.on === true && !this.engine.state.circuitOn && !demoPowerCommand) {
       const entity = typeof args.targetId === 'string' ? this.engine.state.knowledge.entities[args.targetId] : undefined;
-      if (entity?.type === 'switch' && distance(this.engine.state.robot.position, entity.position) <= 1) return { kind: 'power', description: `允许机器人操作 (${entity.position.x}, ${entity.position.y}) 的${entity.name}通电吗？`, consequence: `操作开关消耗 1 TU、0 电量和 ${this.engine.state.human.oxygenRate} 氧气；电池柜和电动门可开启，暴露线路将带电。批准后仍须满足距离与视线条件。` };
+      if (entity?.type === 'switch' && distance(this.engine.state.robot.position, entity.position) <= 1) {
+        const cost = this.engine.actionCost({ kind: 'circuit', targetId: entity.id, on: true });
+        return { kind: 'power', description: `允许机器人操作 (${entity.position.x}, ${entity.position.y}) 的${entity.name}通电吗？`, consequence: `操作开关消耗 ${cost.tu} TU、${cost.battery} 电量和 ${cost.oxygen} 氧气；电池柜和电动门可开启，暴露线路将带电。批准后仍须满足距离与视线条件。` };
+      }
     }
     if (name === 'move_to') {
       const target = args.target as Position;
@@ -415,8 +423,8 @@ export class GameSession {
     if (message) this.say('system', message);
   }
 
-  private checkBudget(tu: number): boolean {
-    if (this.runTU + tu > this.engine.level.rules.actionTULimit) { this.pause('行动预算不足以支付下一完整动作，未开始执行。'); this.control = 'wait_player'; return false; }
+  private checkBudget(action: Action): boolean {
+    if (this.runTU + this.engine.actionCost(action).tu > this.engine.level.rules.actionTULimit) { this.pause('行动预算不足以支付下一完整动作，未开始执行。'); this.control = 'wait_player'; return false; }
     return true;
   }
 
@@ -452,8 +460,9 @@ export class GameSession {
             if (samePosition(this.engine.state.robot.position, input.target)) break;
             const path = this.engine.knownPath(input.target, this.executionConstraints());
             if (!path?.length) { this.control = 'redecide'; break; }
-            if (!this.checkBudget(1)) break;
-            outcome = this.commit({ kind: 'move', target: path[0] }, `${id}:${index}`);
+            const action: Action = { kind: 'move', target: path[0] };
+            if (!this.checkBudget(action)) break;
+            outcome = this.commit(action, `${id}:${index}`);
             costTU += outcome.cost.tu;
             if (!outcome.accepted) { this.control = 'redecide'; break; }
             steps++;
@@ -476,8 +485,9 @@ export class GameSession {
         parameters: Type.Object({ targetId: Type.String() }, { additionalProperties: false }),
         execute: async (id, raw) => {
           const input = raw as { targetId: string };
-          if (!this.checkBudget(1)) return this.emptyResult('BUDGET', '行动预算不足。');
-          return this.actionResult(this.commit({ kind: 'scan', targetId: input.targetId }, id));
+          const action: Action = { kind: 'scan', targetId: input.targetId };
+          if (!this.checkBudget(action)) return this.emptyResult('BUDGET', '行动预算不足。');
+          return this.actionResult(this.commit(action, id));
         },
       },
       {
@@ -491,8 +501,7 @@ export class GameSession {
           const input = raw as { operation: string; targetId?: string; itemId?: string };
           const action = interactionAction(input);
           if (!action) return this.emptyResult('INVALID_ACTION', `交互参数不完整：${input.operation} ${interactionUsage[input.operation] ?? '不是支持的操作'}。`);
-          const tu = action.kind === 'repair' ? action.targetId === 'human' ? 6 : 4 : action.kind === 'clear' ? 3 : action.kind === 'extract' ? 2 : action.kind === 'use_item' && action.targetId === 'human' ? 2 : 1;
-          if (!this.checkBudget(tu)) return this.emptyResult('BUDGET', '行动预算不足。');
+          if (!this.checkBudget(action)) return this.emptyResult('BUDGET', '行动预算不足。');
           return this.actionResult(this.commit(action, id));
         },
       },
@@ -501,8 +510,9 @@ export class GameSession {
         parameters: Type.Object({ targetId: Type.String(), on: Type.Boolean() }, { additionalProperties: false }),
         execute: async (id, raw) => {
           const input = raw as { targetId: string; on: boolean };
-          if (!this.checkBudget(1)) return this.emptyResult('BUDGET', '行动预算不足。');
-          return this.actionResult(this.commit({ kind: 'circuit', targetId: input.targetId, on: input.on }, id));
+          const action: Action = { kind: 'circuit', targetId: input.targetId, on: input.on };
+          if (!this.checkBudget(action)) return this.emptyResult('BUDGET', '行动预算不足。');
+          return this.actionResult(this.commit(action, id));
         },
       },
       {
@@ -713,7 +723,7 @@ export class GameSession {
     this.emit();
   }
 
-  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
+  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
   save(): SessionSave { return { version: 1, id: this.id, engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
   async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');

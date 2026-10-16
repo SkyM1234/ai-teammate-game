@@ -6,7 +6,15 @@ export function validateLevel(value: unknown): Level {
   if (!Number.isInteger(level.width) || !Number.isInteger(level.height) || level.width < 3 || level.height < 3) throw new Error('地图尺寸非法');
   if (!Array.isArray(level.tiles) || level.tiles.length !== level.height || level.tiles.some(row => typeof row !== 'string' || row.length !== level.width || /[^#.DEX]/.test(row))) throw new Error('地图行长度或字符非法');
   if (!Array.isArray(level.entities) || !level.rules || typeof level.id !== 'string' || !Array.isArray(level.rooms)) throw new Error('关卡字段不完整');
-  for (const [name, amount] of Object.entries(level.rules)) if (!Number.isInteger(amount) || amount < 0) throw new Error(`规则 ${name} 非法`);
+  for (const [name, amount] of Object.entries(level.rules)) if (name !== 'actionCosts' && (!Number.isInteger(amount) || amount < 0)) throw new Error(`规则 ${name} 非法`);
+  for (const name of ['move', 'carry_move', 'scan', 'open', 'collect', 'drop_item', 'use_battery', 'use_oxygen', 'repair_human', 'repair_airlock', 'clear', 'pickup_human', 'drop_human', 'circuit', 'extract'] as const) {
+    const cost = level.rules.actionCosts?.[name];
+    if (!cost || !Number.isInteger(cost.tu) || cost.tu < 0 || !Number.isInteger(cost.battery) || cost.battery < 0) throw new Error(`动作消耗 ${name} 非法`);
+  }
+  for (const name of ['repair_human', 'repair_airlock'] as const) {
+    const amount = level.rules.actionCosts[name].materials;
+    if (!Number.isInteger(amount) || amount < 0) throw new Error(`维修材料消耗 ${name} 非法`);
+  }
   if (level.rules.oxygen <= 0 || level.rules.battery <= 0 || level.rules.oxygen > level.rules.oxygenMax || level.rules.battery > level.rules.batteryMax) throw new Error('初始资源非法');
   const inside = (p: Position): boolean => !!p && Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.x < level.width && p.y >= 0 && p.y < level.height && level.tiles[p.y][p.x] !== '#';
   for (const p of [level.humanStart, level.robotStart, level.exit]) if (!inside(p)) throw new Error('起点或出口非法');

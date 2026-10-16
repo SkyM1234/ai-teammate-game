@@ -4,9 +4,104 @@ import test from 'node:test';
 import { diffKnowledge, GameEngine } from '../packages/game-core/src/engine.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
-import type { Action, RadarEcho } from '../packages/game-core/src/types.ts';
+import type { Action, ActionCosts, RadarEcho } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+
+test('动作消耗配置必须完整且为非负整数，维修材料数量同样校验', () => {
+  for (const name of Object.keys(level.rules.actionCosts) as (keyof ActionCosts)[]) {
+    const missing = structuredClone(level); Reflect.deleteProperty(missing.rules.actionCosts, name);
+    assert.throws(() => validateLevel(missing), /动作消耗/);
+    for (const field of ['tu', 'battery'] as const) for (const amount of [undefined, -1, 0.5, Infinity, '2']) {
+      const invalid = structuredClone(level); Reflect.set(invalid.rules.actionCosts[name], field, amount);
+      assert.throws(() => validateLevel(invalid), /动作消耗/);
+    }
+  }
+  const missing = structuredClone(level); Reflect.deleteProperty(missing.rules, 'actionCosts');
+  assert.throws(() => validateLevel(missing), /动作消耗/);
+  for (const name of ['repair_human', 'repair_airlock'] as const) for (const amount of [undefined, -1, 0.5, '1']) {
+    const invalid = structuredClone(level); Reflect.set(invalid.rules.actionCosts[name], 'materials', amount);
+    assert.throws(() => validateLevel(invalid), /维修材料/);
+  }
+  const free = structuredClone(level);
+  for (const cost of Object.values(free.rules.actionCosts)) { cost.tu = 0; cost.battery = 0; }
+  free.rules.actionCosts.repair_human.materials = 0; free.rules.actionCosts.repair_airlock.materials = 0;
+  assert.doesNotThrow(() => validateLevel(free));
+});
+
+test('所有动作按 JSON 配置扣时间和电量，氧气按当前耗氧率结算', () => {
+  const give = (engine: GameEngine, ...ids: string[]) => {
+    for (const id of ids) { engine.state.entities.find(e => e.id === id)!.taken = true; engine.state.robot.inventory.push(id); }
+  };
+  const cases: { name: keyof ActionCosts; action: Action; setup?: (engine: GameEngine) => void }[] = [
+    { name: 'move', action: { kind: 'move', target: { x: 3, y: 9 } } },
+    { name: 'carry_move', action: { kind: 'move', target: { x: 3, y: 9 } }, setup: e => { e.state.human.carried = true; } },
+    { name: 'scan', action: { kind: 'scan', targetId: 's-01' }, setup: e => { e.state.robot.position = { x: 3, y: 9 }; } },
+    { name: 'open', action: { kind: 'open', targetId: 'c-01' }, setup: e => { e.state.robot.position = { x: 5, y: 2 }; e.state.circuitOn = true; } },
+    { name: 'collect', action: { kind: 'collect', targetId: 's-01' }, setup: e => { e.state.robot.position = { x: 3, y: 9 }; } },
+    { name: 'drop_item', action: { kind: 'drop_item', itemId: 's-01' }, setup: e => give(e, 's-01') },
+    { name: 'use_battery', action: { kind: 'use_item', itemId: 's-04', targetId: 'robot' }, setup: e => give(e, 's-04') },
+    { name: 'use_oxygen', action: { kind: 'use_item', itemId: 's-03', targetId: 'human' }, setup: e => give(e, 's-03') },
+    { name: 'repair_human', action: { kind: 'repair', targetId: 'human' }, setup: e => give(e, 's-01', 's-02') },
+    { name: 'repair_airlock', action: { kind: 'repair', targetId: 'a-01' }, setup: e => { give(e, 's-01', 's-02'); e.state.robot.position = { x: 9, y: 8 }; } },
+    { name: 'clear', action: { kind: 'clear', targetId: 'o-01' }, setup: e => { e.state.robot.position = { x: 6, y: 10 }; } },
+    { name: 'pickup_human', action: { kind: 'pickup_human' }, setup: e => { e.state.robot.position = { ...e.state.human.position }; } },
+    { name: 'drop_human', action: { kind: 'drop_human' }, setup: e => { e.state.human.carried = true; } },
+    { name: 'circuit', action: { kind: 'circuit', targetId: 'sw-01', on: true }, setup: e => { e.state.robot.position = { x: 6, y: 2 }; } },
+    { name: 'extract', action: { kind: 'extract' }, setup: e => { e.state.robot.position = { ...level.exit }; e.state.human.carried = true; e.state.entities.find(e => e.id === 'a-01')!.repaired = true; } },
+  ];
+  for (const { name, action, setup } of cases) {
+    const custom = structuredClone(level);
+    Object.assign(custom.rules.actionCosts[name], { tu: 2, battery: 3 });
+    custom.rules.actionCosts.repair_human.materials = 2; custom.rules.actionCosts.repair_airlock.materials = 2;
+    const engine = new GameEngine(validateLevel(custom)); setup?.(engine); engine.observe();
+    const outcome = engine.perform(action);
+    assert.equal(outcome.accepted, true, `${name}: ${outcome.message}`);
+    assert.deepEqual(outcome.cost, { tu: 2, battery: 3, oxygen: 4 }, name);
+    assert.equal(engine.state.elapsedTU, 2, name);
+    assert.equal(engine.state.robot.battery, name === 'use_battery' ? 100 : 87, name);
+    assert.equal(engine.state.human.oxygen, name === 'use_oxygen' ? 156 : 116, name);
+    if (action.kind === 'repair') assert.equal(engine.state.robot.inventory.length, 0, name);
+  }
+});
+
+test('清障说明、漏电附加消耗和返回电量储备随配置更新', () => {
+  const custom = structuredClone(level);
+  custom.rules.actionCosts.clear = { tu: 5, battery: 7 };
+  custom.rules.actionCosts.move = { tu: 2, battery: 8 };
+  custom.rules.actionCosts.carry_move = { tu: 3, battery: 9 };
+  custom.rules.leakCost = 11;
+  const engine = new GameEngine(custom);
+  engine.state.robot.position = { x: 6, y: 10 }; engine.observe();
+  assert.equal(engine.perform({ kind: 'scan', targetId: 'o-01' }).accepted, true);
+  assert.equal(engine.state.knowledge.entities['o-01'].details, '清理需要 5 TU、7 电量。');
+  engine.state.robot.position = { x: 8, y: 4 }; engine.state.circuitOn = true;
+  const hazard = engine.perform({ kind: 'move', target: { x: 8, y: 3 } }, crypto.randomUUID(), { reserveReturnBattery: false, reserveMargin: 0, authorizedHazardIds: ['h-01'], stopOnHazard: false, allowedRepairs: [] });
+  assert.deepEqual(hazard.cost, { tu: 2, battery: 19, oxygen: 4 });
+  engine.state.robot.position = { x: 2, y: 9 }; engine.state.robot.battery = 23;
+  assert.equal(engine.perform({ kind: 'move', target: { x: 3, y: 9 } }, crypto.randomUUID(), { reserveReturnBattery: true, reserveMargin: 0, authorizedHazardIds: [], stopOnHazard: false, allowedRepairs: [] }).code, 'RETURN_RESERVE');
+  engine.state.human.carried = true;
+  assert.deepEqual(engine.actionCost({ kind: 'move', target: { x: 3, y: 9 } }), { tu: 3, battery: 9, oxygen: 6 });
+});
+
+test('维修材料不足不扣资源，零材料维修及配置后的存档回放可执行', () => {
+  const custom = structuredClone(level);
+  custom.rules.actionCosts.repair_human = { tu: 2, battery: 3, materials: 2 };
+  const engine = new GameEngine(custom);
+  const material = engine.state.entities.find(e => e.id === 's-01')!; material.taken = true;
+  engine.state.robot.inventory.push(material.id); engine.observe();
+  assert.equal(engine.perform({ kind: 'repair', targetId: 'human' }).code, 'MATERIAL_REQUIRED');
+  assert.equal(engine.state.robot.battery, 90); assert.equal(engine.state.human.oxygen, 120); assert.equal(engine.state.elapsedTU, 0);
+  custom.rules.actionCosts.repair_human.materials = 0;
+  const free = new GameEngine(custom);
+  assert.equal(free.perform({ kind: 'repair', targetId: 'human' }).accepted, true);
+  assert.equal(free.perform({ kind: 'move', target: { x: 3, y: 9 } }).cost.oxygen, 1);
+  const restored = new GameEngine(custom); restored.restore(free.snapshot());
+  const replay = GameEngine.forReplay(custom, restored.state.ledger);
+  for (const entry of restored.state.ledger) assert.equal(replay.replayEntry(entry).accepted, true);
+  assert.deepEqual(replay.state.robot, free.state.robot); assert.deepEqual(replay.state.human, free.state.human);
+  assert.equal(replay.state.elapsedTU, free.state.elapsedTU);
+});
 
 test('房间范围允许单格与地图边界，拒绝颠倒、越界或缺失的边界', () => {
   for (const bounds of [

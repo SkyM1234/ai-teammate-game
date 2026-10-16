@@ -45,7 +45,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
   const pendingWrites = new Map<string, Promise<void>>();
   const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const requests = new Map<string, Promise<unknown>>();
-  const eventClients = new Set<ServerResponse>();
+  const eventClients = new Map<ServerResponse, GameSession>();
   let latestId: string | null = null;
   function persist(session: GameSession): Promise<void> {
     const save = session.save();
@@ -109,6 +109,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
     clearTimeout(saveTimers.get(id)); saveTimers.delete(id);
     const session = new GameSession(level, { ...options, id });
     await session.restore(save, save.modelConfig ? modelPreferences.keyFor(save.modelConfig) : undefined); register(session);
+    for (const [client, subscribed] of eventClients) if (subscribed === previous) client.end();
     await persist(session); return session;
   }
   const server = createServer(async (req, res) => {
@@ -142,8 +143,8 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
       if (req.method === 'GET' && !operation) { json(res, session.view()); return; }
       if (req.method === 'GET' && operation === 'events') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-        const send = (view: ReturnType<GameSession['view']>) => res.write(`id: ${view.eventId}\ndata: ${JSON.stringify(view)}\n\n`);
-        send(session.view()); session.listeners.add(send); eventClients.add(res);
+        const send = (view: ReturnType<GameSession['view']>) => res.write(`id: ${view.sessionInstanceId}:${view.eventId}\ndata: ${JSON.stringify(view)}\n\n`);
+        send(session.view()); session.listeners.add(send); eventClients.set(res, session);
         const heartbeat = setInterval(() => res.write(': alive\n\n'), 15000);
         res.on('close', () => { clearInterval(heartbeat); session.listeners.delete(send); eventClients.delete(res); }); return;
       }
@@ -159,7 +160,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
       if (req.method !== 'POST') throw new HttpError(405, '请求方法不支持');
       const input = await body(req);
       if (typeof input.requestId !== 'string' || !uuidPattern.test(input.requestId)) throw new HttpError(400, '缺少有效请求 ID');
-      const key = `${id}:${input.requestId}`;
+      const key = `${session.instanceId}:${input.requestId}`;
       let promise = requests.get(key);
       if (!promise) {
         promise = (async () => {
@@ -198,7 +199,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
     for (const timer of saveTimers.values()) clearTimeout(timer); saveTimers.clear();
     for (const session of sessions.values()) { await session.stop(); await persist(session); }
     for (const timer of saveTimers.values()) clearTimeout(timer); saveTimers.clear();
-    for (const client of eventClients) client.end();
+    for (const client of eventClients.keys()) client.end();
     await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
   } };
 }

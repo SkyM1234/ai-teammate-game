@@ -3,11 +3,19 @@ export type ItemType = 'repair' | 'battery' | 'oxygen';
 export type EntityType = 'supply' | 'cabinet' | 'door' | 'hazard' | 'obstacle' | 'airlock' | 'switch';
 export type Phase = 'awaiting_command' | 'agent_thinking' | 'executing' | 'awaiting_player' | 'paused' | 'success' | 'failure';
 
+export interface ActionCost { tu: number; battery: number }
+export interface ActionCosts {
+  move: ActionCost; carry_move: ActionCost; scan: ActionCost; open: ActionCost; collect: ActionCost;
+  drop_item: ActionCost; use_battery: ActionCost; use_oxygen: ActionCost;
+  repair_human: ActionCost & { materials: number }; repair_airlock: ActionCost & { materials: number };
+  clear: ActionCost; pickup_human: ActionCost; drop_human: ActionCost; circuit: ActionCost; extract: ActionCost;
+}
 export interface Rules {
   oxygen: number; oxygenMax: number; oxygenRate: number; repairedOxygenRate: number;
   battery: number; batteryMax: number; batteryRefill: number; oxygenRefill: number;
   inventorySlots: number; sensorRadius: number; radarRadius: number; leakCost: number;
   moveLimit: number; toolLimit: number; requestLimit: number; actionTULimit: number;
+  actionCosts: ActionCosts;
 }
 export interface EntityDefinition {
   id: string; type: EntityType; name: string; position: Position; reflection: number;

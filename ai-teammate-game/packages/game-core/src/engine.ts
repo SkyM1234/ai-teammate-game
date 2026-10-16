@@ -74,11 +74,11 @@ export class GameEngine {
       if (entity.powerRequired) result.powerRequired = true;
       if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
       else if (entity.type === 'switch') result.details = '机器人须在同格或相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
-      else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : '控制器损坏导致出口喷气，出口格不可进入；需要一份维修材料修复。';
+      else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : `控制器损坏导致出口喷气，出口格不可进入；需要 ${this.level.rules.actionCosts.repair_airlock.materials} 份维修材料修复。`;
       else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${this.level.rules.leakCost} 电量。`;
       else if (entity.itemType === 'battery') result.details = `可恢复 ${this.level.rules.batteryRefill} 电量。`;
       else if (entity.itemType === 'oxygen') result.details = `可恢复 ${this.level.rules.oxygenRefill} 氧气。`;
-      else if (entity.type === 'obstacle') result.details = '清理需要 3 TU、4 电量。';
+      else if (entity.type === 'obstacle') result.details = `清理需要 ${this.level.rules.actionCosts.clear.tu} TU、${this.level.rules.actionCosts.clear.battery} 电量。`;
       else result.details = '状态已确认。';
     }
     return result;
@@ -115,6 +115,16 @@ export class GameEngine {
 
   perform(action: Action, actionId: string = crypto.randomUUID(), constraints: Constraints = defaultConstraints()): ActionOutcome {
     return this.performAction(action, actionId, constraints);
+  }
+
+  actionCost(action: Action): Cost {
+    const costs = this.level.rules.actionCosts;
+    const base = action.kind === 'move' && this.state.human.carried ? costs.carry_move
+      : action.kind === 'repair' ? costs[action.targetId === 'human' ? 'repair_human' : 'repair_airlock']
+      : action.kind === 'use_item' ? costs[action.targetId === 'human' ? 'use_oxygen' : 'use_battery']
+      : costs[action.kind];
+    const hazard = action.kind === 'move' && this.state.circuitOn && this.state.entities.some(e => e.type === 'hazard' && samePosition(e.position, action.target));
+    return { tu: base.tu, battery: base.battery + (hazard ? this.level.rules.leakCost : 0), oxygen: this.state.human.oxygenRate * base.tu };
   }
 
   // Only trusted historical ledgers can replay the former remote circuit action.
@@ -155,7 +165,6 @@ export class GameEngine {
       return structuredClone(result);
     };
     if (this.terminal) return reject('SESSION_FINISHED', '本局已经结束。');
-    let cost: Cost = { tu: 0, battery: 0, oxygen: 0 };
     let message = '';
     let effect: (() => void) | undefined;
     let entity: Entity | undefined;
@@ -173,31 +182,30 @@ export class GameEngine {
         if (blocker) return reject('BLOCKED', '前方无法通行，请检查附近设施。');
         const hazard = this.state.entities.find(e => e.type === 'hazard' && samePosition(e.position, target) && this.state.circuitOn);
         if (hazard && !constraints.authorizedHazardIds.includes(hazard.id)) return reject('HAZARD_AUTH_REQUIRED', '前方有带电线路，需要断电或明确授权。');
-        cost = { tu: 1, battery: (this.state.human.carried ? 2 : 1) + (hazard ? this.level.rules.leakCost : 0), oxygen: 0 };
         message = `移动至 (${target.x}, ${target.y})${this.state.human.carried ? ' · 搬运中' : ''}`;
         effect = () => { this.state.robot.position = { ...target }; if (this.state.human.carried) this.state.human.position = { ...target }; };
         break;
       }
       case 'scan':
         if (!entity) return reject('UNKNOWN_TARGET', '扫描目标非法。');
-        cost = { tu: 1, battery: 2, oxygen: 0 }; message = `检查 ${entity.name}`;
+        message = `检查 ${entity.name}`;
         effect = () => { if (!this.state.knowledge.scannedIds.includes(entity.id)) this.state.knowledge.scannedIds.push(entity.id); };
         break;
       case 'open':
         if (!entity || !['door', 'cabinet'].includes(entity.type) || entity.opened) return reject('PRECONDITION_FAILED', '该目标不能开启，或已经开启。');
         if (entity.powerRequired && !this.state.circuitOn) return reject('POWER_REQUIRED', '需要机器人找到并靠近辅助电路开关，操作开关通电后再开启设备。');
-        cost = { tu: 1, battery: 1, oxygen: 0 }; message = `开启 ${entity.name}`; effect = () => { entity.opened = true; };
+        message = `开启 ${entity.name}`; effect = () => { entity.opened = true; };
         break;
       case 'collect':
         if (!entity || entity.type !== 'supply' || entity.taken) return reject('PRECONDITION_FAILED', '没有可取得的已知物资。');
         if (this.state.robot.inventory.length >= this.level.rules.inventorySlots) return reject('INVENTORY_FULL', '物品槽已满。');
-        cost = { tu: 1, battery: 1, oxygen: 0 }; message = `取得 ${entity.name}`;
+        message = `取得 ${entity.name}`;
         effect = () => { entity.taken = true; this.state.robot.inventory.push(entity.id); };
         break;
       case 'drop_item': {
         const item = this.getEntity(action.itemId);
         if (!item || !this.state.robot.inventory.includes(item.id)) return reject('UNKNOWN_TARGET', '背包中没有该物品。');
-        cost = { tu: 1, battery: 1, oxygen: 0 }; message = `放下 ${item.name}`;
+        message = `放下 ${item.name}`;
         effect = () => { this.state.robot.inventory = this.state.robot.inventory.filter(id => id !== item.id); item.taken = false; item.containerId = undefined; item.position = { ...this.state.robot.position }; };
         break;
       }
@@ -205,11 +213,11 @@ export class GameEngine {
         const item = this.getEntity(action.itemId);
         if (!item || !this.state.robot.inventory.includes(item.id)) return reject('UNKNOWN_TARGET', '背包中没有该物品。');
         if (item.itemType === 'battery' && action.targetId === 'robot') {
-          cost = { tu: 1, battery: 1, oxygen: 0 }; message = '安装备用电池';
+          message = '安装备用电池';
           effect = () => { this.state.robot.battery = Math.min(this.level.rules.batteryMax, this.state.robot.battery + this.level.rules.batteryRefill); this.consume(item.id); };
         } else if (item.itemType === 'oxygen' && action.targetId === 'human') {
           if (!this.reachable(this.state.human.position)) return reject('OUT_OF_RANGE', '需要先靠近玩家。');
-          cost = { tu: 2, battery: 2, oxygen: 0 }; message = '为玩家补充氧气';
+          message = '为玩家补充氧气';
           effect = () => { this.state.human.oxygen = Math.min(this.level.rules.oxygenMax, this.state.human.oxygen + this.level.rules.oxygenRefill); this.consume(item.id); };
         } else return reject('PRECONDITION_FAILED', '物品与目标不匹配。');
         break;
@@ -218,47 +226,47 @@ export class GameEngine {
         const target = action.targetId;
         if (target === 'human' && (!this.reachable(this.state.human.position) || this.state.human.oxygenRate === this.level.rules.repairedOxygenRate)) return reject('PRECONDITION_FAILED', '需靠近玩家，且供氧管尚未修补。');
         if (target !== 'human' && (!entity || entity.type !== 'airlock' || entity.repaired)) return reject('PRECONDITION_FAILED', '没有需要修复的已知控制器。');
-        const material = this.state.robot.inventory.find(id => this.getEntity(id)?.itemType === 'repair');
-        if (!material) return reject('MATERIAL_REQUIRED', '需要一份维修材料。');
-        cost = { tu: target === 'human' ? 6 : 4, battery: 4, oxygen: 0 };
+        const required = this.level.rules.actionCosts[target === 'human' ? 'repair_human' : 'repair_airlock'].materials;
+        const materials = this.state.robot.inventory.filter(id => this.getEntity(id)?.itemType === 'repair').slice(0, required);
+        if (materials.length < required) return reject('MATERIAL_REQUIRED', `需要 ${required} 份维修材料。`);
         message = target === 'human' ? '修补玩家供氧管' : '修复气闸控制器';
-        effect = () => { this.consume(material); if (target === 'human') this.state.human.oxygenRate = this.level.rules.repairedOxygenRate; else if (entity) entity.repaired = true; };
+        effect = () => { for (const material of materials) this.consume(material); if (target === 'human') this.state.human.oxygenRate = this.level.rules.repairedOxygenRate; else if (entity) entity.repaired = true; };
         break;
       }
       case 'clear':
         if (!entity || entity.type !== 'obstacle' || entity.removed) return reject('PRECONDITION_FAILED', '没有可清理的已知障碍。');
-        cost = { tu: 3, battery: 4, oxygen: 0 }; message = `清理 ${entity.name}`; effect = () => { entity.removed = true; };
+        message = `清理 ${entity.name}`; effect = () => { entity.removed = true; };
         break;
       case 'pickup_human':
         if (this.state.human.carried || !samePosition(this.state.robot.position, this.state.human.position)) return reject('OUT_OF_RANGE', '需要与玩家位于同一格。');
-        cost = { tu: 1, battery: 2, oxygen: 0 }; message = '抱起玩家，切换负重模式'; effect = () => { this.state.human.carried = true; };
+        message = '抱起玩家，切换负重模式'; effect = () => { this.state.human.carried = true; };
         break;
       case 'drop_human':
         if (!this.state.human.carried || this.state.entities.some(e => e.type === 'hazard' && this.state.circuitOn && samePosition(e.position, this.state.robot.position))) return reject('PRECONDITION_FAILED', '只能在安全地面放下玩家。');
-        cost = { tu: 1, battery: 1, oxygen: 0 }; message = '放下玩家'; effect = () => { this.state.human.carried = false; };
+        message = '放下玩家'; effect = () => { this.state.human.carried = false; };
         break;
       case 'circuit':
         if (!legacyCircuit && entity?.type !== 'switch') return reject('UNKNOWN_TARGET', '必须指定已识别且可触及的实体电路开关。');
         if (typeof action.on !== 'boolean' || action.on === this.state.circuitOn) return reject('PRECONDITION_FAILED', '电路已经处于该状态。');
-        cost = { tu: 1, battery: 0, oxygen: 0 }; message = `${action.on ? '开启' : '关闭'}辅助电路`; effect = () => { this.state.circuitOn = action.on; };
+        message = `${action.on ? '开启' : '关闭'}辅助电路`; effect = () => { this.state.circuitOn = action.on; };
         break;
       case 'extract':
         if (this.exitStatus === 'leaking') return reject('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法撤离；请先修复气闸控制器。');
         if (!this.state.human.carried || !samePosition(this.state.robot.position, this.level.exit) || !this.state.entities.some(e => e.type === 'airlock' && e.repaired)) return reject('PRECONDITION_FAILED', '需要修复气闸，并将玩家搬运到出口。');
-        cost = { tu: 2, battery: 2, oxygen: 0 }; message = '气闸接管救援，撤离成功'; effect = () => { this.state.phase = 'success'; };
+        message = '气闸接管救援，撤离成功'; effect = () => { this.state.phase = 'success'; };
         break;
       default: return reject('INVALID_ACTION', '不支持的动作。');
     }
+    const cost = this.actionCost(action);
     if (this.state.robot.battery < cost.battery) return reject('BATTERY_REQUIRED', '电量不足以完成该动作。');
     if (constraints.reserveReturnBattery && !legacyCircuit) {
       const start = action.kind === 'move' ? action.target : this.state.robot.position;
       const destination = this.state.human.carried ? this.level.exit : this.state.human.position;
       const path = findKnownPath(this.level, this.state.knowledge, start, destination, action.kind === 'circuit' ? action.on : this.state.circuitOn, constraints.authorizedHazardIds);
-      const reserve = (path?.length ?? Number.POSITIVE_INFINITY) * (this.state.human.carried ? 2 : 1) + constraints.reserveMargin;
+      const reserve = path ? path.length * this.level.rules.actionCosts[this.state.human.carried ? 'carry_move' : 'move'].battery + constraints.reserveMargin : Number.POSITIVE_INFINITY;
       const refill = action.kind === 'use_item' && this.getEntity(action.itemId)?.itemType === 'battery' ? this.level.rules.batteryRefill : 0;
       if (this.state.robot.battery - cost.battery + refill < reserve) return reject('RETURN_RESERVE', '该动作会违反返回电量储备，需调整路线或补给。');
     }
-    cost.oxygen = this.state.human.oxygenRate * cost.tu;
     this.state.elapsedTU += cost.tu;
     this.state.human.oxygen = Math.max(0, this.state.human.oxygen - cost.oxygen);
     this.state.robot.battery -= cost.battery;
@@ -315,6 +323,7 @@ export class GameEngine {
     return structuredClone({
       historicalMap: { width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       exitStatus: this.exitStatus,
+      rules: this.level.rules,
       telemetry: { human: this.state.human, robot: this.state.robot, circuitOn: this.state.circuitOn, elapsedTU: this.state.elapsedTU },
       knownEntities: Object.values(this.state.knowledge.entities), sharedMarkers: this.state.knowledge.markers,
       radar: this.state.radarHistory,

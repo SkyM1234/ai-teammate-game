@@ -153,6 +153,77 @@ test('SSE 发送的玩家投影不含隐藏实体，跨来源请求被拒绝', a
   assert.equal(foreign.status, 403);
 });
 
+test('恢复存档结束该实例的所有 SSE，重连以新实例完整状态开始且继续收到动作', async t => {
+  const { base, call, initial, sessions } = await fixture(t);
+  const path = `/api/sessions/${initial.sessionId}`;
+  const other = (await call('/api/sessions', {})).data;
+  const previous = sessions.get(initial.sessionId)!;
+  previous.eventId = 100;
+  const controller = new AbortController();
+  t.after(() => controller.abort());
+  async function subscribe(id: string, lastEventId = '') {
+    const response = await fetch(`${base}/api/sessions/${id}/events`, {
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+      headers: { 'Last-Event-ID': lastEventId },
+    });
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder(); let buffer = '';
+    async function next(): Promise<SessionView | null> {
+      while (true) {
+        const end = buffer.indexOf('\n\n');
+        if (end >= 0) {
+          const event = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+          const data = event.split('\n').find(line => line.startsWith('data:'));
+          if (!data) continue;
+          const view = JSON.parse(data.slice(5)) as SessionView;
+          assert.ok(event.startsWith(`id: ${view.sessionInstanceId}:${view.eventId}\n`));
+          return view;
+        }
+        const chunk = await reader.read(); if (chunk.done) return null;
+        buffer += decoder.decode(chunk.value, { stream: true });
+      }
+    }
+    return { next, view: (await next())! };
+  }
+  const tabs = await Promise.all([subscribe(initial.sessionId), subscribe(initial.sessionId)]);
+  const untouched = await subscribe(other.sessionId);
+  const loaded = await call(`${path}/load`, {});
+  assert.equal(loaded.status, 200);
+  assert.notEqual(loaded.data.sessionInstanceId, initial.sessionInstanceId);
+  assert.ok(loaded.data.eventId < tabs[0].view.eventId);
+  await Promise.all(tabs.map(async tab => { while (await tab.next()) { /* Drain final old events until EOF. */ } }));
+  assert.equal(previous.listeners.size, 1); // Only the persistence listener remains.
+  const resumed = await subscribe(initial.sessionId, `${initial.sessionInstanceId}:100`);
+  assert.deepEqual(resumed.view, loaded.data);
+  const moved = await call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: loaded.data.stateRevision, action: { kind: 'move', target: { x: 3, y: 9 } } });
+  assert.equal(moved.status, 200);
+  let event = await resumed.next();
+  while (event && event.eventId < moved.data.eventId) event = await resumed.next();
+  assert.deepEqual(event, moved.data);
+  const otherMoved = await call(`/api/sessions/${other.sessionId}/action`, { requestId: crypto.randomUUID(), expectedRevision: other.stateRevision, action: { kind: 'move', target: { x: 3, y: 9 } } });
+  assert.equal(otherMoved.status, 200);
+  const otherEvent = await untouched.next();
+  assert.equal(otherEvent?.sessionInstanceId, other.sessionInstanceId);
+  assert.equal(otherEvent?.stateRevision, otherMoved.data.stateRevision);
+});
+
+test('HTTP 请求去重按会话实例隔离，恢复后不会返回旧实例缓存', async t => {
+  const { call, initial } = await fixture(t);
+  const path = `/api/sessions/${initial.sessionId}`;
+  const requestId = crypto.randomUUID();
+  const first = await call(`${path}/marker`, { requestId, expectedRevision: 0, position: { x: 3, y: 9 }, note: '恢复前', shared: false });
+  assert.equal(first.status, 200);
+  await call(`${path}/save`, { requestId: crypto.randomUUID() });
+  const restored = await call(`${path}/load`, {});
+  const input = { requestId, expectedRevision: restored.data.stateRevision, position: { x: 3, y: 8 }, note: '恢复后', shared: false };
+  const marked = await call(`${path}/marker`, input);
+  assert.equal(marked.status, 200);
+  assert.equal(marked.data.sessionInstanceId, restored.data.sessionInstanceId);
+  assert.equal(marked.data.stateRevision, restored.data.stateRevision + 1);
+  assert.deepEqual(marked.data.markers.map(marker => marker.note), ['恢复前', '恢复后']);
+  assert.deepEqual((await call(`${path}/marker`, input)).data, marked.data);
+});
+
 test('通过 HTTP 完整救援后存档恢复、账本回放与原局的资源和结局一致', async t => {
   const { call, initial } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`;

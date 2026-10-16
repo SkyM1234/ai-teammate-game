@@ -5,11 +5,12 @@ import { GameSession } from '../apps/server/src/session.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
 import type { ToolIntent } from '../apps/server/src/model.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
+import type { ActionCosts } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
-function scripted(rounds: ToolIntent[][], delayMs = 0) {
+function scripted(rounds: ToolIntent[][], delayMs = 0, customLevel = level) {
   const contexts: string[] = [];
-  const session = new GameSession(level, { delayMs, adapter: {
+  const session = new GameSession(customLevel, { delayMs, adapter: {
     mode: 'test', label: 'scripted pi Agent', model: demoModel,
     streamFn: (_model, context) => { contexts.push(JSON.stringify(context)); return toolStream(rounds.shift() ?? []); },
   } });
@@ -293,6 +294,35 @@ test('每轮行动预算在逐格边界停止，继续后不重复旧动作', as
   assert.equal(session.engine.state.elapsedTU, 3); assert.equal(session.task?.status, 'completed');
 });
 
+test('移动、扫描、交互和开关工具按配置的完整 TU 检查预算', async () => {
+  const cases: { cost: keyof ActionCosts; tool: ToolIntent; position: { x: number; y: number }; circuitOn?: boolean }[] = [
+    { cost: 'move', tool: move(3, 9), position: { x: 2, y: 9 } },
+    { cost: 'scan', tool: { name: 'scan', arguments: { targetId: 's-01' } }, position: { x: 3, y: 9 } },
+    { cost: 'clear', tool: { name: 'interact', arguments: { operation: 'clear', targetId: 'o-01' } }, position: { x: 6, y: 10 } },
+    { cost: 'circuit', tool: { name: 'set_circuit', arguments: { targetId: 'sw-01', on: false } }, position: { x: 6, y: 2 }, circuitOn: true },
+  ];
+  for (const { cost, tool, position, circuitOn } of cases) {
+    const custom = structuredClone(level); custom.rules.actionCosts[cost].tu = 5; custom.rules.actionTULimit = 4;
+    const { session } = scripted([[tool]], 0, custom);
+    session.engine.state.robot.position = position; session.engine.state.circuitOn = circuitOn ?? false; session.engine.observe();
+    await session.command('检查状态'); await session.settled();
+    assert.equal(session.engine.state.elapsedTU, 0, cost);
+    assert.equal(session.engine.state.robot.battery, 90, cost);
+    assert.equal(session.engine.state.ledger.length, 0, cost);
+    assert.ok(session.messages.some(m => m.text.includes('预算不足')), cost);
+  }
+});
+
+test('修改单步 TU 后预算允许的步数及累计资源一致', async () => {
+  const custom = structuredClone(level); custom.rules.actionCosts.move = { tu: 2, battery: 3 }; custom.rules.actionTULimit = 5;
+  const session = new GameSession(custom, { delayMs: 0 });
+  await session.command('前往 (5,9)'); await session.settled();
+  assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
+  assert.equal(session.engine.state.elapsedTU, 4); assert.equal(session.engine.state.robot.battery, 84); assert.equal(session.engine.state.human.oxygen, 112);
+  await session.continue(); await session.settled();
+  assert.deepEqual(session.engine.state.robot.position, { x: 5, y: 9 }); assert.equal(session.engine.state.elapsedTU, 6);
+});
+
 test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停止', async () => {
   for (const budget of [30, 13]) {
     const longRoute = structuredClone(level);
@@ -425,6 +455,25 @@ test('维修工具前暂停，授权后继续同一响应的工具，不新增�
   assert.equal(session.engine.state.human.oxygenRate, 1); assert.equal(session.engine.state.robot.inventory.length, 0);
   assert.ok(session.messages.some(m => m.text === '状态报告')); assert.equal(session.pendingAuthorization, null);
   await assert.rejects(session.authorize(pending.id, true), /失效/);
+});
+
+test('维修、放下和开关授权提示使用配置消耗，批准后按提示扣除', async t => {
+  const cases: { cost: keyof ActionCosts; tool: ToolIntent; setup: (session: GameSession) => void; consequence: RegExp }[] = [
+    { cost: 'repair_human', tool: repair, setup: s => { giveMaterial(s); const material = s.engine.state.entities.find(e => e.id === 's-02')!; material.taken = true; s.engine.state.robot.inventory.push(material.id); }, consequence: /2 份维修材料、3 TU、7 电量；预计消耗 6 氧气/ },
+    { cost: 'drop_item', tool: { name: 'interact', arguments: { operation: 'drop_item', itemId: 's-01' } }, setup: giveMaterial, consequence: /3 TU、7 电量和 6 氧气/ },
+    { cost: 'drop_human', tool: { name: 'interact', arguments: { operation: 'drop_human' } }, setup: s => { s.engine.state.human.carried = true; }, consequence: /3 TU、7 电量和 6 氧气/ },
+    { cost: 'circuit', tool: { name: 'set_circuit', arguments: { targetId: 'sw-01', on: true } }, setup: s => { s.engine.state.robot.position = { x: 6, y: 2 }; }, consequence: /3 TU、7 电量和 6 氧气/ },
+  ];
+  for (const { cost, tool, setup, consequence } of cases) {
+    const custom = structuredClone(level); Object.assign(custom.rules.actionCosts[cost], { tu: 3, battery: 7 }); custom.rules.actionCosts.repair_human.materials = 2;
+    const { session } = scripted([[tool, finish]], 0, custom); t.after(() => session.stop());
+    setup(session); session.engine.observe();
+    await session.command('检查救援情况'); const pending = await authorization(session);
+    assert.match(pending.consequence, consequence);
+    await session.authorize(pending.id, true); await session.settled();
+    assert.equal(session.engine.state.elapsedTU, 3, cost); assert.equal(session.engine.state.robot.battery, 83, cost); assert.equal(session.engine.state.human.oxygen, 114, cost);
+    if (cost === 'repair_human') assert.equal(session.engine.state.robot.inventory.length, 0);
+  }
 });
 
 test('拒绝授权不执行当前或后续调用，拒绝结果进入下一模型请求', async () => {
