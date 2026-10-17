@@ -58,15 +58,17 @@ async function endpoint(t: TestContext) {
   return { config, requests };
 }
 
-test('应用模型同时保存新局默认，跨局复用手动密钥，重启保留选择且不落盘密钥', async t => {
-  const { savesDir, start } = await fixture(t); const { config, requests } = await endpoint(t);
+test('应用模型将密钥保存到 pi 凭据，跨局和重启后自动复用，游戏存档不含密钥', async t => {
+  const { savesDir, piDir, start } = await fixture(t); const { config, requests } = await endpoint(t);
   const app = await start(); const initial = (await app.call('/api/sessions', {})).data;
   const input = { requestId: crypto.randomUUID(), config: { ...config, apiKey: secret }, apiKey: secret };
   const applied = await app.call(`/api/sessions/${initial.sessionId}/model`, input);
   assert.equal(applied.status, 200);
   assert.deepEqual((await app.call(`/api/sessions/${initial.sessionId}/model`, input)).data, applied.data);
   const defaults = (await app.call<ModelPreferencesView>('/api/model-settings')).data;
-  assert.deepEqual(defaults.config, config); assert.equal(defaults.credentialSource, 'manual');
+  assert.deepEqual(defaults.config, config); assert.equal(defaults.credentialSource, 'pi');
+  const auth = JSON.parse(await readFile(join(piDir, 'auth.json'), 'utf8'));
+  assert.deepEqual(auth[`game-compatible:${config.baseUrl}`], { type: 'api_key', key: secret });
   const next = (await app.call('/api/sessions', {})).data;
   assert.equal(next.agentMode, 'live'); assert.equal(next.modelReady, true); assert.deepEqual(next.modelConfig, config);
   await app.call(`/api/sessions/${next.sessionId}/command`, { requestId: crypto.randomUUID(), expectedRevision: 0, text: '检查状态' });
@@ -78,9 +80,12 @@ test('应用模型同时保存新局默认，跨局复用手动密钥，重启�
   for (const id of [initial.sessionId, next.sessionId]) assert.ok(!(await readFile(join(savesDir, id, 'game.json'), 'utf8')).includes(secret));
   const restarted = await start();
   const remembered = (await restarted.call('/api/sessions', {})).data;
-  assert.deepEqual(remembered.modelConfig, config); assert.equal(remembered.modelReady, false);
+  assert.deepEqual(remembered.modelConfig, config); assert.equal(remembered.modelReady, true); assert.equal(remembered.modelCredentialSource, 'pi');
   await restarted.call(`/api/sessions/${remembered.sessionId}/command`, { requestId: crypto.randomUUID(), expectedRevision: 0, text: '检查状态' });
-  assert.equal(restarted.sessions.get(remembered.sessionId)!.engine.state.elapsedTU, 0); assert.equal(requests.length, 1);
+  await restarted.sessions.get(remembered.sessionId)!.settled();
+  assert.equal(requests.length, 2); assert.equal(requests[1].authorization, `Bearer ${secret}`);
+  const restored = (await restarted.call(`/api/sessions/${initial.sessionId}/load`, {})).data;
+  assert.equal(restored.modelReady, true); assert.equal(restored.modelCredentialSource, 'pi');
 });
 
 test('更改默认保留其他对局配置，旧存档复用对应接口密钥，错误设置不覆盖默认', async t => {
@@ -108,6 +113,18 @@ test('更改默认保留其他对局配置，旧存档复用对应接口密钥�
   assert.deepEqual(requests.map(r => r.path), ['/v1/chat/completions', '/other/v1/chat/completions']);
   await app.call(`${secondPath}/model`, { requestId: crypto.randomUUID(), config: { ...other, maxTokens: 99999 } });
   assert.deepEqual((await app.call<ModelPreferencesView>('/api/model-settings')).data.config, other);
+  await app.close();
+  const restarted = await start();
+  for (const [sessionId, expected] of [[first.sessionId, config], [second.sessionId, other]] as const) {
+    const restored = (await restarted.call(`/api/sessions/${sessionId}/load`, {})).data;
+    assert.equal(restored.modelReady, true);
+    await restarted.call(`/api/sessions/${sessionId}/command`, { requestId: crypto.randomUUID(), expectedRevision: restored.stateRevision, text: '检查状态' });
+    await restarted.sessions.get(sessionId)!.settled();
+    assert.deepEqual(restored.modelConfig, expected);
+  }
+  assert.deepEqual(requests.slice(2).map(r => r.authorization), [`Bearer ${secret}`, `Bearer ${otherSecret}`]);
+  const unknown = { ...config, baseUrl: config.baseUrl.replace('/v1', '/unsaved/v1') };
+  assert.equal((await restarted.call(`${path}/model`, { requestId: crypto.randomUUID(), config: unknown })).status, 400);
 });
 
 test('旧游戏环境配置不影响首次使用，自定义接口密钥需通过页面配置', async t => {
@@ -130,16 +147,32 @@ test('旧游戏环境配置不影响首次使用，自定义接口密钥需通�
   assert.equal(requests.length, 1); assert.equal(requests[0].authorization, `Bearer ${secret}`);
 });
 
-test('重启后新局自动复用 pi 凭据，演示模式的默认选择同样保留', async t => {
+test('凭据保存失败明确报错，不覆盖原文件或新局默认，不回显密钥', async t => {
+  const { start, piDir } = await fixture(t); const { config } = await endpoint(t);
+  const app = await start(); const initial = (await app.call('/api/sessions', {})).data;
+  const invalid = 'invalid-auth-file-fake-private-content';
+  const path = join(piDir, 'auth.json'); await writeFile(path, invalid, 'utf8');
+  const result = await app.call<{ error: string }>(`/api/sessions/${initial.sessionId}/model`, { requestId: crypto.randomUUID(), config, apiKey: secret });
+  assert.equal(result.status, 400); assert.match(result.data.error, /无法保存本机 pi 凭据/);
+  assert.ok(!result.data.error.includes(invalid)); assert.equal(await readFile(path, 'utf8'), invalid);
+  assert.deepEqual((await app.call<ModelPreferencesView>('/api/model-settings')).data.config, defaultModelConfig);
+});
+
+test('页面填写的服务商密钥保存为 pi 标准凭据，留空及演示模式保留已有凭据', async t => {
   const { start, piDir } = await fixture(t);
-  await writeFile(join(piDir, 'auth.json'), JSON.stringify({ deepseek: { type: 'api_key', key: secret } }), 'utf8');
+  const oauth = { type: 'oauth', access: 'fake-other-access', refresh: 'fake-other-refresh', expires: Date.now() + 3600000 };
+  await writeFile(join(piDir, 'auth.json'), JSON.stringify({ anthropic: oauth }), 'utf8');
   const config = { ...defaultModelConfig, mode: 'live' as const, timeoutMs: 15000 };
   const app = await start(); const initial = (await app.call('/api/sessions', {})).data;
-  assert.equal((await app.call(`/api/sessions/${initial.sessionId}/model`, { requestId: crypto.randomUUID(), config })).status, 200);
+  assert.equal((await app.call(`/api/sessions/${initial.sessionId}/model`, { requestId: crypto.randomUUID(), config, apiKey: secret })).status, 200);
+  const savedAuth = JSON.parse(await readFile(join(piDir, 'auth.json'), 'utf8'));
+  assert.deepEqual(savedAuth.deepseek, { type: 'api_key', key: secret }); assert.deepEqual(savedAuth.anthropic, oauth);
   await app.close();
   const restarted = await start(); const next = (await restarted.call('/api/sessions', {})).data;
   assert.equal(next.modelReady, true); assert.equal(next.modelCredentialSource, 'pi'); assert.deepEqual(next.modelConfig, config);
-  assert.equal((await restarted.call(`/api/sessions/${next.sessionId}/model`, { requestId: crypto.randomUUID(), config: { ...config, mode: 'demo' } })).status, 200);
+  assert.equal((await restarted.call(`/api/sessions/${next.sessionId}/model`, { requestId: crypto.randomUUID(), config, apiKey: '' })).status, 200);
+  assert.equal((await restarted.call(`/api/sessions/${next.sessionId}/model`, { requestId: crypto.randomUUID(), config: { ...config, mode: 'demo' }, apiKey: 'fake-unused-demo-key' })).status, 200);
+  assert.deepEqual(JSON.parse(await readFile(join(piDir, 'auth.json'), 'utf8')), savedAuth);
   await restarted.close();
   const demo = await start(); const final = (await demo.call('/api/sessions', {})).data;
   assert.equal(final.agentMode, 'demo'); assert.equal(final.modelConfig.timeoutMs, 15000);

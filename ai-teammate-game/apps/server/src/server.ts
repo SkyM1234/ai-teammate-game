@@ -114,7 +114,7 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
     const previous = sessions.get(id); if (previous) { await previous.stop(); await previous.journal?.flush(); }
     clearTimeout(saveTimers.get(id)); saveTimers.delete(id);
     const session = new GameSession(level, { ...options, id });
-    await session.restore(save, save.modelConfig ? modelPreferences.keyFor(save.modelConfig) : undefined); register(session);
+    await session.restore(save); register(session);
     for (const [client, subscribed] of eventClients) if (subscribed === previous) client.end();
     await persist(session); return session;
   }

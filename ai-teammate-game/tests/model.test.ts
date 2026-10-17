@@ -198,6 +198,8 @@ test('切换模型取消正在等待的网络请求，保留进度和委托；�
 test('配置 API、SSE 和落盘存档只包含非敏感模型设置', async t => {
   const { config } = await endpoint(t, res => completion(res, []));
   const savesDir = await mkdtemp(join(tmpdir(), 'last-oxygen-model-'));
+  const previous = process.env.PI_CODING_AGENT_DIR; process.env.PI_CODING_AGENT_DIR = join(savesDir, 'pi');
+  t.after(() => { if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR; else process.env.PI_CODING_AGENT_DIR = previous; });
   const app = createAppServer(level, { savesDir, delayMs: 0 });
   app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   const address = app.server.address(); assert.ok(address && typeof address !== 'string');

@@ -593,9 +593,10 @@ function updateModelFields(reset = false) {
   $('model-ids').replaceChildren(...provider.models.map(id => { const option = document.createElement('option'); option.value = id; return option; }));
   $<HTMLInputElement>('model-url').readOnly = provider.id !== 'compatible';
   const retained = view?.modelReady && view.agentMode === 'live' && view.modelConfig.provider === provider.id && view.modelConfig.baseUrl === $<HTMLInputElement>('model-url').value;
-  const piCredential = provider.ready && provider.credentialSource === 'pi' || (provider.id === 'compatible' && /^https:\/\/api\.deepseek\.com(?:\/|$)/.test($<HTMLInputElement>('model-url').value) && providers.some(p => p.id === 'deepseek' && p.ready && p.credentialSource === 'pi'));
+  const savedDefault = modelDefaults?.ready && modelDefaults.credentialSource === 'pi' && modelDefaults.config.provider === provider.id && modelDefaults.config.baseUrl === $<HTMLInputElement>('model-url').value;
+  const piCredential = savedDefault || provider.ready && provider.credentialSource === 'pi' || (provider.id === 'compatible' && /^https:\/\/api\.deepseek\.com(?:\/|$)/.test($<HTMLInputElement>('model-url').value) && providers.some(p => p.id === 'deepseek' && p.ready && p.credentialSource === 'pi'));
   const remembered = modelDefaults?.ready && modelDefaults.credentialSource === 'manual' && modelDefaults.config.provider === provider.id && modelDefaults.config.baseUrl === $<HTMLInputElement>('model-url').value;
-  $('model-key-hint').textContent = remembered || retained && view?.modelCredentialSource === 'manual' ? '本次服务已记住此接口的覆盖密钥，留空沿用；新局也会自动复用。' : piCredential ? '已找到本机 pi 凭据，留空自动复用。' : provider.ready ? '服务端已有此服务的环境凭据，可以留空。' : retained ? '当前会话已有可用凭据，可以留空。' : '暂无可用凭据，可在 pi 中登录或配置 API Key，也可在此填写密钥。';
+  $('model-key-hint').textContent = remembered || retained && view?.modelCredentialSource === 'manual' ? '已保存此接口的密钥，留空沿用；重启后自动复用。' : piCredential ? '已找到本机 pi 凭据，留空自动复用。' : provider.ready ? '服务端已有此服务的环境凭据，可以留空。' : retained ? '当前会话已有可用凭据，可以留空。' : '填写密钥后应用即可保存，以后自动复用；也可使用已有 pi 登录凭据。';
   $('live-settings').hidden = $<HTMLSelectElement>('model-mode').value !== 'live';
 }
 function fillModelFields(config: ModelConfig) {

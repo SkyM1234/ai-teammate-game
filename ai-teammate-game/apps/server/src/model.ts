@@ -62,7 +62,7 @@ export function validateModelConfig(input: unknown): ModelConfig {
 export async function liveModel(config: ModelConfig, apiKey?: string): Promise<ModelAdapter> {
   const compatibleProvider = config.provider === 'compatible' && new URL(config.baseUrl).origin === 'https://api.deepseek.com' ? 'deepseek' : undefined;
   const providerId = config.provider === 'compatible' ? 'game-compatible' : config.provider;
-  const credentials = modelCredentials(providerId, apiKey, compatibleProvider);
+  const credentials = modelCredentials(providerId, apiKey, compatibleProvider, config.provider === 'compatible' ? config.baseUrl : undefined);
   const models = config.provider === 'compatible' ? createModels({ credentials }) : builtinModels({ credentials });
   let model: Model<Api>;
   if (config.provider === 'compatible') {

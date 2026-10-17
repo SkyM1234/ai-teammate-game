@@ -4,7 +4,7 @@ import type { TestContext } from 'node:test';
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { modelCredentials } from '../apps/server/src/credentials.ts';
+import { modelCredentials, saveModelCredential } from '../apps/server/src/credentials.ts';
 import { defaultModelConfig, demoModel, liveModel, modelCatalog, toolStream, validateModelConfig } from '../apps/server/src/model.ts';
 import { builtinModels } from '../../pi-main/packages/ai/dist/providers/all.js';
 import { createModels, createProvider } from '../../pi-main/packages/ai/dist/index.js';
@@ -55,6 +55,27 @@ test('缺少或损坏凭据不会回显文件中的密钥或解析错误内容',
   await writeFile(path, `invalid-json-${keyOne}`, 'utf8');
   await assert.rejects(modelCredentials().read('deepseek'), error => error instanceof Error && /无法读取/.test(error.message) && !error.message.includes(keyOne));
   assert.equal((await modelCatalog())[0].ready, false);
+  const before = await readFile(path, 'utf8');
+  await assert.rejects(saveModelCredential(config, keyTwo), error => error instanceof Error && /无法保存/.test(error.message) && !error.message.includes(keyOne) && !error.message.includes(keyTwo));
+  assert.equal(await readFile(path, 'utf8'), before);
+});
+
+test('保存密钥自动创建 pi 用户目录，加锁合并并保留服务商原有配置', async t => {
+  const { dir } = await piUser(t);
+  const nested = join(dir, 'new-user', 'agent'); process.env.PI_CODING_AGENT_DIR = nested;
+  const path = join(nested, 'auth.json');
+  await Promise.all([saveModelCredential(config, keyOne), saveModelCredential({ ...config, provider: 'groq' }, keyTwo)]);
+  const storage = modelCredentials();
+  assert.equal((await storage.read('deepseek'))?.type, 'api_key');
+  assert.equal((await storage.read('groq'))?.type, 'api_key');
+  let auth = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(auth.deepseek.key, keyOne); assert.equal(auth.groq.key, keyTwo);
+  auth.deepseek.env = { CUSTOM_PROVIDER_OPTION: 'preserved' };
+  await writeFile(path, JSON.stringify(auth), 'utf8');
+  await saveModelCredential(config, keyTwo);
+  auth = JSON.parse(await readFile(path, 'utf8'));
+  assert.deepEqual(auth.deepseek, { type: 'api_key', key: keyTwo, env: { CUSTOM_PROVIDER_OPTION: 'preserved' } });
+  assert.equal(auth.groq.key, keyTwo);
 });
 
 test('恢复和新会话自动使用 pi 密钥，每次模型请求重新读取；页面与存档不含密钥', async t => {

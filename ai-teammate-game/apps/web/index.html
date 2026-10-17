@@ -128,12 +128,12 @@
         <label>模型服务<select id="model-provider"></select></label>
         <label>模型 ID<input id="model-id" list="model-ids" maxlength="160" autocomplete="off"><datalist id="model-ids"></datalist></label>
         <label>接口地址<input id="model-url" type="url" autocomplete="off" placeholder="https://example.com/v1"></label>
-        <label>API Key（可选覆盖）<input id="model-key" type="password" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="默认复用本机 pi 凭据，无需填写"></label>
+        <label>API Key（填写后保存）<input id="model-key" type="password" maxlength="4096" autocomplete="off" spellcheck="false" placeholder="留空复用已保存的凭据"></label>
         <p id="model-key-hint" class="subtle"></p>
         <details><summary>请求限制</summary><div class="model-limits"><label>超时（毫秒）<input id="model-timeout" type="number" min="1000" max="120000" step="1000"></label><label>输出上限（tokens）<input id="model-tokens" type="number" min="256" max="8192" step="1"></label></div></details>
         <p class="subtle">真实模型可能产生服务商费用。应用设置后，下一条指令将请求模型。</p>
       </div>
-      <p class="subtle">应用后记为新局默认，重启后仍保留模型选择。自动复用 pi 登录或 API Key；手动密钥在本次服务运行期间跨局复用，重启后需重新填写。恢复存档沿用该局模型。</p>
+      <p class="subtle">应用后保存模型选择和填写的 API Key，重启后自动复用。留空保留已有凭据。恢复存档沿用该局模型。</p>
       <p id="model-form-error" class="model-form-error" role="alert" hidden></p>
       <button id="model-apply" type="submit" class="primary">应用并设为新局默认</button>
     </form>
