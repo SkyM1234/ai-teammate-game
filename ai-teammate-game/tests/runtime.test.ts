@@ -352,7 +352,8 @@ test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停�
 });
 
 test('一个响应最多放行六个工具，超额调用跳过且不产生报告', async () => {
-  const { session } = scripted([[...Array.from({ length: 6 }, () => report), { name: 'report', arguments: { text: '超额报告' } }], [{ name: 'ask_player', arguments: { question: '批次结束' } }]]);
+  const custom = structuredClone(level); custom.rules.toolLimit = 6;
+  const { session } = scripted([[...Array.from({ length: 6 }, () => report), { name: 'report', arguments: { text: '超额报告' } }], [{ name: 'ask_player', arguments: { question: '批次结束' } }]], 0, custom);
   await session.command('探索'); await session.settled();
   assert.equal(session.metrics.skippedTools, 1);
   assert.equal(session.messages.filter(m => m.text === '状态报告').length, 6);

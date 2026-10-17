@@ -1,4 +1,5 @@
 import { Agent } from '../../../../pi-main/packages/agent/dist/index.js';
+import { isDeepStrictEqual } from 'node:util';
 import { Type } from '../../../../pi-main/packages/ai/dist/index.js';
 import type { AgentMessage, AgentTool } from '../../../../pi-main/packages/agent/dist/index.js';
 import { defaultConstraints, diffKnowledge, GameEngine } from '../../../packages/game-core/src/engine.ts';
@@ -31,7 +32,7 @@ export interface PendingAuthorization {
 type AuthorizationDecision = 'approve' | 'deny' | 'cancel' | 'stale';
 export interface Metrics { requests: number; executedTools: number; skippedTools: number; inputTokens: number; outputTokens: number; resultBytes: number; interrupts: number }
 export interface SessionView extends PlayerView {
-  sessionId: string; sessionInstanceId: string; eventId: number; task: Task | null; messages: ChatMessage[]; metrics: Metrics;
+  sessionId: string; sessionInstanceId: string; eventId: number; task: Task | null; messages: ChatMessage[]; metrics: Metrics; demoRescueAvailable: boolean;
   agentMode: ModelAdapter['mode']; agentLabel: string; running: boolean;
   modelConfig: ModelConfig; modelReady: boolean; modelError: string | null; modelCredentialSource: CredentialSource;
   pendingAuthorization: PendingAuthorization | null;
@@ -64,7 +65,7 @@ radar 是你与玩家共享的雷达回波：position 是信号位置，strength
 sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。
 任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到“继续原任务”时先核对整项委托与最新状态：若已完成，直接调用 finish_task；若未完成，只继续未完成的部分，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
-保持人类委托的目标与约束，允许一轮最多6个工具串行调用，基于已知对象生成有限批次。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
+保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动运行累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的模型请求次数。预算来自当前地图，点击继续任务后重新计算。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至可达的相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回开关的可达相邻格，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
 动作结果区分newDiscoveries、stateChanges、invalidatedFacts、knownRefs。只相信实际执行结果，不声称未执行动作完成。面向玩家的解释、报告、问题均使用简体中文；工具名称、参数字段及对象ID保持原样。简短报告事实，不输出内部思考。`;
 
@@ -90,6 +91,7 @@ export class GameSession {
   private requestExternalRevision = 0;
   private requestCount = 0;
   private runTU = 0;
+  private budgetExhausted = false;
   private roundStartTU = 0;
   private noProgressTurns = 0;
   private allowedCalls = new Set<string>();
@@ -133,7 +135,7 @@ export class GameSession {
           return first.content.filter(block => block.type === 'toolCall').every(call => group.some(message => message.role === 'toolResult' && message.toolCallId === call.id));
         }).slice(-5).flat();
         const messages: AgentMessage[] = [
-          { ...(base?.role === 'system' ? base : { role: 'system' as const, timestamp: Date.now() }), content: `${prompt}\n当前机器人知识与任务（仅可见事实）：\n${JSON.stringify({ ...this.engine.robotContext(), task: this.task, remainingTU: this.engine.level.rules.actionTULimit - this.runTU })}` },
+          { ...(base?.role === 'system' ? base : { role: 'system' as const, timestamp: Date.now() }), content: `${prompt}\n当前机器人知识与任务（仅可见事实）：\n${JSON.stringify({ ...this.engine.robotContext(), task: this.task, remainingTU: this.engine.level.rules.actionTULimit - this.runTU, remainingRequests: Math.max(0, this.engine.level.rules.requestLimit - this.requestCount) })}` },
           ...this.transcript,
         ];
         const prepared = { ...context, messages };
@@ -207,6 +209,7 @@ export class GameSession {
         }
         if (this.control === 'wait_player' || this.control === 'task_done' || this.control === 'game_over') return { action: 'end' };
         if (this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit || this.noProgressTurns >= 2) {
+          this.budgetExhausted = this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit;
           this.pause('本次自动运行已到预算或没有取得进展，目标保留。可点击继续。');
           return { action: 'end' };
         }
@@ -298,10 +301,15 @@ export class GameSession {
 
   private executionConstraints(): Constraints {
     const constraints = this.task?.constraints ?? defaultConstraints();
-    return { ...constraints, authorizedHazardIds: [...new Set([...constraints.authorizedHazardIds, ...this.toolHazards])] };
+    const demoHazards = this.isDemoRescue() ? Object.values(this.engine.state.knowledge.entities).filter(e => e.type === 'hazard').map(e => e.id) : [];
+    return { ...constraints, authorizedHazardIds: [...new Set([...constraints.authorizedHazardIds, ...this.toolHazards, ...demoHazards])] };
   }
 
+  private isDemoRescue(): boolean { return this.adapter.mode === 'demo' && this.task?.interpretation === 'demo' && this.task.goal?.kind === 'rescue'; }
+
   private authorizationFor(name: string, args: Record<string, unknown>): Pick<PendingAuthorization, 'kind' | 'description' | 'consequence' | 'hazardIds'> | null {
+    // The explicit local walkthrough delegates its configured steps; live tasks keep button authorization.
+    if (this.isDemoRescue()) return null;
     if (name === 'interact') {
       const entity = typeof args.targetId === 'string' ? this.engine.state.knowledge.entities[args.targetId] : undefined;
       const materials = this.engine.state.robot.inventory.filter(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair').length;
@@ -425,7 +433,7 @@ export class GameSession {
   }
 
   private checkBudget(action: Action): boolean {
-    if (this.runTU + this.engine.actionCost(action).tu > this.engine.level.rules.actionTULimit) { this.pause('行动预算不足以支付下一完整动作，未开始执行。'); this.control = 'wait_player'; return false; }
+    if (this.runTU + this.engine.actionCost(action).tu > this.engine.level.rules.actionTULimit) { this.budgetExhausted = true; this.pause('行动预算不足以支付下一完整动作，未开始执行。'); this.control = 'wait_player'; return false; }
     return true;
   }
 
@@ -555,6 +563,19 @@ export class GameSession {
     if (!task) return [{ name: 'ask_player', arguments: { question: '请给我一个目标。' } }];
     if (!task.goal || !task.demoSupported) return [{ name: 'ask_player', arguments: { question: demoHelp } }];
     const goal = task.goal;
+    if (goal.kind === 'rescue') {
+      const actions = this.engine.level.verification?.actions;
+      if (!actions?.length) return [{ name: 'ask_player', arguments: { question: '本地图尚未配置规则通关路线，请先在地图 JSON 中配置 verification.actions。' } }];
+      const ledger = this.engine.state.ledger;
+      if (ledger.length > actions.length || ledger.some((entry, index) => !isDeepStrictEqual(entry.action, actions[index]))) return [{ name: 'ask_player', arguments: { question: '当前进度已偏离预设通关路线，请新建本地图对局后启动规则通关，或继续手动指挥。' } }];
+      return actions.slice(ledger.length, ledger.length + this.engine.level.rules.toolLimit).map(action => {
+        const { kind, ...args } = action;
+        if (kind === 'move') return { name: 'move_to', arguments: args };
+        if (kind === 'scan') return { name: 'scan', arguments: args };
+        if (kind === 'circuit') return { name: 'set_circuit', arguments: args };
+        return { name: 'interact', arguments: { operation: kind, ...args } };
+      });
+    }
     const go = (target: Position): ToolIntent => ({ name: 'move_to', arguments: { target } });
     const interact = (operation: string, targetId?: string, itemId?: string): ToolIntent => ({ name: 'interact', arguments: { operation, ...(targetId ? { targetId } : {}), ...(itemId ? { itemId } : {}) } });
     if (this.taskSatisfied()) return [{ name: 'finish_task', arguments: { reason: '本次目标已完成。' } }];
@@ -648,10 +669,22 @@ export class GameSession {
     await this.adapter.checkReady?.();
     if (this.adapter.ready === false) { this.modelError = '未找到可用的模型凭据，请检查 pi 登录、API Key 或模型设置。'; this.pause(this.modelError); this.emit(); return; }
     this.modelError = null;
-    this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.control = 'continue'; this.running = true;
+    this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.budgetExhausted = false; this.control = 'continue'; this.running = true;
     this.record('自动运行开始', { text, task: this.task, stateRevision: this.engine.state.stateRevision });
     if (this.task) { this.task.status = 'active'; this.task.question = null; this.task.waitReason = undefined; }
-    this.currentPromise = this.agent.prompt(text).catch(error => {
+    const generation = this.commandRevision;
+    this.currentPromise = (async () => {
+      let message = text;
+      while (true) {
+        const before = this.engine.state.ledger.length;
+        await this.agent.prompt(message);
+        if (!this.isDemoRescue() || !this.budgetExhausted || this.engine.terminal || generation !== this.commandRevision || this.task?.status === 'waiting' || this.engine.state.ledger.length === before) break;
+        this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.budgetExhausted = false; this.control = 'continue';
+        if (this.task) this.task.status = 'active';
+        this.say('system', '规则通关按地图预算继续下一段，可随时停止行动。');
+        message = '继续本地图规则通关路线。';
+      }
+    })().catch(error => {
       this.modelError = modelErrorMessage(error); this.pause(this.modelError);
       this.record('自动运行异常', { error: this.modelError }, true);
     }).finally(() => {
@@ -728,7 +761,7 @@ export class GameSession {
     this.emit();
   }
 
-  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
+  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, demoRescueAvailable: !!this.engine.level.verification?.actions.length, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
   save(): SessionSave { return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
   async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');

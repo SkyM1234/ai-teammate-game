@@ -32,7 +32,7 @@ export interface Level {
   id: string; version: number; name: string; width: number; height: number; tiles: string[];
   humanStart: Position; robotStart: Position; exit: Position; rules: Rules;
   rooms: Room[]; entities: EntityDefinition[];
-  verification?: { actions: Action[] };
+  verification?: { actions: Action[]; alternatives?: Record<string, Action[]> };
 }
 export interface ObservedEntity {
   id: string; type: EntityType; name: string; position: Position;

@@ -36,5 +36,7 @@ export function validateLevel(value: unknown): Level {
   }
   for (const entity of level.entities) if (entity.containerId && !level.entities.some(container => container.id === entity.containerId && container.type === 'cabinet')) throw new Error('物品容器引用非法');
   if (level.verification !== undefined && (!level.verification || !Array.isArray(level.verification.actions))) throw new Error('验证路线必须包含 actions 数组');
+  const alternatives = level.verification?.alternatives;
+  if (alternatives !== undefined && (!alternatives || typeof alternatives !== 'object' || Array.isArray(alternatives) || Object.entries(alternatives).some(([id, actions]) => !id.trim() || id === 'main' || !Array.isArray(actions)))) throw new Error('备用验证路线必须是名称到动作数组的映射，且不能使用 main');
   return structuredClone(level);
 }

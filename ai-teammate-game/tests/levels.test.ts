@@ -3,22 +3,25 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import { loadLevels } from '../apps/server/src/levels.ts';
 import { createAppServer } from '../apps/server/src/server.ts';
 import { GameSession } from '../apps/server/src/session.ts';
+import { demoModel, toolStream } from '../apps/server/src/model.ts';
+import type { ToolIntent } from '../apps/server/src/model.ts';
 import type { SessionSave, SessionView } from '../apps/server/src/session.ts';
 import { parseDemoCommand } from '../apps/server/src/demo-task.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import type { Action, Level, PlayerView } from '../packages/game-core/src/types.ts';
-import { verifyLevelRoute } from '../packages/game-core/src/verify-level.ts';
+import { levelRoutes, verifyLevelRoute } from '../packages/game-core/src/verify-level.ts';
 
 const source = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
-const template = validateLevel(JSON.parse(await readFile(new URL('../docs/level-template.json', import.meta.url), 'utf8')));
+const template = validateLevel(JSON.parse(await readFile(new URL('../docs/maps/template.json', import.meta.url), 'utf8')));
 function map(id: string, width: number, height: number): Level {
   return validateLevel({
-    ...source, id, version: 1, name: `测试地图 ${id}`, width, height,
+    ...source, verification: undefined, id, version: 1, name: `测试地图 ${id}`, width, height,
     tiles: Array.from({ length: height }, (_, y) => y === 0 || y === height - 1 ? '#'.repeat(width) : `#${'.'.repeat(width - 2)}#`),
     humanStart: { x: 1, y: 1 }, robotStart: { x: 2, y: 1 }, exit: { x: width - 2, y: height - 2 },
     rooms: [{ name: '北侧动力舱', bounds: { minX: 1, minY: 1, maxX: width - 2, maxY: height - 2 } }],
@@ -147,4 +150,159 @@ test('JSON 内的验证路线使用真实规则完成救援，并拒绝失败或
   const session = new GameSession(level, { delayMs: 0 }); assert.ok(!JSON.stringify(session.view()).includes('verification'));
   level.verification = { actions: [] }; assert.throws(() => verifyLevelRoute(level), /未完成/);
   level.verification = { actions: [{ kind: 'move', target: { x: 99, y: 1 } }] }; assert.throws(() => verifyLevelRoute(level), /第 1 步/);
+});
+
+test('不同地图分别执行 TU 预算，模型收到对应限制和剩余预算', async () => {
+  for (const budget of [2, 5]) {
+    const level = map(`budget-${budget}`, 16, 6); level.entities = [];
+    level.rules.actionTULimit = budget; level.rules.requestLimit = budget;
+    const session = new GameSession(level, { delayMs: 0, adapter: {
+      mode: 'test', label: '地图预算测试', model: demoModel,
+      streamFn: (_model, context) => {
+        const system = context.messages.find(message => message.role === 'system');
+        assert.ok(system && typeof system.content === 'string');
+        const knowledge = JSON.parse(system.content.split('当前机器人知识与任务（仅可见事实）：\n')[1]);
+        assert.equal(knowledge.rules.actionTULimit, budget);
+        assert.equal(knowledge.rules.requestLimit, budget);
+        assert.equal(knowledge.remainingTU, budget);
+        assert.equal(knowledge.remainingRequests, budget - 1);
+        assert.ok(system.content.includes('rules.toolLimit'));
+        return toolStream([{ name: 'move_to', arguments: { target: { x: 10, y: 1 } } }]);
+      },
+    } });
+    await session.command('前往 (10,1)'); await session.settled();
+    assert.equal(session.engine.state.elapsedTU, budget);
+    assert.deepEqual(session.engine.state.robot.position, { x: 2 + budget, y: 1 });
+    assert.equal(session.task?.status, 'paused');
+  }
+});
+
+test('地图分别限制模型请求和每轮工具数，继续任务重置运行预算', async () => {
+  for (const [requests, tools] of [[1, 2], [3, 8]]) {
+    const level = map(`requests-${requests}-tools-${tools}`, 16, 6); level.entities = [];
+    level.rules.requestLimit = requests; level.rules.toolLimit = tools; level.rules.actionTULimit = 24;
+    const contexts: { rules: Level['rules']; remainingTU: number; remainingRequests: number }[] = [];
+    const session = new GameSession(level, { delayMs: 0, adapter: {
+      mode: 'test', label: '模型与工具预算测试', model: demoModel,
+      streamFn: (_model, context) => {
+        const system = context.messages.find(message => message.role === 'system');
+        assert.ok(system && typeof system.content === 'string');
+        contexts.push(JSON.parse(system.content.split('当前机器人知识与任务（仅可见事实）：\n')[1]));
+        const calls: ToolIntent[] = [
+          { name: 'move_to', arguments: { target: { x: session.engine.state.robot.position.x + 1, y: 1 } } },
+          ...Array.from({ length: tools - 1 }, () => ({ name: 'report', arguments: { text: '预算内报告' } })),
+          { name: 'report', arguments: { text: '超出预算报告' } },
+        ];
+        return toolStream(calls);
+      },
+    } });
+    await session.command('持续向右探索'); await session.settled();
+    assert.equal(session.metrics.requests, requests);
+    assert.equal(session.metrics.executedTools, requests * tools);
+    assert.equal(session.metrics.skippedTools, requests);
+    assert.equal(session.task?.status, 'paused');
+    assert.ok(!session.messages.some(message => message.text === '超出预算报告'));
+    assert.deepEqual(contexts.map(context => context.remainingRequests), Array.from({ length: requests }, (_, i) => requests - i - 1));
+    assert.deepEqual(contexts.map(context => context.remainingTU), Array.from({ length: requests }, (_, i) => 24 - i));
+    for (const context of contexts) assert.equal(context.rules.toolLimit, tools);
+    await session.continue(); await session.settled();
+    assert.equal(session.metrics.requests, requests * 2);
+    assert.equal(contexts[requests].remainingRequests, requests - 1);
+    assert.equal(contexts[requests].remainingTU, 24);
+  }
+});
+
+test('所有正式地图的主路线、备用路线和生成账本均可完成救援并一致回放', async () => {
+  const levels = await loadLevels(fileURLToPath(new URL('../content/levels/', import.meta.url)));
+  const report = JSON.parse(await readFile(new URL('../docs/maps/route-ledgers.json', import.meta.url), 'utf8'));
+  assert.equal(report.levels.length, levels.length);
+  for (const level of levels) {
+    assert.ok(level.verification?.actions.length, `${level.id} 缺少主路线`);
+    const summary = report.levels.find((entry: any) => entry.levelId === level.id);
+    assert.equal(summary.levelVersion, level.version);
+    assert.deepEqual(summary.rules, level.rules);
+    for (const id of Object.keys(levelRoutes(level))) {
+      const engine = verifyLevelRoute(level, id)!;
+      const generated = summary.routes.find((entry: any) => entry.id === id);
+      assert.ok(generated, `${level.id}/${id} 缺少账本`);
+      assert.equal(generated.elapsedTU, engine.state.elapsedTU);
+      assert.equal(generated.remainingOxygen, engine.state.human.oxygen);
+      assert.equal(generated.remainingBattery, engine.state.robot.battery);
+      assert.deepEqual(generated.actions.map((entry: any) => entry.action), levelRoutes(level)[id]);
+      const replay = new GameSession(level, { delayMs: 0 });
+      for (const entry of generated.actions) assert.equal(replay.engine.replayEntry(entry).accepted, true);
+      assert.equal(replay.engine.state.phase, 'success');
+      assert.deepEqual(replay.engine.state.robot, engine.state.robot);
+      assert.deepEqual(replay.engine.state.human, engine.state.human);
+    }
+    assert.ok(!JSON.stringify(new GameSession(level).engine.robotContext()).includes('verification'));
+  }
+  const invalid = structuredClone(template);
+  invalid.verification!.alternatives = { main: [] };
+  assert.throws(() => validateLevel(invalid), /备用验证路线/);
+  assert.throws(() => verifyLevelRoute(template, 'missing'), /没有验证路线/);
+});
+
+test('规则通关按各地图预算自动分段完成救援，无需外部模型或逐步授权', async () => {
+  const levels = await loadLevels(fileURLToPath(new URL('../content/levels/', import.meta.url)));
+  const limitedRequests = structuredClone(template); limitedRequests.rules.requestLimit = 1;
+  for (const level of [...levels, limitedRequests]) {
+    const session = new GameSession(level, { delayMs: 0 });
+    assert.equal(session.view().demoRescueAvailable, true);
+    await session.command('规则通关'); await session.settled();
+    assert.equal(session.engine.state.phase, 'success', level.id);
+    assert.equal(session.task?.status, 'completed');
+    assert.equal(session.pendingAuthorization, null);
+    assert.equal(session.modelError, null);
+    assert.deepEqual(session.engine.state.ledger.map(entry => entry.action), level.verification!.actions);
+    assert.ok(session.engine.state.elapsedTU > level.rules.actionTULimit);
+    assert.ok(session.messages.some(message => message.text.includes('继续下一段')));
+  }
+});
+
+test('规则通关可停止、保存恢复并接续，偏离路线时保持世界状态等待玩家', async () => {
+  const session = new GameSession(source, { delayMs: 1 });
+  let stopping: Promise<void> | undefined;
+  session.listeners.add(view => { if (view.elapsedTU >= 10 && !stopping) stopping = session.stop(); });
+  await session.command('规则通关'); await session.settled(); await stopping;
+  const count = session.engine.state.ledger.length;
+  assert.ok(count > 0 && count < source.verification!.actions.length);
+  assert.equal(session.engine.state.phase, 'paused');
+  assert.equal(session.running, false);
+  const restored = new GameSession(source, { id: session.id, delayMs: 0 }); await restored.restore(session.save());
+  await restored.continue(); await restored.settled();
+  assert.equal(restored.engine.state.phase, 'success');
+  assert.deepEqual(restored.engine.state.ledger.map(entry => entry.action), source.verification!.actions);
+  const deviated = new GameSession(source, { delayMs: 0 });
+  await deviated.manual({ kind: 'move', target: { x: 2, y: 10 } }, 'manual');
+  const before = deviated.engine.snapshot();
+  await deviated.command('规则通关'); await deviated.settled();
+  assert.match(deviated.task?.question ?? '', /偏离.*新建/);
+  assert.deepEqual(deviated.engine.state.robot, before.robot);
+  assert.deepEqual(deviated.engine.state.ledger, before.ledger);
+});
+
+test('缺少路线或单个动作超过预算时规则通关不会无限续行，真实模型不读取预设步骤', async () => {
+  const noRoute = map('no-route', 7, 5);
+  const missing = new GameSession(noRoute, { delayMs: 0 });
+  await missing.command('规则通关'); await missing.settled();
+  assert.match(missing.task?.question ?? '', /尚未配置/);
+  assert.equal(missing.engine.state.elapsedTU, 0);
+  const tooSmall = structuredClone(template); tooSmall.rules.actionTULimit = 1;
+  const blocked = new GameSession(tooSmall, { delayMs: 0 });
+  await blocked.command('规则通关'); await blocked.settled();
+  assert.equal(blocked.engine.state.ledger.length, 1);
+  assert.equal(blocked.task?.status, 'paused');
+  assert.ok(blocked.metrics.requests <= 3);
+  const live = new GameSession(source, { delayMs: 0, adapter: {
+    mode: 'live', label: '模拟真实模型', model: demoModel,
+    streamFn: (_model, context) => {
+      assert.ok(!JSON.stringify(context).includes('verification'));
+      return toolStream([{ name: 'ask_player', arguments: { question: '模型自行规划。' } }]);
+    },
+  } });
+  await live.command('规则通关'); await live.settled();
+  assert.equal(live.task?.interpretation, 'model');
+  assert.equal(live.task?.goal, undefined);
+  assert.equal(live.engine.state.ledger.length, 0);
 });

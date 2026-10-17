@@ -213,6 +213,8 @@ function render() {
   $<HTMLButtonElement>('continue').disabled = !!frames || terminal || view.running || !task || task.status === 'completed';
   $<HTMLButtonElement>('stop').disabled = !!frames || terminal || !view.running;
   $<HTMLButtonElement>('send').disabled = !!frames || terminal || sending;
+  $('demo-rescue-controls').hidden = view.agentMode !== 'demo' || !view.demoRescueAvailable;
+  $<HTMLButtonElement>('demo-rescue').disabled = !!frames || terminal || sending || view.running;
   renderMessages();
   const m = view.metrics; $('metrics').textContent = `模型请求 ${m.requests} / 工具 ${m.executedTools} / 跳过 ${m.skippedTools} / 中断 ${m.interrupts}\nTokens ${m.inputTokens} in · ${m.outputTokens} out / 结果 ${(m.resultBytes / 1024).toFixed(1)} KB`;
   $('ledger').replaceChildren();
@@ -440,6 +442,7 @@ async function command(text: string) { if (!text.trim() || frames) return; sendi
 $('chat-form').onsubmit = event => { event.preventDefault(); const input = $<HTMLTextAreaElement>('command'); const text = input.value; input.value = ''; void command(text); };
 $('command').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $<HTMLFormElement>('chat-form').requestSubmit(); } };
 $('go-selected').onclick = () => { if (selected) { openPanel('comms'); void command(`前往 (${selected.x},${selected.y})`); } };
+$('demo-rescue').onclick = () => { openPanel('comms'); void command('规则通关'); };
 $('toggle-marker').onclick = () => setMarkerEditor($('marker-form').hidden === true);
 $('cancel-marker').onclick = () => { setMarkerEditor(false); $('toggle-marker').focus(); };
 $('clear-selection').onclick = () => { selected = null; renderSelection(); drawMap(); drawer.close(); canvas.focus(); };

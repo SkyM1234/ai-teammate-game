@@ -1,0 +1,5930 @@
+{
+  "levels": [
+    {
+      "levelId": "station-01",
+      "levelVersion": 2,
+      "rules": {
+        "oxygen": 120,
+        "oxygenMax": 180,
+        "oxygenRate": 2,
+        "repairedOxygenRate": 1,
+        "battery": 120,
+        "batteryMax": 120,
+        "batteryRefill": 30,
+        "oxygenRefill": 40,
+        "inventorySlots": 2,
+        "sensorRadius": 1,
+        "radarRadius": 5,
+        "leakCost": 6,
+        "moveLimit": 12,
+        "toolLimit": 8,
+        "requestLimit": 12,
+        "actionTULimit": 16,
+        "actionCosts": {
+          "move": {
+            "tu": 1,
+            "battery": 1
+          },
+          "carry_move": {
+            "tu": 1,
+            "battery": 2
+          },
+          "scan": {
+            "tu": 1,
+            "battery": 2
+          },
+          "open": {
+            "tu": 1,
+            "battery": 1
+          },
+          "collect": {
+            "tu": 1,
+            "battery": 1
+          },
+          "drop_item": {
+            "tu": 1,
+            "battery": 1
+          },
+          "use_battery": {
+            "tu": 1,
+            "battery": 1
+          },
+          "use_oxygen": {
+            "tu": 2,
+            "battery": 2
+          },
+          "repair_human": {
+            "tu": 6,
+            "battery": 4,
+            "materials": 1
+          },
+          "repair_airlock": {
+            "tu": 4,
+            "battery": 4,
+            "materials": 1
+          },
+          "clear": {
+            "tu": 3,
+            "battery": 4
+          },
+          "pickup_human": {
+            "tu": 1,
+            "battery": 2
+          },
+          "drop_human": {
+            "tu": 1,
+            "battery": 1
+          },
+          "circuit": {
+            "tu": 1,
+            "battery": 0
+          },
+          "extract": {
+            "tu": 2,
+            "battery": 2
+          }
+        }
+      },
+      "routes": [
+        {
+          "id": "main",
+          "elapsedTU": 58,
+          "remainingOxygen": 53,
+          "remainingBattery": 28,
+          "actions": [
+            {
+              "sequence": 1,
+              "actionId": "verify:0",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "移动至 (2, 8)",
+              "position": {
+                "x": 2,
+                "y": 8
+              },
+              "oxygen": 118,
+              "battery": 119,
+              "elapsedTU": 1,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 2,
+              "actionId": "verify:1",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "取得 维修材料",
+              "position": {
+                "x": 2,
+                "y": 8
+              },
+              "oxygen": 116,
+              "battery": 118,
+              "elapsedTU": 2,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 3,
+              "actionId": "verify:2",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "移动至 (2, 9)",
+              "position": {
+                "x": 2,
+                "y": 9
+              },
+              "oxygen": 114,
+              "battery": 117,
+              "elapsedTU": 3,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 4,
+              "actionId": "verify:3",
+              "action": {
+                "kind": "repair",
+                "targetId": "human"
+              },
+              "cost": {
+                "tu": 6,
+                "battery": 4,
+                "oxygen": 12
+              },
+              "message": "修补玩家供氧管",
+              "position": {
+                "x": 2,
+                "y": 9
+              },
+              "oxygen": 102,
+              "battery": 113,
+              "elapsedTU": 9,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 5,
+              "actionId": "verify:4",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 1,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (1, 9)",
+              "position": {
+                "x": 1,
+                "y": 9
+              },
+              "oxygen": 101,
+              "battery": 112,
+              "elapsedTU": 10,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 6,
+              "actionId": "verify:5",
+              "action": {
+                "kind": "pickup_human"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "抱起玩家，切换负重模式",
+              "position": {
+                "x": 1,
+                "y": 9
+              },
+              "oxygen": 100,
+              "battery": 110,
+              "elapsedTU": 11,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 7,
+              "actionId": "verify:6",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (2, 9) · 搬运中",
+              "position": {
+                "x": 2,
+                "y": 9
+              },
+              "oxygen": 99,
+              "battery": 108,
+              "elapsedTU": 12,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 8,
+              "actionId": "verify:7",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 9) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 9
+              },
+              "oxygen": 98,
+              "battery": 106,
+              "elapsedTU": 13,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 9,
+              "actionId": "verify:8",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 9) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 9
+              },
+              "oxygen": 97,
+              "battery": 104,
+              "elapsedTU": 14,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 10,
+              "actionId": "verify:9",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 8) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 8
+              },
+              "oxygen": 96,
+              "battery": 102,
+              "elapsedTU": 15,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 11,
+              "actionId": "verify:10",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 7) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 7
+              },
+              "oxygen": 95,
+              "battery": 100,
+              "elapsedTU": 16,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 12,
+              "actionId": "verify:11",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 6) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 6
+              },
+              "oxygen": 94,
+              "battery": 98,
+              "elapsedTU": 17,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 13,
+              "actionId": "verify:12",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 5) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 5
+              },
+              "oxygen": 93,
+              "battery": 96,
+              "elapsedTU": 18,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 14,
+              "actionId": "verify:13",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 4) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 4
+              },
+              "oxygen": 92,
+              "battery": 94,
+              "elapsedTU": 19,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 15,
+              "actionId": "verify:14",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 3) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 3
+              },
+              "oxygen": 91,
+              "battery": 92,
+              "elapsedTU": 20,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 16,
+              "actionId": "verify:15",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 3) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 3
+              },
+              "oxygen": 90,
+              "battery": 90,
+              "elapsedTU": 21,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 17,
+              "actionId": "verify:16",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (2, 3) · 搬运中",
+              "position": {
+                "x": 2,
+                "y": 3
+              },
+              "oxygen": 89,
+              "battery": 88,
+              "elapsedTU": 22,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 18,
+              "actionId": "verify:17",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-02"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "取得 维修材料",
+              "position": {
+                "x": 2,
+                "y": 3
+              },
+              "oxygen": 88,
+              "battery": 87,
+              "elapsedTU": 23,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 19,
+              "actionId": "verify:18",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 3) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 3
+              },
+              "oxygen": 87,
+              "battery": 85,
+              "elapsedTU": 24,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 20,
+              "actionId": "verify:19",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 3) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 3
+              },
+              "oxygen": 86,
+              "battery": 83,
+              "elapsedTU": 25,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 21,
+              "actionId": "verify:20",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 2) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 2
+              },
+              "oxygen": 85,
+              "battery": 81,
+              "elapsedTU": 26,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 22,
+              "actionId": "verify:21",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 5,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (5, 2) · 搬运中",
+              "position": {
+                "x": 5,
+                "y": 2
+              },
+              "oxygen": 84,
+              "battery": 79,
+              "elapsedTU": 27,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 23,
+              "actionId": "verify:22",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 2) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 2
+              },
+              "oxygen": 83,
+              "battery": 77,
+              "elapsedTU": 28,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 24,
+              "actionId": "verify:23",
+              "action": {
+                "kind": "circuit",
+                "targetId": "sw-01",
+                "on": true
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 0,
+                "oxygen": 1
+              },
+              "message": "开启辅助电路",
+              "position": {
+                "x": 6,
+                "y": 2
+              },
+              "oxygen": 82,
+              "battery": 77,
+              "elapsedTU": 29,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              },
+              "targetPosition": {
+                "x": 6,
+                "y": 1
+              }
+            },
+            {
+              "sequence": 25,
+              "actionId": "verify:24",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 3) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 81,
+              "battery": 75,
+              "elapsedTU": 30,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 26,
+              "actionId": "verify:25",
+              "action": {
+                "kind": "open",
+                "targetId": "d-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "开启 辅助电动门",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 80,
+              "battery": 74,
+              "elapsedTU": 31,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 27,
+              "actionId": "verify:26",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 2) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 2
+              },
+              "oxygen": 79,
+              "battery": 72,
+              "elapsedTU": 32,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 28,
+              "actionId": "verify:27",
+              "action": {
+                "kind": "circuit",
+                "targetId": "sw-01",
+                "on": false
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 0,
+                "oxygen": 1
+              },
+              "message": "关闭辅助电路",
+              "position": {
+                "x": 6,
+                "y": 2
+              },
+              "oxygen": 78,
+              "battery": 72,
+              "elapsedTU": 33,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              },
+              "targetPosition": {
+                "x": 6,
+                "y": 1
+              }
+            },
+            {
+              "sequence": 29,
+              "actionId": "verify:28",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 3) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 77,
+              "battery": 70,
+              "elapsedTU": 34,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 30,
+              "actionId": "verify:29",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 7,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (7, 3) · 搬运中",
+              "position": {
+                "x": 7,
+                "y": 3
+              },
+              "oxygen": 76,
+              "battery": 68,
+              "elapsedTU": 35,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 31,
+              "actionId": "verify:30",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 3) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 3
+              },
+              "oxygen": 75,
+              "battery": 66,
+              "elapsedTU": 36,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 32,
+              "actionId": "verify:31",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 4) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 4
+              },
+              "oxygen": 74,
+              "battery": 64,
+              "elapsedTU": 37,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 33,
+              "actionId": "verify:32",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 5) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 5
+              },
+              "oxygen": 73,
+              "battery": 62,
+              "elapsedTU": 38,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 34,
+              "actionId": "verify:33",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 6) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 6
+              },
+              "oxygen": 72,
+              "battery": 60,
+              "elapsedTU": 39,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 35,
+              "actionId": "verify:34",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 7) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 7
+              },
+              "oxygen": 71,
+              "battery": 58,
+              "elapsedTU": 40,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 36,
+              "actionId": "verify:35",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 8) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 8
+              },
+              "oxygen": 70,
+              "battery": 56,
+              "elapsedTU": 41,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 37,
+              "actionId": "verify:36",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 9) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 9
+              },
+              "oxygen": 69,
+              "battery": 54,
+              "elapsedTU": 42,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 38,
+              "actionId": "verify:37",
+              "action": {
+                "kind": "repair",
+                "targetId": "a-01"
+              },
+              "cost": {
+                "tu": 4,
+                "battery": 4,
+                "oxygen": 4
+              },
+              "message": "修复气闸控制器",
+              "position": {
+                "x": 8,
+                "y": 9
+              },
+              "oxygen": 65,
+              "battery": 50,
+              "elapsedTU": 46,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 39,
+              "actionId": "verify:38",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 8) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 8
+              },
+              "oxygen": 64,
+              "battery": 48,
+              "elapsedTU": 47,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 40,
+              "actionId": "verify:39",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 7) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 7
+              },
+              "oxygen": 63,
+              "battery": 46,
+              "elapsedTU": 48,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 41,
+              "actionId": "verify:40",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 6) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 6
+              },
+              "oxygen": 62,
+              "battery": 44,
+              "elapsedTU": 49,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 42,
+              "actionId": "verify:41",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 5) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 5
+              },
+              "oxygen": 61,
+              "battery": 42,
+              "elapsedTU": 50,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 43,
+              "actionId": "verify:42",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 4) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 4
+              },
+              "oxygen": 60,
+              "battery": 40,
+              "elapsedTU": 51,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 44,
+              "actionId": "verify:43",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 3) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 3
+              },
+              "oxygen": 59,
+              "battery": 38,
+              "elapsedTU": 52,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 45,
+              "actionId": "verify:44",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 2) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 2
+              },
+              "oxygen": 58,
+              "battery": 36,
+              "elapsedTU": 53,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 46,
+              "actionId": "verify:45",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 1) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 1
+              },
+              "oxygen": 57,
+              "battery": 34,
+              "elapsedTU": 54,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 47,
+              "actionId": "verify:46",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 9,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (9, 1) · 搬运中",
+              "position": {
+                "x": 9,
+                "y": 1
+              },
+              "oxygen": 56,
+              "battery": 32,
+              "elapsedTU": 55,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 48,
+              "actionId": "verify:47",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 10,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (10, 1) · 搬运中",
+              "position": {
+                "x": 10,
+                "y": 1
+              },
+              "oxygen": 55,
+              "battery": 30,
+              "elapsedTU": 56,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 49,
+              "actionId": "verify:48",
+              "action": {
+                "kind": "extract"
+              },
+              "cost": {
+                "tu": 2,
+                "battery": 2,
+                "oxygen": 2
+              },
+              "message": "气闸接管救援，撤离成功",
+              "position": {
+                "x": 10,
+                "y": 1
+              },
+              "oxygen": 53,
+              "battery": 28,
+              "elapsedTU": 58,
+              "phase": "success",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            }
+          ]
+        },
+        {
+          "id": "lower",
+          "elapsedTU": 56,
+          "remainingOxygen": 55,
+          "remainingBattery": 29,
+          "actions": [
+            {
+              "sequence": 1,
+              "actionId": "verify:0",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "移动至 (2, 8)",
+              "position": {
+                "x": 2,
+                "y": 8
+              },
+              "oxygen": 118,
+              "battery": 119,
+              "elapsedTU": 1,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 2,
+              "actionId": "verify:1",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "取得 维修材料",
+              "position": {
+                "x": 2,
+                "y": 8
+              },
+              "oxygen": 116,
+              "battery": 118,
+              "elapsedTU": 2,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 3,
+              "actionId": "verify:2",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "移动至 (2, 9)",
+              "position": {
+                "x": 2,
+                "y": 9
+              },
+              "oxygen": 114,
+              "battery": 117,
+              "elapsedTU": 3,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 4,
+              "actionId": "verify:3",
+              "action": {
+                "kind": "repair",
+                "targetId": "human"
+              },
+              "cost": {
+                "tu": 6,
+                "battery": 4,
+                "oxygen": 12
+              },
+              "message": "修补玩家供氧管",
+              "position": {
+                "x": 2,
+                "y": 9
+              },
+              "oxygen": 102,
+              "battery": 113,
+              "elapsedTU": 9,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 5,
+              "actionId": "verify:4",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 1,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (1, 9)",
+              "position": {
+                "x": 1,
+                "y": 9
+              },
+              "oxygen": 101,
+              "battery": 112,
+              "elapsedTU": 10,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 6,
+              "actionId": "verify:5",
+              "action": {
+                "kind": "pickup_human"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "抱起玩家，切换负重模式",
+              "position": {
+                "x": 1,
+                "y": 9
+              },
+              "oxygen": 100,
+              "battery": 110,
+              "elapsedTU": 11,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 7,
+              "actionId": "verify:6",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (2, 9) · 搬运中",
+              "position": {
+                "x": 2,
+                "y": 9
+              },
+              "oxygen": 99,
+              "battery": 108,
+              "elapsedTU": 12,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 8,
+              "actionId": "verify:7",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 9) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 9
+              },
+              "oxygen": 98,
+              "battery": 106,
+              "elapsedTU": 13,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 9,
+              "actionId": "verify:8",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 9) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 9
+              },
+              "oxygen": 97,
+              "battery": 104,
+              "elapsedTU": 14,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 10,
+              "actionId": "verify:9",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 8) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 8
+              },
+              "oxygen": 96,
+              "battery": 102,
+              "elapsedTU": 15,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 11,
+              "actionId": "verify:10",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 7) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 7
+              },
+              "oxygen": 95,
+              "battery": 100,
+              "elapsedTU": 16,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 12,
+              "actionId": "verify:11",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 6) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 6
+              },
+              "oxygen": 94,
+              "battery": 98,
+              "elapsedTU": 17,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 13,
+              "actionId": "verify:12",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 5) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 5
+              },
+              "oxygen": 93,
+              "battery": 96,
+              "elapsedTU": 18,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 14,
+              "actionId": "verify:13",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 4) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 4
+              },
+              "oxygen": 92,
+              "battery": 94,
+              "elapsedTU": 19,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 15,
+              "actionId": "verify:14",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 3) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 3
+              },
+              "oxygen": 91,
+              "battery": 92,
+              "elapsedTU": 20,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 16,
+              "actionId": "verify:15",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 3) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 3
+              },
+              "oxygen": 90,
+              "battery": 90,
+              "elapsedTU": 21,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 17,
+              "actionId": "verify:16",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (2, 3) · 搬运中",
+              "position": {
+                "x": 2,
+                "y": 3
+              },
+              "oxygen": 89,
+              "battery": 88,
+              "elapsedTU": 22,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 18,
+              "actionId": "verify:17",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-02"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "取得 维修材料",
+              "position": {
+                "x": 2,
+                "y": 3
+              },
+              "oxygen": 88,
+              "battery": 87,
+              "elapsedTU": 23,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 19,
+              "actionId": "verify:18",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 3) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 3
+              },
+              "oxygen": 87,
+              "battery": 85,
+              "elapsedTU": 24,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 20,
+              "actionId": "verify:19",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 3) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 3
+              },
+              "oxygen": 86,
+              "battery": 83,
+              "elapsedTU": 25,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 21,
+              "actionId": "verify:20",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 4) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 4
+              },
+              "oxygen": 85,
+              "battery": 81,
+              "elapsedTU": 26,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 22,
+              "actionId": "verify:21",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 5) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 5
+              },
+              "oxygen": 84,
+              "battery": 79,
+              "elapsedTU": 27,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 23,
+              "actionId": "verify:22",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 6) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 6
+              },
+              "oxygen": 83,
+              "battery": 77,
+              "elapsedTU": 28,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 24,
+              "actionId": "verify:23",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 7) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 7
+              },
+              "oxygen": 82,
+              "battery": 75,
+              "elapsedTU": 29,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 25,
+              "actionId": "verify:24",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 8) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 8
+              },
+              "oxygen": 81,
+              "battery": 73,
+              "elapsedTU": 30,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 26,
+              "actionId": "verify:25",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 9) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 9
+              },
+              "oxygen": 80,
+              "battery": 71,
+              "elapsedTU": 31,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 27,
+              "actionId": "verify:26",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 10) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 10
+              },
+              "oxygen": 79,
+              "battery": 69,
+              "elapsedTU": 32,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 28,
+              "actionId": "verify:27",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 5,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (5, 10) · 搬运中",
+              "position": {
+                "x": 5,
+                "y": 10
+              },
+              "oxygen": 78,
+              "battery": 67,
+              "elapsedTU": 33,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 29,
+              "actionId": "verify:28",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 10) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 10
+              },
+              "oxygen": 77,
+              "battery": 65,
+              "elapsedTU": 34,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 30,
+              "actionId": "verify:29",
+              "action": {
+                "kind": "clear",
+                "targetId": "o-01"
+              },
+              "cost": {
+                "tu": 3,
+                "battery": 4,
+                "oxygen": 3
+              },
+              "message": "清理 坍塌金属架",
+              "position": {
+                "x": 6,
+                "y": 10
+              },
+              "oxygen": 74,
+              "battery": 61,
+              "elapsedTU": 37,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 31,
+              "actionId": "verify:30",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 7,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (7, 10) · 搬运中",
+              "position": {
+                "x": 7,
+                "y": 10
+              },
+              "oxygen": 73,
+              "battery": 59,
+              "elapsedTU": 38,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 32,
+              "actionId": "verify:31",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 10) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 10
+              },
+              "oxygen": 72,
+              "battery": 57,
+              "elapsedTU": 39,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 33,
+              "actionId": "verify:32",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 9) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 9
+              },
+              "oxygen": 71,
+              "battery": 55,
+              "elapsedTU": 40,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 34,
+              "actionId": "verify:33",
+              "action": {
+                "kind": "repair",
+                "targetId": "a-01"
+              },
+              "cost": {
+                "tu": 4,
+                "battery": 4,
+                "oxygen": 4
+              },
+              "message": "修复气闸控制器",
+              "position": {
+                "x": 8,
+                "y": 9
+              },
+              "oxygen": 67,
+              "battery": 51,
+              "elapsedTU": 44,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 35,
+              "actionId": "verify:34",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 8) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 8
+              },
+              "oxygen": 66,
+              "battery": 49,
+              "elapsedTU": 45,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 36,
+              "actionId": "verify:35",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 7) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 7
+              },
+              "oxygen": 65,
+              "battery": 47,
+              "elapsedTU": 46,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 37,
+              "actionId": "verify:36",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 6) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 6
+              },
+              "oxygen": 64,
+              "battery": 45,
+              "elapsedTU": 47,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 38,
+              "actionId": "verify:37",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 5) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 5
+              },
+              "oxygen": 63,
+              "battery": 43,
+              "elapsedTU": 48,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 39,
+              "actionId": "verify:38",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 4) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 4
+              },
+              "oxygen": 62,
+              "battery": 41,
+              "elapsedTU": 49,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 40,
+              "actionId": "verify:39",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 3) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 3
+              },
+              "oxygen": 61,
+              "battery": 39,
+              "elapsedTU": 50,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 41,
+              "actionId": "verify:40",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 2) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 2
+              },
+              "oxygen": 60,
+              "battery": 37,
+              "elapsedTU": 51,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 42,
+              "actionId": "verify:41",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 1) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 1
+              },
+              "oxygen": 59,
+              "battery": 35,
+              "elapsedTU": 52,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 43,
+              "actionId": "verify:42",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 9,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (9, 1) · 搬运中",
+              "position": {
+                "x": 9,
+                "y": 1
+              },
+              "oxygen": 58,
+              "battery": 33,
+              "elapsedTU": 53,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 44,
+              "actionId": "verify:43",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 10,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (10, 1) · 搬运中",
+              "position": {
+                "x": 10,
+                "y": 1
+              },
+              "oxygen": 57,
+              "battery": 31,
+              "elapsedTU": 54,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 45,
+              "actionId": "verify:44",
+              "action": {
+                "kind": "extract"
+              },
+              "cost": {
+                "tu": 2,
+                "battery": 2,
+                "oxygen": 2
+              },
+              "message": "气闸接管救援，撤离成功",
+              "position": {
+                "x": 10,
+                "y": 1
+              },
+              "oxygen": 55,
+              "battery": 29,
+              "elapsedTU": 56,
+              "phase": "success",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "levelId": "station-02",
+      "levelVersion": 1,
+      "rules": {
+        "oxygen": 120,
+        "oxygenMax": 180,
+        "oxygenRate": 2,
+        "repairedOxygenRate": 1,
+        "battery": 120,
+        "batteryMax": 160,
+        "batteryRefill": 30,
+        "oxygenRefill": 40,
+        "inventorySlots": 2,
+        "sensorRadius": 1,
+        "radarRadius": 5,
+        "leakCost": 6,
+        "moveLimit": 12,
+        "toolLimit": 8,
+        "requestLimit": 12,
+        "actionTULimit": 20,
+        "actionCosts": {
+          "move": {
+            "tu": 1,
+            "battery": 1
+          },
+          "carry_move": {
+            "tu": 1,
+            "battery": 2
+          },
+          "scan": {
+            "tu": 1,
+            "battery": 2
+          },
+          "open": {
+            "tu": 1,
+            "battery": 1
+          },
+          "collect": {
+            "tu": 1,
+            "battery": 1
+          },
+          "drop_item": {
+            "tu": 1,
+            "battery": 1
+          },
+          "use_battery": {
+            "tu": 1,
+            "battery": 1
+          },
+          "use_oxygen": {
+            "tu": 2,
+            "battery": 2
+          },
+          "repair_human": {
+            "tu": 6,
+            "battery": 4,
+            "materials": 1
+          },
+          "repair_airlock": {
+            "tu": 4,
+            "battery": 4,
+            "materials": 1
+          },
+          "clear": {
+            "tu": 3,
+            "battery": 4
+          },
+          "pickup_human": {
+            "tu": 1,
+            "battery": 2
+          },
+          "drop_human": {
+            "tu": 1,
+            "battery": 1
+          },
+          "circuit": {
+            "tu": 1,
+            "battery": 0
+          },
+          "extract": {
+            "tu": 2,
+            "battery": 2
+          }
+        }
+      },
+      "routes": [
+        {
+          "id": "main",
+          "elapsedTU": 52,
+          "remainingOxygen": 101,
+          "remainingBattery": 77,
+          "actions": [
+            {
+              "sequence": 1,
+              "actionId": "verify:0",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "取得 供氧管维修材料",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 118,
+              "battery": 119,
+              "elapsedTU": 1,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 2,
+              "actionId": "verify:1",
+              "action": {
+                "kind": "repair",
+                "targetId": "human"
+              },
+              "cost": {
+                "tu": 6,
+                "battery": 4,
+                "oxygen": 12
+              },
+              "message": "修补玩家供氧管",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 106,
+              "battery": 115,
+              "elapsedTU": 7,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 3,
+              "actionId": "verify:2",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 11)",
+              "position": {
+                "x": 3,
+                "y": 11
+              },
+              "oxygen": 105,
+              "battery": 114,
+              "elapsedTU": 8,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 4,
+              "actionId": "verify:3",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-02"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "取得 气闸维修材料",
+              "position": {
+                "x": 3,
+                "y": 11
+              },
+              "oxygen": 104,
+              "battery": 113,
+              "elapsedTU": 9,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 5,
+              "actionId": "verify:4",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 12
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 12)",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 103,
+              "battery": 112,
+              "elapsedTU": 10,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 6,
+              "actionId": "verify:5",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 12
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (2, 12)",
+              "position": {
+                "x": 2,
+                "y": 12
+              },
+              "oxygen": 102,
+              "battery": 111,
+              "elapsedTU": 11,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 7,
+              "actionId": "verify:6",
+              "action": {
+                "kind": "pickup_human"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "抱起玩家，切换负重模式",
+              "position": {
+                "x": 2,
+                "y": 12
+              },
+              "oxygen": 101,
+              "battery": 109,
+              "elapsedTU": 12,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 8,
+              "actionId": "verify:7",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 12
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 12) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 100,
+              "battery": 107,
+              "elapsedTU": 13,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 9,
+              "actionId": "verify:8",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 11) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 11
+              },
+              "oxygen": 99,
+              "battery": 105,
+              "elapsedTU": 14,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 10,
+              "actionId": "verify:9",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 10) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 10
+              },
+              "oxygen": 98,
+              "battery": 103,
+              "elapsedTU": 15,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 11,
+              "actionId": "verify:10",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-03"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "取得 应急氧气",
+              "position": {
+                "x": 3,
+                "y": 10
+              },
+              "oxygen": 97,
+              "battery": 102,
+              "elapsedTU": 16,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 12,
+              "actionId": "verify:11",
+              "action": {
+                "kind": "use_item",
+                "itemId": "s-03",
+                "targetId": "human"
+              },
+              "cost": {
+                "tu": 2,
+                "battery": 2,
+                "oxygen": 2
+              },
+              "message": "为玩家补充氧气",
+              "position": {
+                "x": 3,
+                "y": 10
+              },
+              "oxygen": 135,
+              "battery": 100,
+              "elapsedTU": 18,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 13,
+              "actionId": "verify:12",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 9) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 9
+              },
+              "oxygen": 134,
+              "battery": 98,
+              "elapsedTU": 19,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 14,
+              "actionId": "verify:13",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 8) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 8
+              },
+              "oxygen": 133,
+              "battery": 96,
+              "elapsedTU": 20,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 15,
+              "actionId": "verify:14",
+              "action": {
+                "kind": "open",
+                "targetId": "d-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "开启 设备间手动门",
+              "position": {
+                "x": 3,
+                "y": 8
+              },
+              "oxygen": 132,
+              "battery": 95,
+              "elapsedTU": 21,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 16,
+              "actionId": "verify:15",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 7) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 7
+              },
+              "oxygen": 131,
+              "battery": 93,
+              "elapsedTU": 22,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 17,
+              "actionId": "verify:16",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 6) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 6
+              },
+              "oxygen": 130,
+              "battery": 91,
+              "elapsedTU": 23,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 18,
+              "actionId": "verify:17",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 5) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 5
+              },
+              "oxygen": 129,
+              "battery": 89,
+              "elapsedTU": 24,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 19,
+              "actionId": "verify:18",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 4) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 4
+              },
+              "oxygen": 128,
+              "battery": 87,
+              "elapsedTU": 25,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 20,
+              "actionId": "verify:19",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 3) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 3
+              },
+              "oxygen": 127,
+              "battery": 85,
+              "elapsedTU": 26,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 21,
+              "actionId": "verify:20",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 3) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 3
+              },
+              "oxygen": 126,
+              "battery": 83,
+              "elapsedTU": 27,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 22,
+              "actionId": "verify:21",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 5,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (5, 3) · 搬运中",
+              "position": {
+                "x": 5,
+                "y": 3
+              },
+              "oxygen": 125,
+              "battery": 81,
+              "elapsedTU": 28,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 23,
+              "actionId": "verify:22",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 3) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 124,
+              "battery": 79,
+              "elapsedTU": 29,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 24,
+              "actionId": "verify:23",
+              "action": {
+                "kind": "circuit",
+                "targetId": "sw-01",
+                "on": true
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 0,
+                "oxygen": 1
+              },
+              "message": "开启辅助电路",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 123,
+              "battery": 79,
+              "elapsedTU": 30,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              },
+              "targetPosition": {
+                "x": 6,
+                "y": 4
+              }
+            },
+            {
+              "sequence": 25,
+              "actionId": "verify:24",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 5,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (5, 3) · 搬运中",
+              "position": {
+                "x": 5,
+                "y": 3
+              },
+              "oxygen": 122,
+              "battery": 77,
+              "elapsedTU": 31,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 26,
+              "actionId": "verify:25",
+              "action": {
+                "kind": "open",
+                "targetId": "c-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "开启 设备间电池柜",
+              "position": {
+                "x": 5,
+                "y": 3
+              },
+              "oxygen": 121,
+              "battery": 76,
+              "elapsedTU": 32,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 27,
+              "actionId": "verify:26",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-04"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "取得 设备间备用电池",
+              "position": {
+                "x": 5,
+                "y": 3
+              },
+              "oxygen": 120,
+              "battery": 75,
+              "elapsedTU": 33,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 28,
+              "actionId": "verify:27",
+              "action": {
+                "kind": "use_item",
+                "itemId": "s-04",
+                "targetId": "robot"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "安装备用电池",
+              "position": {
+                "x": 5,
+                "y": 3
+              },
+              "oxygen": 119,
+              "battery": 104,
+              "elapsedTU": 34,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 29,
+              "actionId": "verify:28",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 3) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 118,
+              "battery": 102,
+              "elapsedTU": 35,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 30,
+              "actionId": "verify:29",
+              "action": {
+                "kind": "open",
+                "targetId": "d-02"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "开启 气闸室电动门",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 117,
+              "battery": 101,
+              "elapsedTU": 36,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 31,
+              "actionId": "verify:30",
+              "action": {
+                "kind": "circuit",
+                "targetId": "sw-01",
+                "on": false
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 0,
+                "oxygen": 1
+              },
+              "message": "关闭辅助电路",
+              "position": {
+                "x": 6,
+                "y": 3
+              },
+              "oxygen": 116,
+              "battery": 101,
+              "elapsedTU": 37,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              },
+              "targetPosition": {
+                "x": 6,
+                "y": 4
+              }
+            },
+            {
+              "sequence": 32,
+              "actionId": "verify:31",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 7,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (7, 3) · 搬运中",
+              "position": {
+                "x": 7,
+                "y": 3
+              },
+              "oxygen": 115,
+              "battery": 99,
+              "elapsedTU": 38,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 33,
+              "actionId": "verify:32",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 3) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 3
+              },
+              "oxygen": 114,
+              "battery": 97,
+              "elapsedTU": 39,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 34,
+              "actionId": "verify:33",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 9,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (9, 3) · 搬运中",
+              "position": {
+                "x": 9,
+                "y": 3
+              },
+              "oxygen": 113,
+              "battery": 95,
+              "elapsedTU": 40,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 35,
+              "actionId": "verify:34",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 10,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (10, 3) · 搬运中",
+              "position": {
+                "x": 10,
+                "y": 3
+              },
+              "oxygen": 112,
+              "battery": 93,
+              "elapsedTU": 41,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 36,
+              "actionId": "verify:35",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 3) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 3
+              },
+              "oxygen": 111,
+              "battery": 91,
+              "elapsedTU": 42,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 37,
+              "actionId": "verify:36",
+              "action": {
+                "kind": "repair",
+                "targetId": "a-01"
+              },
+              "cost": {
+                "tu": 4,
+                "battery": 4,
+                "oxygen": 4
+              },
+              "message": "修复气闸控制器",
+              "position": {
+                "x": 11,
+                "y": 3
+              },
+              "oxygen": 107,
+              "battery": 87,
+              "elapsedTU": 46,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 38,
+              "actionId": "verify:37",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 2) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 2
+              },
+              "oxygen": 106,
+              "battery": 85,
+              "elapsedTU": 47,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 39,
+              "actionId": "verify:38",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 12,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (12, 2) · 搬运中",
+              "position": {
+                "x": 12,
+                "y": 2
+              },
+              "oxygen": 105,
+              "battery": 83,
+              "elapsedTU": 48,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 40,
+              "actionId": "verify:39",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 13,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (13, 2) · 搬运中",
+              "position": {
+                "x": 13,
+                "y": 2
+              },
+              "oxygen": 104,
+              "battery": 81,
+              "elapsedTU": 49,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 41,
+              "actionId": "verify:40",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 13,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (13, 1) · 搬运中",
+              "position": {
+                "x": 13,
+                "y": 1
+              },
+              "oxygen": 103,
+              "battery": 79,
+              "elapsedTU": 50,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 42,
+              "actionId": "verify:41",
+              "action": {
+                "kind": "extract"
+              },
+              "cost": {
+                "tu": 2,
+                "battery": 2,
+                "oxygen": 2
+              },
+              "message": "气闸接管救援，撤离成功",
+              "position": {
+                "x": 13,
+                "y": 1
+              },
+              "oxygen": 101,
+              "battery": 77,
+              "elapsedTU": 52,
+              "phase": "success",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            }
+          ]
+        },
+        {
+          "id": "lower",
+          "elapsedTU": 44,
+          "remainingOxygen": 69,
+          "remainingBattery": 54,
+          "actions": [
+            {
+              "sequence": 1,
+              "actionId": "verify:0",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-01"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 2
+              },
+              "message": "取得 供氧管维修材料",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 118,
+              "battery": 119,
+              "elapsedTU": 1,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 2,
+              "actionId": "verify:1",
+              "action": {
+                "kind": "repair",
+                "targetId": "human"
+              },
+              "cost": {
+                "tu": 6,
+                "battery": 4,
+                "oxygen": 12
+              },
+              "message": "修补玩家供氧管",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 106,
+              "battery": 115,
+              "elapsedTU": 7,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 3,
+              "actionId": "verify:2",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 11)",
+              "position": {
+                "x": 3,
+                "y": 11
+              },
+              "oxygen": 105,
+              "battery": 114,
+              "elapsedTU": 8,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 4,
+              "actionId": "verify:3",
+              "action": {
+                "kind": "collect",
+                "targetId": "s-02"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "取得 气闸维修材料",
+              "position": {
+                "x": 3,
+                "y": 11
+              },
+              "oxygen": 104,
+              "battery": 113,
+              "elapsedTU": 9,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 5,
+              "actionId": "verify:4",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 12
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 12)",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 103,
+              "battery": 112,
+              "elapsedTU": 10,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 6,
+              "actionId": "verify:5",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 2,
+                  "y": 12
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "移动至 (2, 12)",
+              "position": {
+                "x": 2,
+                "y": 12
+              },
+              "oxygen": 102,
+              "battery": 111,
+              "elapsedTU": 11,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 7,
+              "actionId": "verify:6",
+              "action": {
+                "kind": "pickup_human"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "抱起玩家，切换负重模式",
+              "position": {
+                "x": 2,
+                "y": 12
+              },
+              "oxygen": 101,
+              "battery": 109,
+              "elapsedTU": 12,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 8,
+              "actionId": "verify:7",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 12
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 12) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 12
+              },
+              "oxygen": 100,
+              "battery": 107,
+              "elapsedTU": 13,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 9,
+              "actionId": "verify:8",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 3,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (3, 11) · 搬运中",
+              "position": {
+                "x": 3,
+                "y": 11
+              },
+              "oxygen": 99,
+              "battery": 105,
+              "elapsedTU": 14,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 10,
+              "actionId": "verify:9",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 4,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (4, 11) · 搬运中",
+              "position": {
+                "x": 4,
+                "y": 11
+              },
+              "oxygen": 98,
+              "battery": 103,
+              "elapsedTU": 15,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 11,
+              "actionId": "verify:10",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 5,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (5, 11) · 搬运中",
+              "position": {
+                "x": 5,
+                "y": 11
+              },
+              "oxygen": 97,
+              "battery": 101,
+              "elapsedTU": 16,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 12,
+              "actionId": "verify:11",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 6,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (6, 11) · 搬运中",
+              "position": {
+                "x": 6,
+                "y": 11
+              },
+              "oxygen": 96,
+              "battery": 99,
+              "elapsedTU": 17,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 13,
+              "actionId": "verify:12",
+              "action": {
+                "kind": "clear",
+                "targetId": "o-01"
+              },
+              "cost": {
+                "tu": 3,
+                "battery": 4,
+                "oxygen": 3
+              },
+              "message": "清理 备用通道坍塌货架",
+              "position": {
+                "x": 6,
+                "y": 11
+              },
+              "oxygen": 93,
+              "battery": 95,
+              "elapsedTU": 20,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 14,
+              "actionId": "verify:13",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 7,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (7, 11) · 搬运中",
+              "position": {
+                "x": 7,
+                "y": 11
+              },
+              "oxygen": 92,
+              "battery": 93,
+              "elapsedTU": 21,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 15,
+              "actionId": "verify:14",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 8,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (8, 11) · 搬运中",
+              "position": {
+                "x": 8,
+                "y": 11
+              },
+              "oxygen": 91,
+              "battery": 91,
+              "elapsedTU": 22,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 16,
+              "actionId": "verify:15",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 9,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (9, 11) · 搬运中",
+              "position": {
+                "x": 9,
+                "y": 11
+              },
+              "oxygen": 90,
+              "battery": 89,
+              "elapsedTU": 23,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 17,
+              "actionId": "verify:16",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 10,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (10, 11) · 搬运中",
+              "position": {
+                "x": 10,
+                "y": 11
+              },
+              "oxygen": 89,
+              "battery": 87,
+              "elapsedTU": 24,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 18,
+              "actionId": "verify:17",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 11
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 11) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 11
+              },
+              "oxygen": 88,
+              "battery": 85,
+              "elapsedTU": 25,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 19,
+              "actionId": "verify:18",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 10
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 10) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 10
+              },
+              "oxygen": 87,
+              "battery": 83,
+              "elapsedTU": 26,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 20,
+              "actionId": "verify:19",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 9
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 9) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 9
+              },
+              "oxygen": 86,
+              "battery": 81,
+              "elapsedTU": 27,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 21,
+              "actionId": "verify:20",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 8
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 8) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 8
+              },
+              "oxygen": 85,
+              "battery": 79,
+              "elapsedTU": 28,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 22,
+              "actionId": "verify:21",
+              "action": {
+                "kind": "open",
+                "targetId": "d-03"
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 1,
+                "oxygen": 1
+              },
+              "message": "开启 补给仓手动门",
+              "position": {
+                "x": 11,
+                "y": 8
+              },
+              "oxygen": 84,
+              "battery": 78,
+              "elapsedTU": 29,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 23,
+              "actionId": "verify:22",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 7
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 7) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 7
+              },
+              "oxygen": 83,
+              "battery": 76,
+              "elapsedTU": 30,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 24,
+              "actionId": "verify:23",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 6
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 6) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 6
+              },
+              "oxygen": 82,
+              "battery": 74,
+              "elapsedTU": 31,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 25,
+              "actionId": "verify:24",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 5
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 5) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 5
+              },
+              "oxygen": 81,
+              "battery": 72,
+              "elapsedTU": 32,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 26,
+              "actionId": "verify:25",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 4
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 4) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 4
+              },
+              "oxygen": 80,
+              "battery": 70,
+              "elapsedTU": 33,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 27,
+              "actionId": "verify:26",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 3
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 3) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 3
+              },
+              "oxygen": 79,
+              "battery": 68,
+              "elapsedTU": 34,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 28,
+              "actionId": "verify:27",
+              "action": {
+                "kind": "repair",
+                "targetId": "a-01"
+              },
+              "cost": {
+                "tu": 4,
+                "battery": 4,
+                "oxygen": 4
+              },
+              "message": "修复气闸控制器",
+              "position": {
+                "x": 11,
+                "y": 3
+              },
+              "oxygen": 75,
+              "battery": 64,
+              "elapsedTU": 38,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 29,
+              "actionId": "verify:28",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 11,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (11, 2) · 搬运中",
+              "position": {
+                "x": 11,
+                "y": 2
+              },
+              "oxygen": 74,
+              "battery": 62,
+              "elapsedTU": 39,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 30,
+              "actionId": "verify:29",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 12,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (12, 2) · 搬运中",
+              "position": {
+                "x": 12,
+                "y": 2
+              },
+              "oxygen": 73,
+              "battery": 60,
+              "elapsedTU": 40,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 31,
+              "actionId": "verify:30",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 13,
+                  "y": 2
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (13, 2) · 搬运中",
+              "position": {
+                "x": 13,
+                "y": 2
+              },
+              "oxygen": 72,
+              "battery": 58,
+              "elapsedTU": 41,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 32,
+              "actionId": "verify:31",
+              "action": {
+                "kind": "move",
+                "target": {
+                  "x": 13,
+                  "y": 1
+                }
+              },
+              "cost": {
+                "tu": 1,
+                "battery": 2,
+                "oxygen": 1
+              },
+              "message": "移动至 (13, 1) · 搬运中",
+              "position": {
+                "x": 13,
+                "y": 1
+              },
+              "oxygen": 71,
+              "battery": 56,
+              "elapsedTU": 42,
+              "phase": "awaiting_command",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            },
+            {
+              "sequence": 33,
+              "actionId": "verify:32",
+              "action": {
+                "kind": "extract"
+              },
+              "cost": {
+                "tu": 2,
+                "battery": 2,
+                "oxygen": 2
+              },
+              "message": "气闸接管救援，撤离成功",
+              "position": {
+                "x": 13,
+                "y": 1
+              },
+              "oxygen": 69,
+              "battery": 54,
+              "elapsedTU": 44,
+              "phase": "success",
+              "constraints": {
+                "reserveReturnBattery": false,
+                "reserveMargin": 5,
+                "authorizedHazardIds": [
+                  "h-01",
+                  "h-02"
+                ],
+                "stopOnHazard": false,
+                "allowedRepairs": []
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

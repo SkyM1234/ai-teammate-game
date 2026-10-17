@@ -2,11 +2,11 @@ import { defaultConstraints } from '../../../packages/game-core/src/engine.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import type { Constraints, Level, Position } from '../../../packages/game-core/src/types.ts';
 
-export type DemoGoal = { kind: 'goto' | 'scan' | 'collect' | 'repair' | 'pickup' | 'extract' | 'circuit' | 'custom'; position?: Position; searchPosition?: Position; targetId?: string; itemType?: string; returnHome?: boolean; on?: boolean };
+export type DemoGoal = { kind: 'goto' | 'scan' | 'collect' | 'repair' | 'pickup' | 'extract' | 'circuit' | 'rescue' | 'custom'; position?: Position; searchPosition?: Position; targetId?: string; itemType?: string; returnHome?: boolean; on?: boolean };
 export interface DemoCommand {
   goal: DemoGoal; constraints: Constraints; supported: boolean;
 }
-export const demoHelp = '规则演示只支持简单目标，如“前往 (4,8)”“修补我的供氧管”“去设备间找电池并回来”“开启辅助电路”。否定、条件和多步骤指令请切换真实模型，或拆成明确的简单指令。';
+export const demoHelp = '可用“规则通关”按本地图预设路线完成救援，或发送简单目标，如“前往 (4,8)”“修补我的供氧管”“去设备间找电池并回来”“开启辅助电路”。其他否定、条件和多步骤指令请切换真实模型，或拆成明确的简单指令。';
 
 // A finite local grammar, deliberately independent of live model instructions.
 export function parseDemoCommand(text: string, level: Level, home: Position, selected?: Position): DemoCommand {
@@ -17,7 +17,8 @@ export function parseDemoCommand(text: string, level: Level, home: Position, sel
   const searchRoom = level.rooms.find(room => input.startsWith(`去${room.name}`));
   const collectInput = searchRoom ? input.slice(searchRoom.name.length + 1) : input;
   let goal: DemoGoal | null = null;
-  if (/^(抱起|搬起)(我|玩家)$/.test(input)) goal = { kind: 'pickup' };
+  if (/^(规则通关|完成救援|一键救援)$/.test(input)) goal = { kind: 'rescue' };
+  else if (/^(抱起|搬起)(我|玩家)$/.test(input)) goal = { kind: 'pickup' };
   else if (/^(修补|维修|修复)(我的|玩家的)?(供氧管|氧气管)$/.test(input)) {
     goal = { kind: 'repair', targetId: 'human' }; command.constraints.allowedRepairs.push('human');
   } else if (/^(维修|修复)(气闸|气闸控制器|控制器)$/.test(input)) {
