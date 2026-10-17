@@ -415,7 +415,7 @@ window.addEventListener('pagehide', event => { if (!event.persisted) station?.di
 const drawer = $<HTMLDialogElement>('console-drawer');
 let drawerTrigger: HTMLElement | null = null;
 const panelTitles: Record<string, string> = { nearby: '附近操作', inventory: '物资管理', status: '生命监测', objective: '救援目标', ledger: '行动记录', comms: '机器人通信', guide: '操作指南', selection: '位置情报' };
-const panelCodes: Record<string, string> = { nearby: 'R-07 / LOCAL CONTROL', inventory: 'R-07 / CARGO SYSTEM', status: 'LIFE SUPPORT / TELEMETRY', objective: 'RESCUE / MISSION CONTROL', ledger: 'BLACK BOX / ACTION LOG', comms: 'R-07 / COMMUNICATION LINK', guide: 'STATION 07 / FIELD MANUAL', selection: 'STATION MAP / SECTOR INTELLIGENCE' };
+const panelCodes: Record<string, string> = { nearby: 'R-07 / LOCAL CONTROL', inventory: 'R-07 / CARGO SYSTEM', status: 'LIFE SUPPORT / TELEMETRY', objective: 'RESCUE / MISSION CONTROL', ledger: 'BLACK BOX / ACTION LOG', comms: 'R-07 / COMMUNICATION LINK', guide: 'FIELD MANUAL', selection: 'STATION MAP / SECTOR INTELLIGENCE' };
 function openPanel(panel: string) {
   if (!panelTitles[panel]) return;
   if (panel === 'selection') drawerTrigger = canvas;
