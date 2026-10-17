@@ -4,9 +4,69 @@ import test from 'node:test';
 import { diffKnowledge, GameEngine } from '../packages/game-core/src/engine.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
-import type { Action, ActionCosts, RadarEcho } from '../packages/game-core/src/types.ts';
+import type { Action, ActionCosts, ObservedEntity, RadarEcho } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+
+test('重复抱起已在搬运中的玩家返回已满足状态，不误报距离或消耗资源', () => {
+  const engine = new GameEngine(level);
+  assert.equal(engine.perform({ kind: 'pickup_human' }).code, 'OUT_OF_RANGE');
+  engine.state.robot.position = { ...engine.state.human.position };
+  assert.equal(engine.perform({ kind: 'pickup_human' }).accepted, true);
+  const before = engine.snapshot();
+  const result = engine.perform({ kind: 'pickup_human' });
+  assert.equal(result.accepted, false);
+  assert.equal(result.code, 'ALREADY_CARRYING');
+  assert.match(result.message, /已.*搬运.*无需再次抱起/);
+  assert.deepEqual(result.cost, { tu: 0, battery: 0, oxygen: 0 });
+  assert.deepEqual(engine.state.robot, before.robot); assert.deepEqual(engine.state.human, before.human);
+  assert.equal(engine.state.elapsedTU, before.elapsedTU); assert.deepEqual(engine.state.ledger, before.ledger);
+});
+
+test('已耗尽物资在原地或远处均说明已消耗，不能再次扫描、拾取或使用', () => {
+  const custom = structuredClone(level);
+  custom.entities.find(entity => entity.id === 's-03')!.position = { ...custom.humanStart };
+  const engine = new GameEngine(custom);
+  engine.state.robot.position = { ...engine.state.human.position }; engine.observe();
+  assert.equal(engine.perform({ kind: 'scan', targetId: 's-03' }).accepted, true);
+  assert.equal(engine.perform({ kind: 'collect', targetId: 's-03' }).accepted, true);
+  assert.equal(engine.perform({ kind: 'collect', targetId: 's-03' }).code, 'ITEM_IN_INVENTORY');
+  assert.equal(engine.perform({ kind: 'use_item', itemId: 's-03', targetId: 'human' }).accepted, true);
+  assert.equal(engine.state.knowledge.entities['s-03'].state, 'cleared');
+  assert.match(engine.state.knowledge.entities['s-03'].details!, /已消耗/);
+  assert.ok(!engine.state.knowledge.entities['s-03'].details!.includes('可恢复'));
+  const actions: Action[] = [{ kind: 'scan', targetId: 's-03' }, { kind: 'collect', targetId: 's-03' }, { kind: 'use_item', itemId: 's-03', targetId: 'human' }];
+  for (const position of [custom.humanStart, { x: 4, y: 9 }]) {
+    engine.state.robot.position = { ...position };
+    const before = engine.snapshot();
+    for (const action of actions) {
+      const result = engine.perform(action);
+      assert.equal(result.accepted, false); assert.equal(result.code, 'ITEM_CONSUMED');
+      assert.match(result.message, /已消耗/); assert.deepEqual(result.cost, { tu: 0, battery: 0, oxygen: 0 });
+    }
+    assert.equal(engine.state.elapsedTU, before.elapsedTU);
+    assert.deepEqual(engine.state.robot, before.robot); assert.deepEqual(engine.state.human, before.human);
+  }
+  assert.equal(engine.perform({ kind: 'collect', targetId: 's-04' }).code, 'UNKNOWN_TARGET');
+  const legacy = engine.snapshot();
+  legacy.knowledge.entities['s-03'].details = '可恢复 40 氧气。';
+  const restored = new GameEngine(custom); restored.restore(legacy);
+  const context = restored.robotContext() as { knownEntities: ObservedEntity[] };
+  assert.match(context.knownEntities.find(entity => entity.id === 's-03')!.details!, /已消耗/);
+  assert.equal(restored.state.knowledge.entities['s-03'].details, '可恢复 40 氧气。');
+});
+
+test('维修材料不能当作氧气使用，失败提示指出正确操作', () => {
+  const engine = new GameEngine(level);
+  engine.state.robot.position = { x: 3, y: 9 }; engine.observe();
+  assert.equal(engine.perform({ kind: 'collect', targetId: 's-01' }).accepted, true);
+  const before = engine.snapshot();
+  const result = engine.perform({ kind: 'use_item', itemId: 's-01', targetId: 'human' });
+  assert.equal(result.accepted, false); assert.equal(result.code, 'ITEM_TYPE_MISMATCH');
+  assert.match(result.message, /维修材料.*repair/);
+  assert.deepEqual(result.cost, { tu: 0, battery: 0, oxygen: 0 });
+  assert.deepEqual(engine.state.robot, before.robot); assert.deepEqual(engine.state.human, before.human);
+});
 
 test('动作消耗配置必须完整且为非负整数，维修材料数量同样校验', () => {
   for (const name of Object.keys(level.rules.actionCosts) as (keyof ActionCosts)[]) {

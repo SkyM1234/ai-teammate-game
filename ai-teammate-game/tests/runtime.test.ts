@@ -19,6 +19,67 @@ function scripted(rounds: ToolIntent[][], delayMs = 0, customLevel = level) {
 const move = (x: number, y: number): ToolIntent => ({ name: 'move_to', arguments: { target: { x, y } } });
 const report: ToolIntent = { name: 'report', arguments: { text: '状态报告' } };
 
+test('请求、动作结果与状态查询共享完整遥测和预算，背包直接标明物品类型', async () => {
+  const { session, contexts } = scripted([
+    [{ name: 'interact', arguments: { operation: 'pickup_human' } }, move(2, 9), { name: 'interact', arguments: { operation: 'use_item', itemId: 's-03', targetId: 'human' } }],
+    [{ name: 'get_status', arguments: {} }, { name: 'ask_player', arguments: { question: '核对结束' } }],
+  ]);
+  session.engine.state.robot.position = { ...session.engine.state.human.position };
+  for (const id of ['s-01', 's-03']) {
+    session.engine.state.entities.find(entity => entity.id === id)!.taken = true;
+    session.engine.state.robot.inventory.push(id);
+  }
+  session.engine.observe();
+  await session.command('背起我并使用氧气'); await session.settled();
+  const knowledge = contexts.map(context => JSON.parse(JSON.parse(context).messages[0].content.split('当前机器人知识与任务（仅可见事实）：\n')[1]));
+  assert.equal(knowledge.length, 2);
+  assert.equal(knowledge[0].telemetry.human.carried, false);
+  assert.deepEqual(knowledge[0].telemetry.robot.inventory, [
+    { id: 's-01', name: '维修材料', itemType: 'repair' }, { id: 's-03', name: '氧气补给', itemType: 'oxygen' },
+  ]);
+  const results = session.agent.state.messages.filter(message => message.role === 'toolResult').map(message => {
+    assert.ok(message.content[0].type === 'text');
+    return { toolName: message.toolName, data: JSON.parse(message.content[0].text) };
+  });
+  const used = results[2].data;
+  assert.equal(used.telemetry.human.carried, true);
+  assert.deepEqual(used.telemetry.human.position, { x: 2, y: 9 });
+  assert.equal(used.telemetry.human.oxygenRate, level.rules.oxygenRate);
+  assert.deepEqual(used.telemetry.robot.inventory, [{ id: 's-01', name: '维修材料', itemType: 'repair' }]);
+  assert.deepEqual(used.telemetry, knowledge[1].telemetry);
+  assert.deepEqual(results[3].data.telemetry, knowledge[1].telemetry);
+  assert.equal(used.remainingTU, level.rules.actionTULimit - 4);
+  assert.equal(used.remainingRequests, level.rules.requestLimit - 1);
+  assert.equal(results[3].data.remainingTU, knowledge[1].remainingTU);
+  assert.equal(results[3].data.remainingRequests, knowledge[1].remainingRequests);
+  assert.equal(used.telemetry.elapsedTU, session.engine.state.elapsedTU);
+  assert.equal(used.telemetry.exitStatus, 'leaking');
+  assert.ok(!JSON.stringify(knowledge).includes('s-04'));
+});
+
+test('移动到墙或已知阻挡格说明目标本身受阻，不统称路线不存在', async () => {
+  const cases = [
+    { target: { x: 7, y: 9 }, position: { x: 6, y: 9 }, code: 'TARGET_WALL', message: /墙.*更换起点/ },
+    { target: { x: 5, y: 3 }, position: { x: 4, y: 3 }, code: 'TARGET_BLOCKED', message: /相邻格/ },
+    { target: { x: 9, y: 9 }, position: { x: 8, y: 9 }, code: 'TARGET_BLOCKED', message: /相邻格/ },
+    { target: { x: 6, y: 1 }, position: { x: 5, y: 1 }, code: 'TARGET_BLOCKED', message: /相邻格/ },
+    { target: { x: 7, y: 3 }, position: { x: 6, y: 3 }, code: 'TARGET_BLOCKED', message: /open/ },
+    { target: { x: 7, y: 10 }, position: { x: 6, y: 10 }, code: 'TARGET_BLOCKED', message: /clear/ },
+  ];
+  for (const { target, position, code, message } of cases) {
+    const { session } = scripted([[move(target.x, target.y)], [{ name: 'ask_player', arguments: { question: '目标受阻' } }]]);
+    session.engine.state.robot.position = position; session.engine.observe();
+    await session.command('前往目标'); await session.settled();
+    const result = session.agent.state.messages.find(message => message.role === 'toolResult');
+    assert.ok(result?.role === 'toolResult' && result.content[0].type === 'text');
+    const data = JSON.parse(result.content[0].text);
+    assert.equal(data.accepted, false); assert.equal(data.code, code); assert.match(data.message, message);
+    assert.equal(data.costTU, 0); assert.equal(data.targetReached, false);
+    assert.deepEqual(session.engine.state.robot.position, position);
+    assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.engine.state.robot.battery, level.rules.battery);
+  }
+});
+
 test('模型明确获知出口喷气规则，move_to 拒绝进入且不扣资源，修复后可进入', async () => {
   const finish: ToolIntent = { name: 'finish_task', arguments: { reason: '本次检查结束。' } };
   const { session, contexts } = scripted([[move(10, 1)], [finish], [move(10, 1), finish]]);

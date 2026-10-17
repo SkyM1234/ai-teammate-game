@@ -3,6 +3,7 @@ import { distance, emptyDelta, positionKey, samePosition } from './types.ts';
 import type { Action, ActionOutcome, Constraints, Cost, Entity, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position, RadarEcho } from './types.ts';
 
 export const defaultConstraints = (): Constraints => ({ reserveReturnBattery: false, reserveMargin: 5, authorizedHazardIds: [], stopOnHazard: false, allowedRepairs: [] });
+const consumedSupplyDetails = '该物资已消耗，不能再次拾取或使用。';
 
 function comparable(observation: ObservedEntity): string {
   const { observedAt: _time, source: _source, ...fact } = observation;
@@ -70,7 +71,8 @@ export class GameEngine {
       scanned, observedAt: this.state.elapsedTU, source: scanned ? 'scan' : 'sensor',
     };
     if (entity.itemType) result.itemType = entity.itemType;
-    if (scanned) {
+    if (entity.type === 'supply' && entity.removed) result.details = consumedSupplyDetails;
+    else if (scanned) {
       if (entity.powerRequired) result.powerRequired = true;
       if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
       else if (entity.type === 'switch') result.details = '机器人须在可达的相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
@@ -172,6 +174,8 @@ export class GameEngine {
     if ('targetId' in action && action.targetId !== 'human' && action.targetId !== 'robot') {
       entity = this.getEntity(action.targetId);
       if (!entity || !this.state.knowledge.entities[action.targetId]) return reject('UNKNOWN_TARGET', '目标尚未识别。');
+      if (entity.type === 'supply' && this.state.knowledge.entities[entity.id].state === 'cleared') return reject('ITEM_CONSUMED', '该物资已消耗，不能再次扫描、拾取或使用；请选择其他可用物资。');
+      if (action.kind === 'collect' && this.state.robot.inventory.includes(entity.id)) return reject('ITEM_IN_INVENTORY', '该物资已在背包中，无需再次拾取；请按物品类型使用或维修。');
       if (!this.reachable(entity.position) || !this.visible(entity)) return reject('OUT_OF_RANGE', '需要先靠近已知目标，且保持视线。');
     }
     switch (action.kind) {
@@ -212,6 +216,7 @@ export class GameEngine {
       }
       case 'use_item': {
         const item = this.getEntity(action.itemId);
+        if (item?.type === 'supply' && this.state.knowledge.entities[action.itemId]?.state === 'cleared') return reject('ITEM_CONSUMED', '该物资已消耗，不能再次使用；请选择背包中的可用物资。');
         if (!item || !this.state.robot.inventory.includes(item.id)) return reject('UNKNOWN_TARGET', '背包中没有该物品。');
         if (item.itemType === 'battery' && action.targetId === 'robot') {
           message = '安装备用电池';
@@ -220,7 +225,7 @@ export class GameEngine {
           if (!this.reachable(this.state.human.position)) return reject('OUT_OF_RANGE', '需要先靠近玩家。');
           message = '为玩家补充氧气';
           effect = () => { this.state.human.oxygen = Math.min(this.level.rules.oxygenMax, this.state.human.oxygen + this.level.rules.oxygenRefill); this.consume(item.id); };
-        } else return reject('PRECONDITION_FAILED', '物品与目标不匹配。');
+        } else return reject('ITEM_TYPE_MISMATCH', item.itemType === 'repair' ? '维修材料用于 repair，由维修操作自动消耗；不能用 use_item 补充氧气或电量。' : '物品类型与目标不匹配：氧气只能用于 human，电池只能用于 robot。');
         break;
       }
       case 'repair': {
@@ -239,7 +244,8 @@ export class GameEngine {
         message = `清理 ${entity.name}`; effect = () => { entity.removed = true; };
         break;
       case 'pickup_human':
-        if (this.state.human.carried || !samePosition(this.state.robot.position, this.state.human.position)) return reject('OUT_OF_RANGE', '需要与玩家位于同一格。');
+        if (this.state.human.carried) return reject('ALREADY_CARRYING', '玩家已在搬运中，无需再次抱起；可继续移动或执行其他所需操作。');
+        if (!samePosition(this.state.robot.position, this.state.human.position)) return reject('OUT_OF_RANGE', '需要与玩家位于同一格。');
         message = '抱起玩家，切换负重模式'; effect = () => { this.state.human.carried = true; };
         break;
       case 'drop_human':
@@ -325,13 +331,24 @@ export class GameEngine {
     });
   }
 
+  robotTelemetry() {
+    return structuredClone({
+      elapsedTU: this.state.elapsedTU, exitStatus: this.exitStatus, circuitOn: this.state.circuitOn,
+      human: this.state.human,
+      robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => {
+        const item = this.state.knowledge.entities[id];
+        return { id, name: item?.name, itemType: item?.itemType };
+      }) },
+    });
+  }
+
   robotContext(): object {
     return structuredClone({
       historicalMap: { width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       exitStatus: this.exitStatus,
       rules: this.level.rules,
-      telemetry: { human: this.state.human, robot: this.state.robot, circuitOn: this.state.circuitOn, elapsedTU: this.state.elapsedTU },
-      knownEntities: Object.values(this.state.knowledge.entities), sharedMarkers: this.state.knowledge.markers,
+      telemetry: this.robotTelemetry(),
+      knownEntities: Object.values(this.state.knowledge.entities).map(entity => entity.type === 'supply' && entity.state === 'cleared' ? { ...entity, details: consumedSupplyDetails } : entity), sharedMarkers: this.state.knowledge.markers,
       radar: this.state.radarHistory,
     });
   }

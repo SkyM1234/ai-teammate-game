@@ -46,26 +46,28 @@ export class RevisionConflictError extends Error {}
 
 const interactionUsage: Record<string, string> = {
   open: '需要 targetId（已知门或柜子的 ID）',
-  collect: '需要 targetId（已知物资的 ID）',
+  collect: '需要 targetId（state=available 的已知物资 ID）；inventory 已在背包，cleared 已消耗，均不可再次拾取',
   drop_item: '需要 itemId（背包物品的 ID），不需要 targetId',
   use_item: '必须同时提供 itemId（背包物品的 ID）和 targetId（只能为 "human" 或 "robot"；氧气补给用 "human"，备用电池用 "robot"），不能把物品 ID 当作 targetId',
   repair: '需要 targetId（修补玩家供氧管用 "human"，修复气闸用已知气闸 ID）；自动消耗背包维修材料，不需要 itemId',
   clear: '需要 targetId（已知障碍的 ID）',
-  pickup_human: '抱起玩家，不需要 targetId 或 itemId',
+  pickup_human: '与玩家同格且 telemetry.human.carried=false 时抱起玩家，不需要 targetId 或 itemId；carried=true 时跳过此步',
   drop_human: '放下玩家，不需要 targetId 或 itemId',
   extract: '启动撤离，不需要 targetId 或 itemId',
 };
 
 const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气有限，你有电量限制。只使用收到的机器人知识和人类明确发送的信息；雷达模糊回波不是物品身份。
+本次请求的系统快照优先于其中的历史对话、历史工具结果及此前推测；本次请求内新执行的工具结果会更新状态，telemetry.elapsedTU 是游戏时间。telemetry.human 提供玩家位置、氧气、耗氧率和 carried；telemetry.robot 提供机器人位置、电量和带 id/name/itemType 的背包。carried=true 表示玩家已由你搬运，位置随你移动，跳过 pickup_human，无需放下玩家也可使用物资或维修；carried=false 时才需要同格抱起。
+物资以当前 state 和 itemType 为准：available 可前往拾取，inventory 已在背包，cleared 已消耗且不能再次拾取或使用；背包与已耗尽物资在 knownEntities 中的 position 是历史位置，不代表仍可在那里取得。itemType=oxygen 用 use_item 给 human，battery 给 robot，repair 只能由 repair 自动消耗。补氧应选择背包中的氧气或已知 available 氧气，不能去已耗尽的旧位置。类型、数量和可用性已知时无需额外扫描或 get_status 确认。
 historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0,0)，x 向右增大，y 向下增大；tiles[y][x] 表示坐标 (x,y) 的格子，每个字符串是一整行，数组索引是 y，字符串字符索引是 x。图例：# 是墙，不可通行；. 是历史地面，可作为候选路线；D 是历史门位，当前开闭与供电状态需靠近确认；X 是历史障碍位，不代表永久不可通行；E 是撤离出口，能到达不等于满足撤离条件。rooms 用 name 和 bounds 描述历史区域，minX/minY/maxX/maxY 均包含端点，没有固定导航点；范围内的墙体和实际阻挡仍以 tiles 和最新观察为准，不提供当前设施状态或可交互实体 ID。前往区域时可选择其中合适的可达位置，抵达不等于完成物资搜索；各区域属于固定历史位置，不随玩家搬运移动。
 当前设施状态以 knownEntities 和最新工具结果为准，优先于历史地图符号及此前的推测：障碍 state=cleared 表示已清除，不再阻挡；门 state=opened 表示已打开，可以通过；已知关闭的门、未清除的障碍仍阻挡移动。柜体（cabinet）、气闸控制器（airlock）和辅助电路开关（switch）所在格均不可进入或穿越，开启、修复或通断电均不会解除阻挡，空载和搬运时都适用；识别后需要交互时，move_to 的目标应选择可达的相邻格，不要选择设施所在格。历史可通行格可能存在尚未发现的阻挡或危险，需以逐格执行结果确认；不要把未知状态直接判为无路。
 exitStatus 是玩家与机器人共享的出口实时状态：leaking 表示出口正在漏气喷射，出口这一格禁止进入或穿越，搬运与危险授权均不能绕过；safe 表示修复气闸后漏气已停止，出口恢复通行。出口位置仍以 historicalMap.exit 为准，气闸控制器的位置与 ID 必须靠近识别，不能由出口位置推断。需先寻找气闸控制器、取得维修材料并修复，再把人类搬到出口并 interact extract；前往出口附近可选择可达的安全相邻格，不要将出口漏气误判为整个附近区域不可达。
-move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.position 为准，不要把部分移动视为抵达。
+move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.robot.position 为准；精确坐标目标 targetReached=false 时尚未抵达，不得当作完成。TARGET_WALL 表示目标本身是墙，更换起点或中间点不能解决；TARGET_BLOCKED 应按原因开门、清障或选择设施相邻格，关闭的门可以打开后通过，不等同于柜体等固定阻挡。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
 sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。
 任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到“继续原任务”时先核对整项委托与最新状态：若已完成，直接调用 finish_task；若未完成，只继续未完成的部分，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
-保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动运行累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的模型请求次数。预算来自当前地图，点击继续任务后重新计算。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
+保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动运行累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的模型请求次数。预算以本次快照和最新工具结果中的数值为准，不能沿用历史中“预算耗尽”的说法；batchControl=redecide 或行动受阻不代表预算耗尽。预算来自当前地图，点击继续任务后重新计算。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至可达的相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回开关的可达相邻格，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
 动作结果区分newDiscoveries、stateChanges、invalidatedFacts、knownRefs。只相信实际执行结果，不声称未执行动作完成。面向玩家的解释、报告、问题均使用简体中文；工具名称、参数字段及对象ID保持原样。简短报告事实，不输出内部思考。`;
 
@@ -135,7 +137,7 @@ export class GameSession {
           return first.content.filter(block => block.type === 'toolCall').every(call => group.some(message => message.role === 'toolResult' && message.toolCallId === call.id));
         }).slice(-5).flat();
         const messages: AgentMessage[] = [
-          { ...(base?.role === 'system' ? base : { role: 'system' as const, timestamp: Date.now() }), content: `${prompt}\n当前机器人知识与任务（仅可见事实）：\n${JSON.stringify({ ...this.engine.robotContext(), task: this.task, remainingTU: this.engine.level.rules.actionTULimit - this.runTU, remainingRequests: Math.max(0, this.engine.level.rules.requestLimit - this.requestCount) })}` },
+          { ...(base?.role === 'system' ? base : { role: 'system' as const, timestamp: Date.now() }), content: `${prompt}\n当前机器人知识与任务（仅可见事实）：\n${JSON.stringify(this.modelContext())}` },
           ...this.transcript,
         ];
         const prepared = { ...context, messages };
@@ -191,7 +193,7 @@ export class GameSession {
           if (this.control === 'wait_player') this.waitForPlayer('发现带电线路。已按你的指令停止，请决定断电或更换路线。', 'hazard');
         }
         if (!outcome.accepted && this.control === 'continue') this.control = 'redecide';
-        const compact = { accepted: outcome.accepted, code: outcome.code, message: outcome.message, executedSteps: outcome.executedSteps, targetReached: outcome.targetReached, costTU: outcome.costTU, ...delta, batchControl: this.control, telemetry: { position: this.engine.state.robot.position, oxygen: this.engine.state.human.oxygen, battery: this.engine.state.robot.battery, exitStatus: this.engine.exitStatus } };
+        const compact = { accepted: outcome.accepted, code: outcome.code, message: outcome.message, executedSteps: outcome.executedSteps, targetReached: outcome.targetReached, costTU: outcome.costTU, ...delta, batchControl: this.control, telemetry: this.engine.robotTelemetry(), ...this.remainingBudget() };
         const content = JSON.stringify(compact);
         this.metrics.resultBytes += Buffer.byteLength(content);
         this.emit();
@@ -448,6 +450,12 @@ export class GameSession {
     return outcome;
   }
 
+  private remainingBudget() {
+    return { remainingTU: Math.max(0, this.engine.level.rules.actionTULimit - this.runTU), remainingRequests: Math.max(0, this.engine.level.rules.requestLimit - this.requestCount) };
+  }
+
+  private modelContext() { return { ...this.engine.robotContext(), task: this.task, ...this.remainingBudget() }; }
+
   private tools(): AgentTool[] {
     const position = Type.Object({ x: Type.Integer({ minimum: 0, maximum: this.engine.level.width - 1 }), y: Type.Integer({ minimum: 0, maximum: this.engine.level.height - 1 }) }, { additionalProperties: false });
     return [
@@ -457,6 +465,20 @@ export class GameSession {
         execute: async (id, raw, signal) => {
           const input = raw as { target: Position };
           if (samePosition(input.target, this.engine.level.exit) && this.engine.exitStatus === 'leaking') return this.emptyResult('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法进入；请先修复气闸控制器，或选择出口附近的安全位置。');
+          if (this.engine.level.tiles[input.target.y]?.[input.target.x] === '#') {
+            const result = this.emptyResult('TARGET_WALL', '目标格是历史地图上的墙，无法进入；更换起点或中间点不能解决，请选择可通行目标。');
+            return { ...result, details: { ...result.details, targetReached: false } };
+          }
+          const blocker = Object.values(this.engine.state.knowledge.entities).find(entity => samePosition(entity.position, input.target) && (
+            ['cabinet', 'airlock', 'switch'].includes(entity.type) || entity.type === 'door' && entity.state !== 'opened' || entity.type === 'obstacle' && entity.state !== 'cleared'
+          ));
+          if (blocker) {
+            const message = blocker.type === 'door' ? `目标格的门 ${blocker.id} 尚未打开；请先在可达相邻格 interact open，再前往目标。`
+              : blocker.type === 'obstacle' ? `目标格被障碍 ${blocker.id} 阻挡；请先在可达相邻格 interact clear，再前往目标。`
+              : `目标格是设施 ${blocker.id}，不可进入或穿越；请前往可达的相邻格交互。`;
+            const result = this.emptyResult('TARGET_BLOCKED', message);
+            return { ...result, details: { ...result.details, targetReached: false } };
+          }
           let outcome: ActionOutcome | null = null;
           let steps = 0;
           let costTU = 0;
@@ -526,7 +548,7 @@ export class GameSession {
       },
       {
         name: 'get_status', label: '状态', description: '查询机器人已有知识、当前有效的共享标记 sharedMarkers 和共同遥测；已移除及私有标记不在列表中，不查询隐藏实体。', executionMode: 'sequential', parameters: Type.Object({}, { additionalProperties: false }),
-        execute: async () => ({ content: [{ type: 'text', text: JSON.stringify(this.engine.robotContext()) }], details: undefined }),
+        execute: async () => ({ content: [{ type: 'text', text: JSON.stringify(this.modelContext()) }], details: undefined }),
       },
       {
         name: 'report', label: '报告', description: '给玩家简短报告，事实应来自可见观察；不会结束委托。整项委托完成时直接调用 finish_task。', executionMode: 'sequential', parameters: Type.Object({ text: Type.String({ maxLength: 800 }) }, { additionalProperties: false }),
