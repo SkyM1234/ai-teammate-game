@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { ArtResources } from '../apps/web/src/art/resources.ts';
 import { createProp } from '../apps/web/src/art/props.ts';
 import { colors } from '../apps/web/src/art/themes.ts';
+import { wallHeightAt, wallHeights } from '../apps/web/src/art/dimensions.ts';
 
 test('门框按配置沿地图横向或纵向展开，开门及合批后保持朝向', () => {
   const art = new ArtResources();
@@ -19,6 +20,50 @@ test('门框按配置沿地图横向或纵向展开，开门及合批后保持�
     }
   }
   art.dispose();
+});
+
+test('舱门打开后中央通道净空，门框尺寸及合批后的开闭表现保持一致', () => {
+  const art = new ArtResources();
+  for (const wallHeight of [.6, 1.0, 1.2, 1.8, 2.4]) for (const orientation of ['horizontal', 'vertical'] as const) {
+    let frameSize: THREE.Vector3 | undefined;
+    for (const state of ['closed', 'opened']) {
+      const door = createProp(art, { id: 'door', type: 'door', name: '门', position: { x: 3, y: 7 }, orientation, state, scanned: false, observedAt: 0, source: 'sensor' }, true, wallHeight);
+      const size = new THREE.Box3().setFromObject(door).getSize(new THREE.Vector3());
+      if (frameSize) assert.ok(size.distanceTo(frameSize) < 1e-6);
+      frameSize = size;
+      const origin = new THREE.Vector3(.1, wallHeight / 2, 2).applyEuler(door.rotation);
+      const direction = new THREE.Vector3(0, 0, -1).applyEuler(door.rotation);
+      const ray = new THREE.Raycaster(origin, direction);
+      for (let pass = 0; pass < 2; pass++) {
+        door.updateMatrixWorld(true);
+        assert.equal(ray.intersectObject(door, true).length > 0, state === 'closed');
+        if (pass === 0) art.batchMeshes(door);
+      }
+      art.clear(door);
+    }
+  }
+  art.dispose();
+});
+
+test('内外墙高设置改变后，对应位置的门高同步变化且宽厚保持一致', () => {
+  const art = new ArtResources(), original = { ...wallHeights };
+  const level = { width: 12, height: 14 };
+  const doorSize = (position: { x: number; y: number }, height?: number) => {
+    const door = createProp(art, { id: 'door', type: 'door', name: '门', position, orientation: 'horizontal', state: 'closed', scanned: false, observedAt: 0, source: 'sensor' }, true, height);
+    const size = new THREE.Box3().setFromObject(door).getSize(new THREE.Vector3());
+    art.clear(door); return size;
+  };
+  try {
+    for (const position of [{ x: 0, y: 4 }, { x: 11, y: 4 }, { x: 4, y: 0 }, { x: 4, y: 13 }, { x: 4, y: 4 }]) {
+      Object.assign(wallHeights, original);
+      const height = wallHeightAt(level, position), before = doorSize(position, height);
+      Object.assign(wallHeights, { outer: original.outer * 1.5, inner: original.inner * 2 });
+      const updatedHeight = wallHeightAt(level, position), after = doorSize(position, updatedHeight);
+      assert.ok(Math.abs(after.y / before.y - updatedHeight / height) < 1e-6);
+      assert.equal(after.x, before.x); assert.equal(after.z, before.z);
+    }
+    assert.ok(Math.abs(doorSize({ x: 4, y: 4 }).y - doorSize({ x: 4, y: 4 }, wallHeights.inner).y) < 1e-6);
+  } finally { Object.assign(wallHeights, original); art.dispose(); }
 });
 
 test('清理模型实例不销毁共用资源，材质可以按表面类型复用', () => {

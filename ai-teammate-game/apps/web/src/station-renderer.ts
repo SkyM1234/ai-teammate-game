@@ -6,6 +6,7 @@ import { ArtResources } from './art/resources.ts';
 import { createRobot, createHuman } from './art/characters.ts';
 import { createProp } from './art/props.ts';
 import { createTerrain } from './art/terrain.ts';
+import { wallHeightAt } from './art/dimensions.ts';
 import { buildReticle, createExitLeak } from './art/effects.ts';
 import { colors, levelTheme } from './art/themes.ts';
 import type { StationTheme } from './art/themes.ts';
@@ -155,7 +156,9 @@ export class StationRenderer {
       }
       const observed = p.observed.filter(entity => !['cleared', 'inventory'].includes(entity.state));
       for (const entity of observed) {
-        const group = createProp(this.art, entity, sensed.has(`${entity.position.x},${entity.position.y}`));
+        const group = createProp(this.art, entity, sensed.has(`${entity.position.x},${entity.position.y}`), wallHeightAt(p.level, entity.position));
+        const contact = this.art.decal(group, 'contact', entity.type === 'door' ? [1.06, 1.02] : [.88, .7], [0, .008, 0]);
+        contact.rotation.x = -Math.PI / 2;
         group.position.copy(this.world(entity.position)); this.objects.add(group);
       }
       for (const echo of p.radar) {

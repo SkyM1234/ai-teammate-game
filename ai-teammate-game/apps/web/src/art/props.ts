@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { ArtResources } from './resources.ts';
 import { colors } from './themes.ts';
+import { wallHeights } from './dimensions.ts';
 import type { ObservedEntity } from '../../../../packages/game-core/src/types.ts';
 
-export function createProp(art: ArtResources, entity: ObservedEntity, sensed: boolean) {
+export function createProp(art: ArtResources, entity: ObservedEntity, sensed: boolean, wallHeight = wallHeights.inner) {
   const group = new THREE.Group();
   group.name = `observed:${entity.id}`;
   const steel = sensed ? 0xa3b0a2 : 0x617567;
@@ -46,23 +47,47 @@ export function createProp(art: ArtResources, entity: ObservedEntity, sensed: bo
     }
   } else if (entity.type === 'door') {
     group.rotation.y = entity.orientation === 'horizontal' ? 0 : Math.PI / 2;
-    art.box(group, [.94, .045, .55], [0, .035, 0], colors.dark);
-    for (const x of [-.39, .39]) {
-      art.box(group, [.16, .96, .46], [x, .52, 0], steel);
+    // Parts are authored at 1.2 units; only their vertical scale follows the wall height.
+    group.scale.y = wallHeight / 1.2;
+    art.box(group, [1.02, .045, .98], [0, .035, 0], colors.dark, 'rubber');
+    art.box(group, [.71, .018, .9], [0, .065, 0], steel, 'metal');
+    for (const z of [-.32, -.16, 0, .16, .32]) art.box(group, [.65, .008, .018], [0, .078, z], colors.dark);
+    for (const x of [-.43, .43]) {
+      art.box(group, [.14, 1.08, .98], [x, .59, 0], steel);
       for (const side of [-1, 1]) {
-        art.box(group, [.075, .75, .035], [x, .55, side * .25], colors.dark);
-        art.box(group, [.1, .15, .045], [x, .2, side * .26], colors.amber);
+        art.box(group, [.12, 1.02, .035], [x, .59, side * .51], colors.ivory);
+        art.box(group, [.055, .65, .025], [x, .58, side * .537], colors.dark, 'rubber');
+        art.box(group, [.12, .17, .045], [x, .23, side * .536], colors.amber);
+        for (const y of [.19, .25]) art.box(group, [.125, .025, .05], [x, y, side * .54], colors.dark);
+        art.box(group, [.1, .18, .05], [x, .78, side * .54], colors.dark);
+        art.glow(group, [.035, .065, .018], [x, .8, side * .575], entity.state === 'opened' ? colors.signal : colors.amber);
+        // Gouges in the frame retain the same position when the door opens.
+        const scratch = art.box(group, [.1, .013, .008], [x, .95, side * .534], colors.steel, 'metal');
+        scratch.rotation.z = x > 0 ? -.28 : .4;
       }
     }
-    art.box(group, [.96, .15, .5], [0, 1.02, 0], colors.ivory);
+    art.box(group, [1.18, .12, 1.0], [0, 1.17, 0], steel);
+    art.box(group, [1.2, .038, 1.015], [0, 1.219, 0], colors.ivory);
+    art.box(group, [.62, .012, .32], [0, 1.244, 0], steel);
+    for (const x of [-.26, .26]) art.box(group, [.035, .014, .1], [x, 1.255, 0], colors.dark, 'metal');
+    for (const side of [-1, 1]) {
+      art.box(group, [.73, .075, .035], [0, 1.16, side * .52], colors.dark, 'rubber');
+      art.glow(group, [.34, .028, .018], [0, 1.17, side * .545], entity.state === 'opened' ? colors.signal : colors.amber);
+    }
     for (const sign of [-1, 1]) {
-      const x = sign * (entity.state === 'opened' ? .34 : .15);
-      art.box(group, [entity.state === 'opened' ? .09 : .28, .77, .18], [x, .49, 0], steel);
-      if (entity.state !== 'opened') {
-        for (const side of [-1, 1]) art.box(group, [.21, .075, .025], [x, .48, side * .11], colors.dark);
+      const opened = entity.state === 'opened', x = sign * (opened ? .35 : .18);
+      art.box(group, [opened ? .055 : .35, .99, .16], [x, .585, 0], steel);
+      for (const side of [-1, 1]) {
+        art.box(group, [.025, .89, .025], [sign * (opened ? .325 : .018), .58, side * .09], colors.dark, 'rubber');
+        if (!opened) {
+          art.box(group, [.25, .055, .025], [x, .62, side * .095], colors.dark);
+          for (const offset of [-.1, .02]) {
+            const scratch = art.box(group, [.16, .01, .008], [x, .4 + offset, side * .088], colors.ivory, 'metal');
+            scratch.rotation.z = -.6;
+          }
+        }
       }
     }
-    for (const side of [-1, 1]) art.glow(group, [.32, .045, .03], [0, 1.03, side * .27], entity.state === 'opened' ? colors.signal : colors.amber);
   } else if (entity.type === 'cabinet') {
     art.box(group, [.68, .91, .5], [0, .51, 0], steel);
     art.box(group, [.53, .77, .045], [0, .52, .265], colors.dark);

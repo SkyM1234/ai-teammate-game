@@ -8,6 +8,7 @@ const finishes = {
   glass: { roughness: .16, metalness: .35 },
 };
 type Finish = keyof typeof finishes;
+type Decal = 'contact' | 'soot' | 'scar';
 
 /** One pool per renderer. Builders borrow these assets; only the pool disposes them. */
 export class ArtResources {
@@ -15,9 +16,11 @@ export class ArtResources {
   readonly deck = new THREE.BoxGeometry(1, 1, 1);
   private readonly cylinder = new THREE.CylinderGeometry(.5, .5, 1, 20);
   private readonly sphere = new THREE.SphereGeometry(.5, 16, 10);
+  private readonly plane = new THREE.PlaneGeometry(1, 1);
   private readonly materials = new Map<string, THREE.MeshStandardMaterial>();
   private readonly surfaces = new Map<string, THREE.MeshStandardMaterial>();
   private readonly textures = new Map<string, THREE.CanvasTexture>();
+  private readonly decals = new Map<Decal, THREE.MeshBasicMaterial>();
   private readonly anisotropy: number;
 
   constructor(anisotropy = 1) { this.anisotropy = anisotropy; }
@@ -64,7 +67,7 @@ export class ArtResources {
     const inverse = group.matrixWorld.clone().invert();
     group.traverse(object => {
       if (!(object instanceof THREE.Mesh) || object instanceof THREE.InstancedMesh || Array.isArray(object.material)) return;
-      if (object.geometry !== this.cube && object.geometry !== this.cylinder && object.geometry !== this.sphere) return;
+      if (object.geometry !== this.cube && object.geometry !== this.cylinder && object.geometry !== this.sphere && object.geometry !== this.plane) return;
       const key = `${object.geometry.uuid}:${object.material.uuid}:${object.castShadow}:${object.receiveShadow}`;
       let batch = batches.get(key);
       if (!batch) { batch = { source: object, matrices: [] }; batches.set(key, batch); }
@@ -77,6 +80,42 @@ export class ArtResources {
       mesh.castShadow = source.castShadow; mesh.receiveShadow = source.receiveShadow;
       mesh.computeBoundingSphere(); group.add(mesh);
     }
+  }
+
+  decal(group: THREE.Group, kind: Decal, size: [number, number], position: [number, number, number]) {
+    let material = this.decals.get(kind);
+    if (!material) {
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 256;
+      const context = canvas.getContext('2d')!;
+      if (kind === 'contact') {
+        const shade = context.createRadialGradient(128, 128, 8, 128, 128, 126);
+        shade.addColorStop(0, '#11191480'); shade.addColorStop(.45, '#11191448'); shade.addColorStop(1, '#11191400');
+        context.fillStyle = shade; context.fillRect(0, 0, 256, 256);
+      } else if (kind === 'soot') {
+        for (let i = 0; i < 18; i++) {
+          const x = 75 + (i * 37) % 108, y = 60 + (i * 53) % 130, radius = 30 + i % 5 * 7;
+          const stain = context.createRadialGradient(x, y, 0, x, y, radius);
+          stain.addColorStop(0, '#211e1a38'); stain.addColorStop(.4, '#2b272124'); stain.addColorStop(1, '#30282000');
+          context.fillStyle = stain; context.fillRect(0, 0, 256, 256);
+        }
+      } else {
+        for (let i = 0; i < 5; i++) {
+          const x = 48 + i * 32, y = 176 - i * 11;
+          context.beginPath(); context.moveTo(x, y); context.lineTo(x + 12, y - 29);
+          context.lineTo(x + 8, y - 40); context.lineTo(x + 40, y - 83);
+          context.lineWidth = 5 - i * .5; context.strokeStyle = '#202923c0'; context.stroke();
+          context.lineWidth = 1.5; context.strokeStyle = '#d4d5c7b0'; context.stroke();
+          context.fillStyle = '#c2c5b47d'; context.fillRect(x + 4, y - 9, 4 + i, 2);
+        }
+      }
+      const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
+      texture.anisotropy = Math.min(8, this.anisotropy); this.textures.set(`decal:${kind}`, texture);
+      material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+      this.decals.set(kind, material);
+    }
+    const mesh = new THREE.Mesh(this.plane, material);
+    mesh.scale.set(size[0], size[1], 1); mesh.position.set(...position);
+    group.add(mesh); return mesh;
   }
 
   surface(kind: 'deck' | 'vent' | 'wall-panel' | 'wall-ribbed', color: number) {
@@ -123,6 +162,29 @@ export class ArtResources {
         for (const x of [23, 233]) for (const y of [23, 233]) {
           context.beginPath(); context.arc(x, y, 2.5, 0, Math.PI * 2); context.fill();
         }
+        // Restrained wear follows the panel edges rather than covering the paint in noise.
+        const dust = context.createLinearGradient(0, 198, 0, 246);
+        dust.addColorStop(0, '#34413900'); dust.addColorStop(1, '#34413926');
+        context.fillStyle = dust; context.fillRect(15, 198, 226, 48);
+        context.lineWidth = 1;
+        for (let i = 0; i < 12; i++) {
+          const x = 35 + (i * 43) % 181, y = i % 2 ? 237 : 18;
+          context.strokeStyle = i % 3 ? '#f4f5ef70' : '#65736a55';
+          context.beginPath(); context.moveTo(x, y); context.lineTo(x + 3 + i % 5, y - 1); context.stroke();
+        }
+        const relief = document.createElement('canvas'); relief.width = relief.height = 256;
+        const height = relief.getContext('2d')!;
+        height.fillStyle = '#808080'; height.fillRect(0, 0, 256, 256);
+        height.strokeStyle = '#484848'; height.lineWidth = 3; height.strokeRect(9, 9, 238, 238);
+        if (kind === 'wall-ribbed') {
+          height.fillStyle = '#b0b0b0';
+          for (let x = 35; x < 235; x += 38) height.fillRect(x, 26, 14, 204);
+        } else {
+          height.strokeStyle = '#686868'; height.lineWidth = 2; height.strokeRect(28, 28, 200, 200);
+        }
+        const bump = new THREE.CanvasTexture(relief);
+        bump.anisotropy = Math.min(8, this.anisotropy);
+        this.textures.set(`${kind}:height`, bump);
       } else {
         // Fine brushed finish; larger panel seams are built from public map geometry.
         context.fillStyle = '#d8dfd7'; context.fillRect(0, 0, 256, 256);
@@ -138,6 +200,10 @@ export class ArtResources {
       this.textures.set(kind, texture);
     }
     material = new THREE.MeshStandardMaterial({ color, map: texture, roughness: kind === 'wall-ribbed' ? .58 : .8, metalness: kind === 'wall-ribbed' ? .45 : .2 });
+    if (kind === 'wall-panel' || kind === 'wall-ribbed') {
+      material.bumpMap = this.textures.get(`${kind}:height`)!;
+      material.bumpScale = kind === 'wall-ribbed' ? .018 : .008;
+    }
     this.surfaces.set(key, material); return material;
   }
 
@@ -206,8 +272,9 @@ export class ArtResources {
 
   /** Instance buffers and sprite materials belong to their groups; shared assets live here. */
   dispose() {
-    this.cube.dispose(); this.deck.dispose(); this.cylinder.dispose(); this.sphere.dispose();
+    this.cube.dispose(); this.deck.dispose(); this.cylinder.dispose(); this.sphere.dispose(); this.plane.dispose();
     this.materials.forEach(material => material.dispose()); this.surfaces.forEach(material => material.dispose());
+    this.decals.forEach(material => material.dispose()); this.decals.clear();
     this.textures.forEach(texture => texture.dispose());
     this.materials.clear(); this.surfaces.clear(); this.textures.clear();
   }
