@@ -101,6 +101,7 @@ function render() {
   if (!view) return;
   const p = current()!;
   const terminal = ['success', 'failure'].includes(p.phase);
+  $('map-sector').textContent = `${p.level.id.toUpperCase()} · 救援区域`;
   $('level-name').textContent = p.level.name;
   $('map-dimensions').textContent = `${p.level.width} × ${p.level.height} / LOCAL`;
   $('level-name').title = p.level.name;
