@@ -27,7 +27,7 @@
     "oxygenRate": 2,
     "repairedOxygenRate": 1,
     "battery": 120,
-    "batteryMax": 120,
+    "batteryMax": 160,
     "batteryRefill": 30,
     "oxygenRefill": 40,
     "inventorySlots": 2,
