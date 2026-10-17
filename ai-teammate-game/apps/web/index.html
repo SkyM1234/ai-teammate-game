@@ -47,6 +47,14 @@
     <footer><h1>LAST OXYGEN</h1><span>最后的氧气</span></footer>
     <span class="console-serial" aria-hidden="true">RESCUE SYSTEM</span>
   </main>
+  <section id="route-picker" class="route-picker" aria-labelledby="route-title" hidden>
+    <small class="eyebrow">R-07 / ROUTE CONTROL</small>
+    <h2 id="route-title">选择移动路线</h2>
+    <p id="route-target"></p>
+    <div id="route-options" class="route-options"></div>
+    <p id="route-hint" class="route-hint"></p>
+    <button id="route-stop" type="button">停止本次运行</button>
+  </section>
 </div>
 <dialog id="console-drawer" class="console-drawer" aria-labelledby="drawer-title">
   <header class="drawer-header"><span class="drawer-emblem" aria-hidden="true"><svg class="icon"><use id="drawer-icon" href="#icon-tools"/></svg></span><div class="drawer-heading"><span class="eyebrow" id="drawer-code">TERMINAL</span><h2 id="drawer-title">救援终端</h2></div><button id="drawer-close" aria-label="关闭面板">×</button></header>

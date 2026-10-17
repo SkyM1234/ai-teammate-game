@@ -284,17 +284,21 @@ test('规则通关按各地图预算自动分段完成救援，无需外部模�
   }
 });
 
-test('规则通关可停止、保存恢复并接续，偏离路线时保持世界状态等待玩家', async () => {
+test('规则通关停止后取消委托，保存恢复须重新委托，偏离路线时等待玩家', async () => {
   const session = new GameSession(source, { delayMs: 1 });
   let stopping: Promise<void> | undefined;
   session.listeners.add(view => { if (view.elapsedTU >= 10 && !stopping) stopping = session.stop(); });
   await session.command('规则通关'); await session.settled(); await stopping;
   const count = session.engine.state.ledger.length;
   assert.ok(count > 0 && count < source.verification!.actions.length);
-  assert.equal(session.engine.state.phase, 'paused');
+  assert.equal(session.engine.state.phase, 'awaiting_command'); assert.equal(session.task, null);
   assert.equal(session.running, false);
   const restored = new GameSession(source, { id: session.id, delayMs: 0 }); await restored.restore(session.save());
+  assert.equal(restored.task, null);
+  const stopped = restored.engine.snapshot(); const requests = restored.metrics.requests;
   await restored.continue(); await restored.settled();
+  assert.deepEqual(restored.engine.snapshot(), stopped); assert.equal(restored.metrics.requests, requests);
+  await restored.command('规则通关'); await restored.settled();
   assert.equal(restored.engine.state.phase, 'success');
   assert.deepEqual(restored.engine.state.ledger.map(entry => entry.action), source.verification!.actions);
   const deviated = new GameSession(source, { delayMs: 0 });

@@ -176,7 +176,7 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
       let promise = requests.get(key);
       if (!promise) {
         promise = (async () => {
-          if (!['stop', 'continue', 'save', 'model', 'authorize'].includes(operation ?? '') && input.expectedRevision !== session.engine.state.stateRevision) throw new HttpError(409, '地图状态已更新，请根据最新信息重试');
+          if (!['stop', 'continue', 'save', 'model', 'authorize', 'select-route'].includes(operation ?? '') && input.expectedRevision !== session.engine.state.stateRevision) throw new HttpError(409, '地图状态已更新，请根据最新信息重试');
           if (operation === 'command') {
             if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 2000) throw new HttpError(400, '指令长度应为 1–2000 字符');
             await session.command(input.text.trim(), input.selected ? position(input.selected, session.engine.level) : undefined, input.expectedRevision as number);
@@ -187,6 +187,10 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
           else if (operation === 'authorize') {
             if (typeof input.authorizationId !== 'string' || !uuidPattern.test(input.authorizationId) || typeof input.approve !== 'boolean') throw new HttpError(400, '授权参数不合法');
             await session.authorize(input.authorizationId, input.approve);
+          }
+          else if (operation === 'select-route') {
+            if (typeof input.selectionId !== 'string' || !uuidPattern.test(input.selectionId) || !['safe', 'shortest'].includes(input.choice as string)) throw new HttpError(400, '路线选择参数不合法');
+            await session.selectRoute(input.selectionId, input.choice as 'safe' | 'shortest');
           }
           else if (operation === 'marker') {
             if (typeof input.note !== 'string' || typeof input.shared !== 'boolean') throw new HttpError(400, '标记参数不完整');

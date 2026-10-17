@@ -276,6 +276,51 @@ test('运行中的存档恢复为暂停，停止请求不因客户端旧版本�
   const latest = await call<SessionView>('/api/latest'); assert.equal(latest.data.sessionId, initial.sessionId);
 });
 
+test('HTTP 选路同步候选路径、校验与去重，选带电路线后拒绝授权立即停止', async t => {
+  const { call, sessions, initial, base } = await fixture(t);
+  const path = `/api/sessions/${initial.sessionId}`; const session = sessions.get(initial.sessionId)!;
+  session.engine.state.circuitOn = true;
+  session.engine.state.entities.find(entity => entity.id === 'd-01')!.opened = true;
+  for (const position of [{ x: 6, y: 2 }, { x: 6, y: 3 }, { x: 7, y: 3 }]) {
+    session.engine.state.robot.position = position; session.engine.observe();
+  }
+  session.adapter = { mode: 'live', label: '选路测试', model: demoModel, streamFn: () => toolStream([
+    { name: 'move_to', arguments: { target: { x: 9, y: 3 } } },
+    { name: 'finish_task', arguments: { reason: '完成。' } },
+  ]) };
+  session.agent.streamFunction = session.adapter.streamFn;
+  await call(`${path}/command`, { requestId: crypto.randomUUID(), expectedRevision: 0, text: '前往 (9,3)' });
+  const controller = new AbortController(); t.after(() => controller.abort());
+  const response = await fetch(`${base}${path}/events`, { signal: controller.signal });
+  const reader = response.body!.getReader(); let sse = '';
+  while (!sse.includes('"pendingRouteSelection":{"id"')) sse += new TextDecoder().decode((await reader.read()).value);
+  assert.ok(sse.includes('estimatedCost')); assert.ok(sse.includes(session.pendingRouteSelection!.id));
+  controller.abort(); await reader.cancel().catch(() => undefined);
+  const selectionId = session.pendingRouteSelection!.id;
+  assert.equal((await call(path)).data.pendingRouteSelection?.options.length, 2);
+  for (const invalid of [{ selectionId, choice: 'anything' }, { selectionId: 'bad-id', choice: 'safe' }, { choice: 'safe' }]) {
+    assert.equal((await call(`${path}/select-route`, { requestId: crypto.randomUUID(), ...invalid })).status, 400);
+  }
+  const input = { requestId: crypto.randomUUID(), selectionId, choice: 'shortest' };
+  assert.equal((await call(`${path}/select-route`, input)).status, 200);
+  assert.equal((await call(`${path}/select-route`, input)).status, 200);
+  assert.equal((await call(`${path}/select-route`, { ...input, requestId: crypto.randomUUID() })).status, 409);
+  const pending = (await call(path)).data.pendingAuthorization!;
+  assert.equal(pending.kind, 'hazard'); assert.equal(session.engine.state.elapsedTU, 0);
+  assert.equal((await call(`${path}/authorize`, { requestId: crypto.randomUUID(), authorizationId: pending.id, approve: false })).status, 200);
+  await session.settled();
+  const latest = (await call(path)).data;
+  assert.equal(latest.running, false); assert.equal(latest.task, null); assert.equal(latest.phase, 'awaiting_command'); assert.equal(latest.elapsedTU, 0);
+  assert.equal(latest.metrics.requests, 1); assert.equal(latest.pendingRouteSelection, null); assert.equal(latest.pendingAuthorization, null);
+  assert.equal((await call(`${path}/continue`, { requestId: crypto.randomUUID() })).status, 200);
+  assert.equal(session.metrics.requests, 1); assert.equal(session.task, null);
+  await call(`${path}/save`, { requestId: crypto.randomUUID() });
+  const loaded = await call(`${path}/load`, {});
+  assert.equal(loaded.data.task, null);
+  assert.equal((await call(`${path}/continue`, { requestId: crypto.randomUUID() })).status, 200);
+  assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.task, null);
+});
+
 test('HTTP 授权决定按请求 ID 去重，SSE 同步挂起状态且过期授权返回冲突', async t => {
   const { call, sessions, initial, base } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`; const session = sessions.get(initial.sessionId)!;

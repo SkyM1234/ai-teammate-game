@@ -5,6 +5,7 @@ import type { LevelSummary } from '../../server/src/levels.ts';
 import type { Action, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { StationRenderer } from './station-renderer.ts';
+import type { RouteOverlay } from './station-renderer.ts';
 import { roomColors } from './art/themes.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -36,6 +37,9 @@ let providers: Awaited<ReturnType<typeof modelCatalog>> = [];
 let modelDefaults: ModelPreferencesView | null = null;
 let modelFormConfig: ModelConfig | null = null;
 let answeringAuthorization = false;
+let choosingRoute = false;
+let lastRouteDecision = '';
+let lastRouteRender = '';
 let restoringSave = false;
 const phaseNames: Record<string, string> = { awaiting_command: '等待指令', agent_thinking: '正在决策', executing: '行动中', awaiting_player: '等待你的决定', paused: '已暂停', success: '救援成功', failure: '救援失败' };
 const stateNames: Record<string, string> = { available: '可获取', closed: '关闭', opened: '已打开', active: '带电', inactive: '未通电', on: '已通电', off: '已断电', damaged: '损坏', repaired: '已修复', cleared: '已移除', inventory: '已携带' };
@@ -146,7 +150,7 @@ function render() {
   $('inventory-count').textContent = `${p.robot.inventory.length} / ${p.rules.inventorySlots}`;
   $('drawer-clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${frames ? ' / 回放' : ''}`;
   document.querySelector<HTMLElement>('.robot-card')!.dataset.lowBattery = String(p.robot.battery / p.rules.batteryMax < .25);
-  $('robot-summary').textContent = `${frames ? '回放 · ' : ''}${!frames && view.pendingAuthorization ? '等待你的授权' : phaseNames[p.phase]}`;
+  $('robot-summary').textContent = `${frames ? '回放 · ' : ''}${!frames && view.pendingRouteSelection ? '等待你选择路线' : !frames && view.pendingAuthorization ? '等待你的授权' : phaseNames[p.phase]}`;
   $('robot-location').textContent = `坐标 (${p.robot.position.x}, ${p.robot.position.y}) · ${p.human.carried ? '搬运伤员中' : `物资 ${p.robot.inventory.length} / ${p.rules.inventorySlots}`}`;
   $('human-status').textContent = `${p.human.carried ? '正在由 R-07 搬运' : '受伤 · 无法移动'} / 每 TU 消耗 ${p.human.oxygenRate} 氧气`;
   $('robot-status').textContent = `${phaseNames[p.phase]} / 坐标 (${p.robot.position.x}, ${p.robot.position.y})`;
@@ -207,16 +211,18 @@ function render() {
   const task = view.task;
   $('task').replaceChildren();
   const taskStatus = task?.status === 'completed' && task.interpretation === 'model' ? '已结束' : task ? { active: '执行中', paused: '暂停', waiting: '待决定', completed: '已完成' }[task.status] : '待命';
-  $('comms-state').textContent = !frames && view.pendingAuthorization ? '等待授权' : frames ? '历史回放' : taskStatus;
+  $('comms-state').textContent = !frames && view.pendingRouteSelection ? '等待选路' : !frames && view.pendingAuthorization ? '等待授权' : frames ? '历史回放' : taskStatus;
   const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${taskStatus}`;
   const taskText = document.createElement('p'); taskText.textContent = task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
   if (task?.question) { const question = document.createElement('p'); question.className = 'question'; question.textContent = task.question; $('task').append(question); }
+  $('continue').hidden = !task;
   $<HTMLButtonElement>('continue').disabled = !!frames || terminal || view.running || !task || task.status === 'completed';
   $<HTMLButtonElement>('stop').disabled = !!frames || terminal || !view.running;
   $<HTMLButtonElement>('send').disabled = !!frames || terminal || sending;
   $('demo-rescue-controls').hidden = view.agentMode !== 'demo' || !view.demoRescueAvailable;
   $<HTMLButtonElement>('demo-rescue').disabled = !!frames || terminal || sending || view.running;
   renderMessages();
+  renderRoutePicker();
   const m = view.metrics; $('metrics').textContent = `模型请求 ${m.requests} / 工具 ${m.executedTools} / 跳过 ${m.skippedTools} / 中断 ${m.interrupts}\nTokens ${m.inputTokens} in · ${m.outputTokens} out / 结果 ${(m.resultBytes / 1024).toFixed(1)} KB`;
   $('ledger').replaceChildren();
   $('ledger-mode').textContent = frames ? '历史回放' : '实时';
@@ -308,8 +314,59 @@ function geometry() {
 }
 function drawMap() {
   const p = current(); if (!p) return;
-  if (station) station.update(p, selected); else drawFlatMap();
+  if (station) station.update(p, selected, routeOverlays()); else drawFlatMap();
 }
+
+const routeColor = (choice: string) => choice === 'safe' ? '#66ddce' : '#f2b864';
+const routeLabel = (choice: string) => choice === 'safe' ? 'A' : 'B';
+function routeOverlays(): RouteOverlay[] {
+  if (!view || frames) return [];
+  const routes = view.pendingRouteSelection?.options ?? (view.pendingAuthorization?.route ? [view.pendingAuthorization.route] : []);
+  return routes.map(route => ({ path: [view!.robot.position, ...route.path], color: routeColor(route.choice), label: routeLabel(route.choice) }));
+}
+
+function renderRoutePicker() {
+  const pending = frames ? null : view?.pendingRouteSelection;
+  const authorization = !frames && view?.pendingAuthorization?.kind === 'hazard' ? view.pendingAuthorization : null;
+  const decisionId = pending?.id ?? authorization?.id ?? '';
+  $('route-picker').hidden = !decisionId;
+  document.querySelector<HTMLElement>('.shell')!.dataset.routeDecision = String(!!decisionId);
+  const key = JSON.stringify([view?.sessionInstanceId, decisionId, choosingRoute, answeringAuthorization]);
+  if (key === lastRouteRender) return;
+  lastRouteRender = key;
+  if (!decisionId) { lastRouteDecision = ''; return; }
+  $('route-title').textContent = pending ? '选择移动路线' : '授权危险穿越';
+  $('route-target').textContent = pending ? `目标 (${pending.target.x}, ${pending.target.y}) · 路线颜色与地图对应` : authorization!.description;
+  const options = $('route-options'); options.replaceChildren();
+  if (pending) for (const route of pending.options) {
+    const option = document.createElement('button'); option.type = 'button'; option.className = 'route-option';
+    option.style.setProperty('--route-color', routeColor(route.choice)); option.disabled = choosingRoute;
+    const title = document.createElement('strong'); title.textContent = `${routeLabel(route.choice)} · ${route.choice === 'safe' ? '避险路线' : '带电近路'} · ${route.steps} 格`;
+    const cost = document.createElement('span'); cost.textContent = `${route.estimatedCost.tu} TU · ${route.estimatedCost.battery} 电量 · ${route.estimatedCost.oxygen} 氧气`;
+    const note = document.createElement('small'); note.textContent = [route.requiresAuthorization ? '选择后还需危险授权' : '选择后开始移动', !route.withinRemainingTU ? '超出本次剩余 TU，途中会停止' : ''].filter(Boolean).join(' · ');
+    option.append(title, cost, note);
+    option.onclick = async () => {
+      if (choosingRoute) return;
+      choosingRoute = true; renderRoutePicker();
+      try { await post('select-route', { selectionId: pending.id, choice: route.choice }); }
+      finally { choosingRoute = false; renderRoutePicker(); }
+    };
+    options.append(option);
+  }
+  if (authorization) {
+    const consequence = document.createElement('p'); consequence.textContent = authorization.consequence; options.append(consequence);
+    const button = document.createElement('button'); button.type = 'button'; button.textContent = '授权并继续'; button.className = 'primary';
+    button.disabled = answeringAuthorization;
+    button.onclick = () => void answerAuthorization(true, authorization.id); options.append(button);
+  }
+  $('route-hint').textContent = '按已知地图估算，途中可能受阻。等待不消耗资源。';
+  if (lastRouteDecision !== decisionId) {
+    lastRouteDecision = decisionId;
+    $<HTMLDialogElement>('console-drawer').close();
+    options.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+  }
+}
+$('route-stop').onclick = () => void stopAndReturnToComms();
 document.addEventListener('visibilitychange', () => { if (!station && !document.hidden) drawMap(); });
 function drawFlatMap() {
   cancelAnimationFrame(flatAnimation); flatAnimation = 0;
@@ -382,6 +439,14 @@ function drawFlatMap() {
     const c = center(marker.position); context.strokeStyle = marker.shared ? '#92b2fa' : '#6c7fa2';
     context.beginPath(); context.moveTo(c.x, c.y - cell * .36); context.lineTo(c.x + cell * .36, c.y); context.lineTo(c.x, c.y + cell * .36); context.lineTo(c.x - cell * .36, c.y); context.closePath(); context.stroke();
   }
+  for (const route of routeOverlays()) {
+    context.strokeStyle = route.color; context.lineWidth = Math.max(2, cell * .08); context.lineJoin = 'round';
+    context.beginPath();
+    route.path.forEach((point, i) => { const c = center(point); if (i) context.lineTo(c.x, c.y); else context.moveTo(c.x, c.y); }); context.stroke();
+    const point = route.path[1];
+    if (point) { const c = center(point); context.fillStyle = '#102126'; context.fillRect(c.x - 8, c.y - 8, 16, 16); context.fillStyle = route.color; context.font = 'bold 12px monospace'; context.fillText(route.label, c.x, c.y); }
+    context.lineWidth = 1;
+  }
   const human = center(p.human.position);
   context.fillStyle = '#f2b864'; context.beginPath(); context.arc(human.x, human.y, cell * .22, 0, Math.PI * 2); context.fill();
   context.fillStyle = '#162128'; context.font = `bold ${cell * .25}px monospace`; context.fillText('H', human.x, human.y);
@@ -447,6 +512,7 @@ document.addEventListener('keydown', event => {
   event.preventDefault(); drawer.close();
 });
 async function command(text: string) { if (!text.trim() || frames) return; sending = true; render(); await post('command', { text, ...(selected ? { selected } : {}) }); sending = false; render(); }
+async function stopAndReturnToComms() { if (await post('stop')) openPanel('comms'); }
 $('chat-form').onsubmit = event => { event.preventDefault(); const input = $<HTMLTextAreaElement>('command'); const text = input.value; input.value = ''; void command(text); };
 $('command').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $<HTMLFormElement>('chat-form').requestSubmit(); } };
 $('go-selected').onclick = () => { if (selected) { openPanel('comms'); void command(`前往 (${selected.x},${selected.y})`); } };
@@ -468,7 +534,7 @@ document.addEventListener('keydown', event => {
   if (!$('marker-form').hidden) { setMarkerEditor(false); $('toggle-marker').focus(); }
   else $('clear-selection').click();
 });
-$('stop').onclick = () => void post('stop'); $('continue').onclick = () => void post('continue');
+$('stop').onclick = () => void stopAndReturnToComms(); $('continue').onclick = () => void post('continue');
 $('save').onclick = async () => { if (await post('save')) toast('当前进度已保存。'); };
 let creatingGame = false;
 async function chooseMap() {
@@ -650,10 +716,12 @@ $('model-form').onsubmit = async event => {
 function renderMessages() {
   if (!view) return;
   const pending = frames ? null : view?.pendingAuthorization;
-  $('comms-notice').hidden = !pending;
+  const routePending = !frames && view.pendingRouteSelection;
+  $('comms-notice').hidden = !pending && !routePending;
+  $('comms-notice').textContent = routePending ? '待选路' : '待授权';
   document.querySelectorAll<HTMLButtonElement>('[data-open="comms"]').forEach(button => {
-    button.classList.toggle('needs-authorization', !!pending);
-    button.setAttribute('aria-label', pending ? '机器人通信 · 待授权' : '机器人通信');
+    button.classList.toggle('needs-authorization', !!pending || !!routePending);
+    button.setAttribute('aria-label', routePending ? '机器人通信 · 待选路' : pending ? '机器人通信 · 待授权' : '机器人通信');
   });
   const messageKey = JSON.stringify([view.messages, pending?.id, !!frames, answeringAuthorization]);
   if (messageKey === lastMessages) return;
@@ -670,10 +738,10 @@ function renderMessages() {
     const consequence = document.createElement('p'); consequence.id = 'authorization-consequence'; consequence.className = 'authorization-consequence'; consequence.textContent = pending.consequence;
     const hint = document.createElement('p'); hint.className = 'authorization-hint'; hint.textContent = '等待不消耗资源。授权仅对当前操作有效。';
     const actions = document.createElement('div'); actions.className = 'authorization-buttons';
-    for (const [approve, label] of [[true, '授权并继续'], [false, '拒绝，重新决策']] as const) {
-      const button = document.createElement('button'); button.type = 'button'; button.id = approve ? 'authorization-approve' : 'authorization-deny'; button.textContent = label;
+    for (const [approve, label] of [[true, '授权并继续'], [false, pending.kind === 'hazard' ? '停止本次运行' : '拒绝，重新决策']] as const) {
+      const button = document.createElement('button'); button.type = 'button'; button.id = approve ? 'authorization-approve' : pending.kind === 'hazard' ? 'authorization-stop' : 'authorization-deny'; button.textContent = label;
       if (approve) button.className = 'primary'; button.disabled = answeringAuthorization;
-      button.onclick = () => void answerAuthorization(approve, pending.id); actions.append(button);
+      button.onclick = () => { if (!approve && pending.kind === 'hazard') void stopAndReturnToComms(); else void answerAuthorization(approve, pending.id); }; actions.append(button);
     }
     el.append(consequence, hint, actions);
   };
@@ -704,7 +772,7 @@ function renderMessages() {
 }
 async function answerAuthorization(approve: boolean, authorizationId: string) {
   const pending = view?.pendingAuthorization; if (!pending || pending.id !== authorizationId || frames || answeringAuthorization) return;
-  answeringAuthorization = true; renderMessages();
-  try { await post('authorize', { authorizationId: pending.id, approve }); }
-  finally { answeringAuthorization = false; renderMessages(); }
+  answeringAuthorization = true; renderMessages(); renderRoutePicker();
+  try { if (await post('authorize', { authorizationId: pending.id, approve }) && pending.kind === 'hazard') openPanel('comms'); }
+  finally { answeringAuthorization = false; renderMessages(); renderRoutePicker(); }
 }

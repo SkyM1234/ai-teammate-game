@@ -5,7 +5,7 @@ import type { AgentMessage, AgentTool } from '../../../../pi-main/packages/agent
 import { defaultConstraints, diffKnowledge, GameEngine } from '../../../packages/game-core/src/engine.ts';
 import { sensorCells } from '../../../packages/game-core/src/navigation.ts';
 import { distance, emptyDelta, samePosition } from '../../../packages/game-core/src/types.ts';
-import type { Action, ActionOutcome, Constraints, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
+import type { Action, ActionOutcome, Constraints, Cost, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveModel, modelErrorMessage } from './model.ts';
 import type { CredentialSource } from './credentials.ts';
 import type { ModelAdapter, ModelConfig, ToolIntent } from './model.ts';
@@ -23,11 +23,15 @@ export interface Task {
   id: string; text: string; selected?: Position; interpretation: 'model' | 'demo';
   goal?: DemoGoal; demoSupported?: boolean;
   status: 'active' | 'paused' | 'waiting' | 'completed'; question: string | null;
-  waitReason?: 'power' | 'hazard' | 'decision' | 'authorization'; constraints: Constraints;
+  waitReason?: 'power' | 'hazard' | 'decision' | 'authorization' | 'route'; constraints: Constraints;
 }
 export interface PendingAuthorization {
   id: string; toolName: string; arguments: Record<string, unknown>; kind: 'repair' | 'drop' | 'hazard' | 'power';
   description: string; consequence: string; stateRevision: number; hazardIds?: string[];
+  route?: MoveRoute;
+}
+export interface PendingRouteSelection {
+  id: string; target: Position; options: MoveRoute[]; stateRevision: number;
 }
 type AuthorizationDecision = 'approve' | 'deny' | 'cancel' | 'stale';
 export interface Metrics { requests: number; executedTools: number; skippedTools: number; inputTokens: number; outputTokens: number; resultBytes: number; interrupts: number }
@@ -36,11 +40,16 @@ export interface SessionView extends PlayerView {
   agentMode: ModelAdapter['mode']; agentLabel: string; running: boolean;
   modelConfig: ModelConfig; modelReady: boolean; modelError: string | null; modelCredentialSource: CredentialSource;
   pendingAuthorization: PendingAuthorization | null;
+  pendingRouteSelection: PendingRouteSelection | null;
 }
 export interface SessionSave { version: 1; id: string; level?: Level; engine: GameState; task: Task | null; messages: ChatMessage[]; metrics: Metrics; eventId: number; modelConfig?: ModelConfig }
 interface ToolOutcome {
   accepted: boolean; code: string; message: string; delta: ObservationDelta;
   executedSteps?: number; targetReached?: boolean; costTU: number;
+}
+export interface MoveRoute {
+  choice: 'safe' | 'shortest'; path: Position[]; steps: number; estimatedCost: Cost;
+  withinRemainingTU: boolean; hazardIds: string[]; requiresAuthorization: boolean;
 }
 export class RevisionConflictError extends Error {}
 
@@ -63,6 +72,7 @@ historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0
 当前设施状态以 knownEntities 和最新工具结果为准，优先于历史地图符号及此前的推测：障碍 state=cleared 表示已清除，不再阻挡；门 state=opened 表示已打开，可以通过；已知关闭的门、未清除的障碍仍阻挡移动。柜体（cabinet）、气闸控制器（airlock）和辅助电路开关（switch）所在格均不可进入或穿越，开启、修复或通断电均不会解除阻挡，空载和搬运时都适用；识别后需要交互时，move_to 的目标应选择可达的相邻格，不要选择设施所在格。历史可通行格可能存在尚未发现的阻挡或危险，需以逐格执行结果确认；不要把未知状态直接判为无路。
 exitStatus 是玩家与机器人共享的出口实时状态：leaking 表示出口正在漏气喷射，出口这一格禁止进入或穿越，搬运与危险授权均不能绕过；safe 表示修复气闸后漏气已停止，出口恢复通行。出口位置仍以 historicalMap.exit 为准，气闸控制器的位置与 ID 必须靠近识别，不能由出口位置推断。需先寻找气闸控制器、取得维修材料并修复，再把人类搬到出口并 interact extract；前往出口附近可选择可达的安全相邻格，不要将出口漏气误判为整个附近区域不可达。
 move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.robot.position 为准；精确坐标目标 targetReached=false 时尚未抵达，不得当作完成。TARGET_WALL 表示目标本身是墙，更换起点或中间点不能解决；TARGET_BLOCKED 应按原因开门、清障或选择设施相邻格，关闭的门可以打开后通过，不等同于柜体等固定阻挡。
+move_to 发现多条候选路线时，程序会在前端地图显示路径和预计消耗，等待玩家选定；只有一条路线时直接采用。选择期间不消耗游戏资源或新增模型请求，随后在原工具调用中检查危险授权并沿选定路径执行。预计消耗仅依据历史布局、已知设施和当前搬运状态，未知阻挡或危险仍可能改变实际情况。模型只传目标，不选择路线，也不要用 ask_player 代替地图选路或危险授权；玩家停止运行或拒绝危险穿越后，立即取消委托，不能继续旧任务，必须重新下达指令。任何普通移动或选定路线的移动，途中首次发现剩余选定路径上未清除的障碍、关闭的门或未经授权的带电危险时才停止运行并取消委托，不再请求模型重新决策、换路或申请后续授权，必须重新下达指令。路旁、已经走过的位置、目标之外的物体，以及不影响通行的已清除障碍、已打开门或无须新授权的线路不会因此中断移动；仍记录这些新发现。NEW_OBSTACLE、NEW_DOOR、NEW_HAZARD、NEW_DISCOVERY 表示发现新情况而中断，NO_KNOWN_PATH 表示当前条件下无路，BUDGET 表示剩余 TU 不足以执行下一步；均不代表已经抵达。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
 sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。
@@ -102,8 +112,11 @@ export class GameSession {
   private currentPromise: Promise<void> | null = null;
   private operationSerial: Promise<unknown> = Promise.resolve();
   pendingAuthorization: PendingAuthorization | null = null;
+  pendingRouteSelection: PendingRouteSelection | null = null;
   journal?: SessionJournal;
   private authorizationWaiter: { resolve: (decision: AuthorizationDecision) => void; commandRevision: number; externalRevision: number } | null = null;
+  private routeWaiter: { resolve: (decision: MoveRoute['choice'] | 'cancel' | 'stale') => void; commandRevision: number; externalRevision: number } | null = null;
+  private toolRoute: MoveRoute | null = null;
   private deniedCalls = new Set<string>();
   private toolHazards: string[] = [];
 
@@ -147,6 +160,7 @@ export class GameSession {
       },
       beforeToolCall: async ({ toolCall, args }, signal) => {
         this.toolHazards = [];
+        this.toolRoute = null;
         const valid = () => this.control === 'continue' && this.requestCommandRevision === this.commandRevision && this.requestExternalRevision === this.externalRevision && this.allowedCalls.has(toolCall.id) && !this.engine.terminal && !signal?.aborted;
         if (!valid()) {
           this.metrics.skippedTools++;
@@ -156,6 +170,19 @@ export class GameSession {
         const input = args as Record<string, unknown>;
         const target = input.target as Position | undefined;
         const signature = JSON.stringify([toolCall.name, input.operation, input.targetId, input.itemId, input.on, target ? [target.x, target.y] : null]);
+        if (toolCall.name === 'move_to' && target && !this.isDemoRescue()) {
+          const routes = this.moveRoutes(target);
+          if (routes.length > 1) {
+            const revision = this.engine.state.stateRevision;
+            const choice = await this.awaitRouteSelection({ id: crypto.randomUUID(), target, options: routes, stateRevision: revision }, signal);
+            if (!valid() || revision !== this.engine.state.stateRevision || choice === 'cancel' || choice === 'stale') {
+              this.metrics.skippedTools++;
+              if (this.control === 'continue') this.control = 'redecide';
+              return { block: true, reason: 'ROUTE_SELECTION_EXPIRED：路线选择已取消或状态已变化，未移动，请依据最新状态重新决策。' };
+            }
+            this.toolRoute = routes.find(route => route.choice === choice)!;
+          } else this.toolRoute = routes[0] ?? null;
+        }
         const authorization = this.authorizationFor(toolCall.name, input);
         if (authorization) {
           if (this.deniedCalls.has(signature)) { this.control = 'redecide'; this.metrics.skippedTools++; return { block: true, reason: 'AUTHORIZATION_DENIED：玩家已拒绝该操作，请选择其他方案。' }; }
@@ -164,6 +191,10 @@ export class GameSession {
           if (decision !== 'approve' || !valid() || revision !== this.engine.state.stateRevision) {
             this.metrics.skippedTools++;
             if (decision === 'deny') this.deniedCalls.add(signature);
+            if (decision === 'deny' && authorization.kind === 'hazard') {
+              this.cancelTask('你已拒绝经过带电线路，本次自动运行已停止，委托已取消，请重新下达指令。');
+              return { block: true, reason: 'HAZARD_AUTHORIZATION_DENIED：玩家拒绝危险穿越，委托已取消，未移动。' };
+            }
             if (this.control === 'continue') this.control = 'redecide';
             return { block: true, reason: decision === 'deny' ? 'AUTHORIZATION_DENIED：玩家拒绝了该操作，未执行，请重新选择方案。' : 'AUTHORIZATION_EXPIRED：状态或任务已变化，未执行，请重新决策。' };
           }
@@ -173,7 +204,7 @@ export class GameSession {
         this.engine.state.phase = 'executing';
         return undefined;
       },
-      afterToolCall: async ({ result, isError }) => {
+      afterToolCall: async ({ toolCall, result, isError }) => {
         this.metrics.executedTools++;
         if (isError) { this.control = 'redecide'; return undefined; }
         const outcome = result.details as ToolOutcome;
@@ -184,10 +215,13 @@ export class GameSession {
         if (this.engine.terminal) {
           this.control = 'game_over';
           if (this.task) this.task.status = this.engine.state.phase === 'success' ? 'completed' : 'paused';
+        } else if (toolCall.name === 'move_to' && ['NEW_OBSTACLE', 'NEW_DOOR', 'NEW_HAZARD'].includes(outcome.code) && !this.isDemoRescue()) {
+          outcome.message += ' 本次自动运行已停止，委托已取消，请重新下达指令。';
+          this.cancelTask(outcome.message);
         } else if (outcome.accepted && this.taskSatisfied()) {
           this.control = this.engine.terminal ? 'game_over' : 'task_done';
           if (this.task) { this.task.status = 'completed'; this.task.question = null; }
-        } else if (this.control === 'continue' && this.significant(delta)) {
+        } else if (toolCall.name !== 'move_to' && this.control === 'continue' && this.significant(delta)) {
           this.control = this.task?.constraints.stopOnHazard && this.newActiveHazard(delta) ? 'wait_player' : 'redecide';
           this.metrics.interrupts++;
           if (this.control === 'wait_player') this.waitForPlayer('发现带电线路。已按你的指令停止，请决定断电或更换路线。', 'hazard');
@@ -212,11 +246,16 @@ export class GameSession {
         if (this.control === 'wait_player' || this.control === 'task_done' || this.control === 'game_over') return { action: 'end' };
         if (this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit || this.noProgressTurns >= 2) {
           this.budgetExhausted = this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit;
-          this.pause('本次自动运行已到预算或没有取得进展，目标保留。可点击继续。');
+          const reasons: string[] = [];
+          if (this.requestCount >= level.rules.requestLimit) reasons.push('本次模型请求次数已用尽');
+          if (this.runTU >= level.rules.actionTULimit) reasons.push('本次行动预算已用尽');
+          if (this.noProgressTurns >= 2) reasons.push(`连续 ${this.noProgressTurns} 轮未推进游戏时间`);
+          const remaining = this.remainingBudget();
+          this.pause(`${reasons.join('；')}。剩余行动预算 ${remaining.remainingTU} TU，剩余模型请求 ${remaining.remainingRequests} 次。目标保留，可点击继续。`);
           return { action: 'end' };
         }
         if (toolResults.length === 0) {
-          this.pause('等待下一条指令。');
+          this.pause('模型本轮仅回复文字、未调用工具，自动运行已暂停。目标保留，等待下一条指令或点击继续。');
           return { action: 'end' };
         }
         return undefined;
@@ -309,7 +348,26 @@ export class GameSession {
 
   private isDemoRescue(): boolean { return this.adapter.mode === 'demo' && this.task?.interpretation === 'demo' && this.task.goal?.kind === 'rescue'; }
 
-  private authorizationFor(name: string, args: Record<string, unknown>): Pick<PendingAuthorization, 'kind' | 'description' | 'consequence' | 'hazardIds'> | null {
+  private moveRoutes(target: Position): MoveRoute[] {
+    const constraints = this.task?.constraints ?? defaultConstraints();
+    const hazards = this.engine.state.circuitOn ? Object.values(this.engine.state.knowledge.entities).filter(entity => entity.type === 'hazard') : [];
+    const safe = this.engine.knownPath(target, constraints);
+    const shortest = this.engine.knownPath(target, { ...constraints, authorizedHazardIds: [...new Set([...constraints.authorizedHazardIds, ...hazards.map(entity => entity.id)])] });
+    const routes: MoveRoute[] = [];
+    const add = (choice: MoveRoute['choice'], path: Position[]) => {
+      const crossing = hazards.filter(entity => path.some(position => samePosition(position, entity.position)));
+      const base = this.engine.level.rules.actionCosts[this.engine.state.human.carried ? 'carry_move' : 'move'];
+      const tu = path.length * base.tu;
+      const battery = path.length * base.battery + path.filter(position => crossing.some(entity => samePosition(position, entity.position))).length * this.engine.level.rules.leakCost;
+      const hazardIds = crossing.map(entity => entity.id);
+      routes.push({ choice, path, steps: path.length, estimatedCost: { tu, battery, oxygen: tu * this.engine.state.human.oxygenRate }, withinRemainingTU: tu <= this.remainingBudget().remainingTU, hazardIds, requiresAuthorization: hazardIds.some(id => !constraints.authorizedHazardIds.includes(id)) });
+    };
+    if (safe) add('safe', safe);
+    if (shortest && (!safe || shortest.length < safe.length)) add('shortest', shortest);
+    return routes;
+  }
+
+  private authorizationFor(name: string, args: Record<string, unknown>): Pick<PendingAuthorization, 'kind' | 'description' | 'consequence' | 'hazardIds' | 'route'> | null {
     // The explicit local walkthrough delegates its configured steps; live tasks keep button authorization.
     if (this.isDemoRescue()) return null;
     if (name === 'interact') {
@@ -336,15 +394,54 @@ export class GameSession {
       }
     }
     if (name === 'move_to') {
-      const target = args.target as Position;
-      if (!this.engine.knownPath(target, this.task?.constraints)) {
-        const hazards = Object.values(this.engine.state.knowledge.entities).filter(e => e.type === 'hazard' && e.state === 'active');
-        const path = this.engine.knownPath(target, { ...this.executionConstraints(), authorizedHazardIds: hazards.map(e => e.id) });
-        const crossing = hazards.filter(e => path?.some(p => samePosition(p, e.position)));
-        if (path && crossing.length) return { kind: 'hazard', hazardIds: crossing.map(e => e.id), description: '允许本次移动经过已知带电线路吗？', consequence: `经过 ${crossing.map(e => `(${e.position.x},${e.position.y})`).join('、')}；每次进入额外消耗 ${this.engine.level.rules.leakCost} 电量，仍检查返回储备和行动预算。` };
+      const route = this.toolRoute;
+      if (route?.requiresAuthorization) {
+        const hazardIds = route.hazardIds.filter(id => !this.task?.constraints.authorizedHazardIds.includes(id));
+        const crossing = hazardIds.map(id => this.engine.state.knowledge.entities[id]);
+        const cost = route.estimatedCost;
+        return { kind: 'hazard', hazardIds, route, description: '允许本次移动经过已知带电线路吗？', consequence: `根据已知信息，路线预计 ${cost.tu} TU、${cost.battery} 电量、${cost.oxygen} 氧气；经过 ${crossing.map(entity => `(${entity.position.x},${entity.position.y})`).join('、')}；每次进入额外消耗 ${this.engine.level.rules.leakCost} 电量（已计入估算），仍检查返回储备和行动预算。拒绝后停止本次自动运行。` };
       }
     }
     return null;
+  }
+
+  private async awaitRouteSelection(request: PendingRouteSelection, signal?: AbortSignal): Promise<MoveRoute['choice'] | 'cancel' | 'stale'> {
+    if (signal?.aborted) return 'cancel';
+    const abort = () => this.resolveRouteSelection('cancel');
+    const decision = new Promise<MoveRoute['choice'] | 'cancel' | 'stale'>(resolve => {
+      this.routeWaiter = { resolve, commandRevision: this.commandRevision, externalRevision: this.externalRevision };
+      signal?.addEventListener('abort', abort, { once: true });
+      this.pendingRouteSelection = request;
+      if (this.task) { this.task.status = 'waiting'; this.task.waitReason = 'route'; this.task.question = `请在地图上选择前往 (${request.target.x}, ${request.target.y}) 的路线。`; }
+      this.engine.state.phase = 'awaiting_player';
+      this.record('等待路线选择', request, true);
+      this.emit();
+    });
+    try { return await decision; } finally { signal?.removeEventListener('abort', abort); }
+  }
+
+  private resolveRouteSelection(decision: MoveRoute['choice'] | 'cancel' | 'stale'): void {
+    const waiter = this.routeWaiter;
+    if (waiter) this.record('路线选择决定', { decision, request: this.pendingRouteSelection }, true);
+    this.routeWaiter = null; this.pendingRouteSelection = null;
+    if (this.task?.waitReason === 'route') { this.task.status = decision === 'cancel' ? 'paused' : 'active'; this.task.question = null; this.task.waitReason = undefined; }
+    waiter?.resolve(decision);
+    if (waiter) this.emit();
+  }
+
+  async selectRoute(id: string, choice: MoveRoute['choice']): Promise<void> {
+    await this.serial(async () => {
+      const pending = this.pendingRouteSelection; const waiter = this.routeWaiter;
+      if (!pending || pending.id !== id || !waiter || !this.running) throw new RevisionConflictError('该路线选择已失效，请查看最新状态。');
+      if (pending.stateRevision !== this.engine.state.stateRevision || waiter.commandRevision !== this.commandRevision || waiter.externalRevision !== this.externalRevision || this.engine.terminal) {
+        this.resolveRouteSelection('stale'); throw new RevisionConflictError('状态已变化，该路线选择已取消，机器人将重新决策。');
+      }
+      const route = pending.options.find(route => route.choice === choice);
+      if (!route) throw new Error('所选路线不在当前候选列表中。');
+      this.noProgressTurns = 0;
+      this.say('human', `选择前往 (${pending.target.x}, ${pending.target.y}) 的${route.choice === 'safe' ? '避险' : '较短带电'}路线：预计 ${route.estimatedCost.tu} TU、${route.estimatedCost.battery} 电量、${route.estimatedCost.oxygen} 氧气。`);
+      this.resolveRouteSelection(choice);
+    });
   }
 
   private async awaitAuthorization(request: PendingAuthorization, signal?: AbortSignal): Promise<AuthorizationDecision> {
@@ -379,11 +476,24 @@ export class GameSession {
         this.resolveAuthorization('stale'); throw new RevisionConflictError('状态已变化，该授权已取消，机器人将重新决策。');
       }
       this.say('human', `${approve ? '授权' : '拒绝'}：${pending.description}`);
+      this.noProgressTurns = 0;
       this.resolveAuthorization(approve ? 'approve' : 'deny');
     });
   }
 
   private newActiveHazard(delta: ObservationDelta): boolean { return [...delta.newDiscoveries, ...delta.stateChanges].some(e => e.type === 'hazard' && e.state === 'active'); }
+
+  private movementDelta(delta: ObservationDelta, remainingRoute: Position[]): ObservationDelta {
+    const authorizedHazards = this.executionConstraints().authorizedHazardIds;
+    const relevant = (entity: ObservedEntity) => {
+      if (!['obstacle', 'door', 'hazard'].includes(entity.type)) return true;
+      if (!remainingRoute.some(position => samePosition(position, entity.position))) return false;
+      return entity.type === 'obstacle' ? entity.state !== 'cleared'
+        : entity.type === 'door' ? entity.state !== 'opened'
+        : entity.state === 'active' && !authorizedHazards.includes(entity.id);
+    };
+    return { ...delta, newDiscoveries: delta.newDiscoveries.filter(relevant), stateChanges: delta.stateChanges.filter(relevant) };
+  }
 
   private significant(delta: ObservationDelta): boolean {
     if (this.newActiveHazard(delta)) return true;
@@ -434,8 +544,19 @@ export class GameSession {
     if (message) this.say('system', message);
   }
 
+  private cancelTask(message: string): void {
+    this.task = null;
+    this.control = 'wait_player';
+    this.toolRoute = null;
+    this.toolHazards = [];
+    this.deniedCalls.clear();
+    if (!this.engine.terminal) this.engine.state.phase = 'awaiting_command';
+    this.say('system', message);
+  }
+
   private checkBudget(action: Action): boolean {
-    if (this.runTU + this.engine.actionCost(action).tu > this.engine.level.rules.actionTULimit) { this.budgetExhausted = true; this.pause('行动预算不足以支付下一完整动作，未开始执行。'); this.control = 'wait_player'; return false; }
+    const required = this.engine.actionCost(action).tu;
+    if (required > this.remainingBudget().remainingTU) { this.budgetExhausted = true; this.pause(`行动预算不足：剩余 ${this.remainingBudget().remainingTU} TU，下一完整动作需要 ${required} TU，未开始执行该动作。目标保留，可点击继续。`); this.control = 'wait_player'; return false; }
     return true;
   }
 
@@ -460,7 +581,7 @@ export class GameSession {
     const position = Type.Object({ x: Type.Integer({ minimum: 0, maximum: this.engine.level.width - 1 }), y: Type.Integer({ minimum: 0, maximum: this.engine.level.height - 1 }) }, { additionalProperties: false });
     return [
       {
-        name: 'move_to', label: '移动', description: '自动沿历史布局和已知阻挡寻路至最终目标坐标，无需拆分中间坐标，无单次格数上限；柜体、气闸控制器和辅助电路开关所在格不可进入，靠近交互时请选择可达的相邻格；逐格检查关键变化、资源与自动运行剩余 TU 预算，可中断。', executionMode: 'sequential',
+        name: 'move_to', label: '移动', description: '自动沿历史布局和已知阻挡寻路至最终目标坐标，无需拆分中间坐标，无单次格数上限；柜体、气闸控制器和辅助电路开关所在格不可进入，靠近交互时请选择可达的相邻格。多条候选路线由程序在地图显示并等待玩家选择，单条直接采用，随后再请求必要的危险授权；均在当前调用内等待，不需额外模型请求。停止运行或拒绝危险授权后立即取消委托，必须重新下达指令。沿选定路径逐格检查关键变化、资源与自动运行剩余 TU 预算，可中断。', executionMode: 'sequential',
         parameters: Type.Object({ target: position }, { additionalProperties: false }),
         execute: async (id, raw, signal) => {
           const input = raw as { target: Position };
@@ -479,35 +600,41 @@ export class GameSession {
             const result = this.emptyResult('TARGET_BLOCKED', message);
             return { ...result, details: { ...result.details, targetReached: false } };
           }
+          const route = this.toolRoute?.path ?? this.engine.knownPath(input.target, this.executionConstraints());
           let outcome: ActionOutcome | null = null;
           let steps = 0;
           let costTU = 0;
+          let stopCode = 'NO_KNOWN_PATH';
+          let stopMessage = '当前已知条件下没有可通行路线，请检查门、障碍和危险授权。';
           const before = structuredClone(this.engine.state.knowledge);
           const generation = this.commandRevision;
           const external = this.externalRevision;
           this.engine.state.phase = 'executing';
           for (let index = 0; ; index++) {
-            if (signal?.aborted || generation !== this.commandRevision || external !== this.externalRevision || this.control !== 'continue') { if (this.control === 'continue') this.control = 'redecide'; break; }
+            if (signal?.aborted || generation !== this.commandRevision || external !== this.externalRevision || this.control !== 'continue') { if (this.control === 'continue') this.control = 'redecide'; stopCode = 'MOVE_INTERRUPTED'; stopMessage = '移动已取消，或任务、共享状态已变化；请依据最新状态重新决策。'; break; }
             if (samePosition(this.engine.state.robot.position, input.target)) break;
-            const path = this.engine.knownPath(input.target, this.executionConstraints());
-            if (!path?.length) { this.control = 'redecide'; break; }
-            const action: Action = { kind: 'move', target: path[0] };
-            if (!this.checkBudget(action)) break;
+            const next = route?.[index];
+            if (!next) { this.control = 'redecide'; break; }
+            const action: Action = { kind: 'move', target: next };
+            if (!this.checkBudget(action)) { stopCode = 'BUDGET'; stopMessage = `移动因行动预算不足而中断：剩余 ${this.remainingBudget().remainingTU} TU，下一步需要 ${this.engine.actionCost(action).tu} TU，尚未抵达目标。`; break; }
             outcome = this.commit(action, `${id}:${index}`);
             costTU += outcome.cost.tu;
-            if (!outcome.accepted) { this.control = 'redecide'; break; }
+            if (!outcome.accepted) { this.control = 'redecide'; stopCode = outcome.code; stopMessage = outcome.message; break; }
             steps++;
-            if (this.engine.terminal) { this.control = 'game_over'; break; }
-            if (this.significant(outcome.delta)) {
+            if (this.engine.terminal) { this.control = 'game_over'; stopCode = 'GAME_OVER'; stopMessage = this.engine.state.failureReason ?? '游戏已结束，移动停止。'; break; }
+            const delta = this.movementDelta(outcome.delta, route!.slice(index + 1));
+            if (this.significant(delta)) {
               this.metrics.interrupts++;
-              if (this.task?.constraints.stopOnHazard && this.newActiveHazard(outcome.delta)) this.waitForPlayer('发现带电线路，已按你的指令停止。', 'hazard');
-              else this.control = 'redecide';
+              this.control = 'redecide';
+              const discoveries = delta.newDiscoveries;
+              stopCode = this.newActiveHazard(delta) ? 'NEW_HAZARD' : discoveries.some(entity => entity.type === 'obstacle') ? 'NEW_OBSTACLE' : discoveries.some(entity => entity.type === 'door') ? 'NEW_DOOR' : 'NEW_DISCOVERY';
+              stopMessage = `发现 ${[...discoveries, ...delta.stateChanges].map(entity => `${entity.name} ${entity.id} (${entity.position.x}, ${entity.position.y})`).join('、')}，移动已中断，尚未抵达目标；不代表预算耗尽。`;
               break;
             }
             if (this.delayMs) await new Promise<void>(resolve => setTimeout(resolve, this.delayMs));
           }
           const reached = samePosition(this.engine.state.robot.position, input.target);
-          const result: ToolOutcome = { accepted: steps > 0 || reached, code: outcome?.code ?? (reached ? 'OK' : 'NO_KNOWN_PATH'), message: reached ? '已到达目标。' : outcome?.message ?? '没有可继续的已知路线，请检查阻挡设施。', executedSteps: steps, targetReached: reached, delta: diffKnowledge(before, this.engine.state.knowledge), costTU };
+          const result: ToolOutcome = { accepted: steps > 0 || reached, code: reached ? 'OK' : stopCode, message: reached ? '已到达目标。' : stopMessage, executedSteps: steps, targetReached: reached, delta: diffKnowledge(before, this.engine.state.knowledge), costTU };
           return { content: [{ type: 'text', text: result.message }], details: result };
         },
       },
@@ -721,6 +848,7 @@ export class GameSession {
   private async cancelRunning(): Promise<void> {
     if (this.running) this.record('取消当前运行', { commandRevision: this.commandRevision, elapsedTU: this.engine.state.elapsedTU }, true);
     this.commandRevision++; this.control = 'wait_player'; this.agent.abort();
+    this.resolveRouteSelection('cancel');
     this.resolveAuthorization('cancel');
     await this.currentPromise; await this.agent.waitForIdle();
     this.currentPromise = null;
@@ -732,7 +860,7 @@ export class GameSession {
     return promise;
   }
 
-  async stop(): Promise<void> { await this.serial(async () => { await this.cancelRunning(); this.pause('已停止，未执行动作不消耗资源。'); this.emit(); }); }
+  async stop(): Promise<void> { await this.serial(async () => { await this.cancelRunning(); this.cancelTask('已停止，委托已取消，请重新下达指令。未执行动作不消耗资源。'); this.emit(); }); }
 
   async continue(): Promise<void> {
     await this.serial(async () => {
@@ -765,6 +893,7 @@ export class GameSession {
     this.record('玩家添加标记', { position, note, shared, elapsedTU: this.engine.state.elapsedTU });
     if (shared) {
       this.externalRevision++;
+      this.resolveRouteSelection('stale');
       this.resolveAuthorization('stale');
       this.engine.state.knowledge.markers = this.engine.state.markers.filter(marker => marker.shared);
       this.say('human', `标记 (${position.x}, ${position.y})：${note || '请检查此处'}。回波的具体对象尚未确认。`);
@@ -777,13 +906,14 @@ export class GameSession {
     this.record('玩家移除标记', { ...marker, elapsedTU: this.engine.state.elapsedTU });
     if (marker.shared) {
       this.externalRevision++;
+      this.resolveRouteSelection('stale');
       this.resolveAuthorization('stale');
       this.say('human', `已移除共享标记 (${marker.position.x}, ${marker.position.y})：${marker.note || '未填写说明'}。请以当前共享标记列表为准。`);
     }
     this.emit();
   }
 
-  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, demoRescueAvailable: !!this.engine.level.verification?.actions.length, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
+  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, demoRescueAvailable: !!this.engine.level.verification?.actions.length, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization), pendingRouteSelection: structuredClone(this.pendingRouteSelection) }; }
   save(): SessionSave { return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
   async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');
@@ -800,7 +930,7 @@ export class GameSession {
       this.interpretTask();
       if (legacyLiveTask) this.task.status = 'paused';
     }
-    if (this.task && (this.task.status === 'active' || this.task.waitReason === 'authorization' || this.task.waitReason === 'power')) { this.task.status = 'paused'; this.task.question = null; this.task.waitReason = undefined; }
+    if (this.task && (this.task.status === 'active' || this.task.waitReason === 'authorization' || this.task.waitReason === 'power' || this.task.waitReason === 'route')) { this.task.status = 'paused'; this.task.question = null; this.task.waitReason = undefined; }
   }
   async settled(): Promise<void> { await this.currentPromise; await this.journal?.flush(); }
 }

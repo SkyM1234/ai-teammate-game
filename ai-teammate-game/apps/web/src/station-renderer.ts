@@ -12,6 +12,7 @@ import { colors, levelTheme } from './art/themes.ts';
 import type { StationTheme } from './art/themes.ts';
 
 const equal = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
+export interface RouteOverlay { path: Position[]; color: string; label: string }
 
 /** A view of player knowledge. Never loads the authoritative level entities. */
 export class StationRenderer {
@@ -25,6 +26,11 @@ export class StationRenderer {
   private readonly human: THREE.Group;
   private readonly selection = new THREE.Group();
   private readonly hover = new THREE.Group();
+  private readonly routes = new THREE.Group();
+  private routeOverlays: RouteOverlay[] = [];
+  private routeSignature = '';
+  private readonly routeGeometry = new THREE.BoxGeometry(1, 1, 1);
+  private readonly routeMaterials = new Map<string, THREE.MeshBasicMaterial>();
   private readonly exitLeak: THREE.Group;
   private readonly exitGas: THREE.Sprite[];
   private readonly art: ArtResources;
@@ -60,7 +66,7 @@ export class StationRenderer {
     this.renderer.toneMappingExposure = 1;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.scene.add(this.terrain, this.objects, this.robot, this.human, this.selection, this.hover, this.exitLeak);
+    this.scene.add(this.terrain, this.objects, this.robot, this.human, this.selection, this.hover, this.exitLeak, this.routes);
     this.scene.add(new THREE.HemisphereLight(0xe8eee9, 0x25332c, 1.6));
     const light = new THREE.DirectionalLight(0xf5f1e7, 2.8);
     light.position.set(-8, 18, 6);
@@ -115,7 +121,7 @@ export class StationRenderer {
     return new THREE.Vector3(position.x - (this.width - 1) / 2, 0, position.y - (this.height - 1) / 2);
   }
 
-  update(p: PlayerView, selected: Position | null) {
+  update(p: PlayerView, selected: Position | null, routes: RouteOverlay[] = []) {
     this.exitLeak.visible = p.exitStatus === 'leaking';
     this.canvas.dataset.exitStatus = p.exitStatus;
     if (!this.exitLeak.visible) { cancelAnimationFrame(this.leakAnimation); this.leakAnimation = 0; }
@@ -179,6 +185,33 @@ export class StationRenderer {
       }
       this.art.batchMeshes(this.objects);
       this.signature = signature;
+    }
+    const routeSignature = JSON.stringify([levelKey, routes]);
+    this.routeOverlays = routes;
+    if (routeSignature !== this.routeSignature) {
+      this.art.clear(this.routes);
+      for (const route of routes) {
+        let material = this.routeMaterials.get(route.color);
+        if (!material) {
+          material = new THREE.MeshBasicMaterial({ color: route.color, depthTest: false, depthWrite: false, toneMapped: false });
+          this.routeMaterials.set(route.color, material);
+        }
+        for (let i = 1; i < route.path.length; i++) {
+          const from = this.world(route.path[i - 1]), to = this.world(route.path[i]);
+          const segment = new THREE.Mesh(this.routeGeometry, material);
+          segment.position.copy(from).lerp(to, .5); segment.position.y = .12;
+          segment.scale.set(.075, .025, from.distanceTo(to) + .075);
+          segment.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
+          segment.renderOrder = 20; this.routes.add(segment);
+        }
+        const point = route.path[1];
+        if (point) {
+          const label = new THREE.Group(); label.position.copy(this.world(point));
+          this.art.label(label, route.label, route.color, .65, .45);
+          label.children.forEach(child => { child.renderOrder = 21; }); this.routes.add(label);
+        }
+      }
+      this.routeSignature = routeSignature;
     }
     this.selection.visible = !!selected;
     if (selected) this.selection.position.copy(this.world(selected));
@@ -308,7 +341,7 @@ export class StationRenderer {
   private onContextRestored = () => { this.canvas.dataset.renderMode = '3d'; document.getElementById('map-render-status')!.textContent = '点击选格 · 拖动观察 · 滚轮缩放'; this.resize(); };
   private onVisibilityChange = () => {
     if (document.hidden) { cancelAnimationFrame(this.animation); cancelAnimationFrame(this.leakAnimation); this.leakAnimation = 0; this.cancelGesture(); }
-    else if (this.state) { this.robot.position.copy(this.world(this.state.robot.position)); this.signature = ''; this.update(this.state, this.selection.visible ? { x: Math.round(this.selection.position.x + (this.width - 1) / 2), y: Math.round(this.selection.position.z + (this.height - 1) / 2) } : null); }
+    else if (this.state) { this.robot.position.copy(this.world(this.state.robot.position)); this.signature = ''; this.update(this.state, this.selection.visible ? { x: Math.round(this.selection.position.x + (this.width - 1) / 2), y: Math.round(this.selection.position.z + (this.height - 1) / 2) } : null, this.routeOverlays); }
   };
 
   private resize() {
@@ -358,7 +391,8 @@ export class StationRenderer {
     document.removeEventListener('visibilitychange', this.onVisibilityChange);
     document.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('blur', this.cancelGesture);
-    for (const group of [this.terrain, this.objects, this.robot, this.human, this.selection, this.hover, this.exitLeak]) this.art.clear(group);
+    for (const group of [this.terrain, this.objects, this.robot, this.human, this.selection, this.hover, this.exitLeak, this.routes]) this.art.clear(group);
+    this.routeGeometry.dispose(); this.routeMaterials.forEach(material => material.dispose());
     this.art.dispose();
     this.scene.traverse(object => { if (object instanceof THREE.DirectionalLight) object.shadow.dispose(); });
     this.renderer.dispose();
