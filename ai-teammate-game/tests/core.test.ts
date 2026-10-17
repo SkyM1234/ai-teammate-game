@@ -139,10 +139,32 @@ test('电路开关遵守知识、距离与类型检查，失败不消耗资源',
   assert.equal(engine.state.circuitOn, false);
 });
 
-test('机器人可走上实体开关，近距切换更新观察且请求只结算一次', () => {
+test('气闸控制器和电路开关始终阻挡空载及搬运移动，已知后寻路绕开', () => {
+  for (const { id, start, target } of [
+    { id: 'a-01', start: { x: 8, y: 9 }, target: { x: 10, y: 9 } },
+    { id: 'sw-01', start: { x: 6, y: 2 }, target: { x: 5, y: 1 } },
+  ]) for (const active of [false, true]) for (const carried of [false, true]) {
+    const engine = new GameEngine(level);
+    const entity = engine.state.entities.find(e => e.id === id)!;
+    engine.state.robot.position = { ...start }; engine.state.human.carried = carried;
+    entity.repaired = active; engine.state.circuitOn = active; engine.observe();
+    const before = engine.snapshot();
+    const outcome = engine.perform({ kind: 'move', target: entity.position });
+    assert.equal(outcome.accepted, false, id);
+    assert.equal(outcome.code, 'BLOCKED', id);
+    assert.deepEqual(outcome.cost, { tu: 0, battery: 0, oxygen: 0 });
+    assert.deepEqual(engine.state.robot, before.robot); assert.deepEqual(engine.state.human, before.human);
+    assert.equal(engine.state.elapsedTU, 0); assert.equal(engine.state.ledger.length, 0);
+    assert.equal(engine.knownPath(entity.position), null);
+    const route = engine.knownPath(target);
+    assert.ok(route);
+    assert.ok(!route.some(p => p.x === entity.position.x && p.y === entity.position.y));
+  }
+});
+
+test('机器人在相邻格切换开关，更新观察且请求只结算一次', () => {
   const engine = new GameEngine(level);
   engine.state.robot.position = { x: 6, y: 2 }; engine.observe();
-  assert.equal(engine.perform({ kind: 'move', target: { x: 6, y: 1 } }).accepted, true);
   const action = { kind: 'circuit' as const, targetId: 'sw-01', on: true };
   const outcome = engine.perform(action, 'switch-on');
   assert.equal(outcome.accepted, true);
@@ -150,8 +172,7 @@ test('机器人可走上实体开关，近距切换更新观察且请求只结�
   assert.ok(outcome.delta.stateChanges.some(e => e.id === 'sw-01' && e.state === 'on'));
   assert.deepEqual(engine.perform(action, 'switch-on'), outcome);
   assert.equal(engine.perform(action).accepted, false);
-  assert.equal(engine.state.elapsedTU, 2);
-  assert.equal(engine.perform({ kind: 'move', target: { x: 6, y: 2 } }).accepted, true);
+  assert.equal(engine.state.elapsedTU, 1);
   assert.equal(engine.perform({ kind: 'move', target: { x: 6, y: 3 } }).accepted, true);
   assert.equal(engine.perform({ kind: 'open', targetId: 'd-01' }).accepted, true);
   assert.equal(engine.perform({ kind: 'move', target: { x: 6, y: 2 } }).accepted, true);
@@ -189,10 +210,9 @@ test('旧实体开关存档迁移到新位置，历史与新位置操作混合�
     while (original.state.robot.position.x !== x) assert.equal(original.perform({ kind: 'move', target: { x: original.state.robot.position.x + Math.sign(x - original.state.robot.position.x), y: original.state.robot.position.y } }).accepted, true);
     while (original.state.robot.position.y !== y) assert.equal(original.perform({ kind: 'move', target: { x, y: original.state.robot.position.y + Math.sign(y - original.state.robot.position.y) } }).accepted, true);
   };
-  walk(4, 9); walk(4, 4); walk(6, 4); walk(6, 3);
+  walk(4, 9); walk(4, 4); walk(6, 4);
   original.perform({ kind: 'scan', targetId: 'sw-01' });
   original.perform({ kind: 'circuit', targetId: 'sw-01', on: true });
-  original.perform({ kind: 'open', targetId: 'd-01' });
   original.perform({ kind: 'circuit', targetId: 'sw-01', on: false });
   const old = original.snapshot(); old.rulesVersion = 2;
   for (const entry of old.ledger) delete entry.targetPosition;
@@ -204,7 +224,9 @@ test('旧实体开关存档迁移到新位置，历史与新位置操作混合�
   assert.ok(!restored.state.radarHistory.some(e => e.position.x === 6 && e.position.y === 3));
   assert.deepEqual(restored.state.robot, old.robot);
   assert.deepEqual(restored.state.human, old.human);
-  assert.equal(restored.perform({ kind: 'move', target: { x: 6, y: 2 } }).accepted, true);
+  for (const target of [{ x: 5, y: 4 }, { x: 4, y: 4 }, { x: 4, y: 3 }, { x: 4, y: 2 }, { x: 5, y: 2 }, { x: 6, y: 2 }]) {
+    assert.equal(restored.perform({ kind: 'move', target }).accepted, true);
+  }
   assert.equal(restored.perform({ kind: 'circuit', targetId: 'sw-01', on: true }).accepted, true);
   const replay = GameEngine.forReplay(level, restored.state.ledger);
   for (const entry of restored.state.ledger) assert.equal(replay.replayEntry(entry).accepted, true);

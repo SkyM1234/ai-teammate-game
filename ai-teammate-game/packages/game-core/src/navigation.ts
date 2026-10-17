@@ -30,7 +30,7 @@ export function findKnownPath(level: Pick<Level, 'width' | 'height' | 'tiles' | 
       if (p.x < 0 || p.x >= level.width || p.y < 0 || p.y >= level.height || level.tiles[p.y][p.x] === '#' || previous.has(positionKey(p))) continue;
       if (exitBlocked && samePosition(p, level.exit)) continue;
       const blocked = Object.values(knowledge.entities).some(e => samePosition(e.position, p) && (
-        e.type === 'cabinet' || (e.type === 'door' && e.state !== 'opened') || (e.type === 'obstacle' && e.state !== 'cleared') ||
+        e.type === 'cabinet' || e.type === 'airlock' || e.type === 'switch' || (e.type === 'door' && e.state !== 'opened') || (e.type === 'obstacle' && e.state !== 'cleared') ||
         (e.type === 'hazard' && circuitOn && !authorizedHazardIds.includes(e.id))
       ));
       if (blocked) continue;

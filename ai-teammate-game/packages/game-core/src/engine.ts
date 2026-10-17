@@ -73,13 +73,14 @@ export class GameEngine {
     if (scanned) {
       if (entity.powerRequired) result.powerRequired = true;
       if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
-      else if (entity.type === 'switch') result.details = '机器人须在同格或相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
+      else if (entity.type === 'switch') result.details = '机器人须在可达的相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
       else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : `控制器损坏导致出口喷气，出口格不可进入；需要 ${this.level.rules.actionCosts.repair_airlock.materials} 份维修材料修复。`;
       else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${this.level.rules.leakCost} 电量。`;
       else if (entity.itemType === 'battery') result.details = `可恢复 ${this.level.rules.batteryRefill} 电量。`;
       else if (entity.itemType === 'oxygen') result.details = `可恢复 ${this.level.rules.oxygenRefill} 氧气。`;
       else if (entity.type === 'obstacle') result.details = `清理需要 ${this.level.rules.actionCosts.clear.tu} TU、${this.level.rules.actionCosts.clear.battery} 电量。`;
       else result.details = '状态已确认。';
+      if (['cabinet', 'airlock', 'switch'].includes(entity.type)) result.details += ' 本设施所在格不可进入或穿越，需在可达的相邻格交互；开启、修复或通断电均不会解除阻挡。';
     }
     return result;
   }
@@ -178,7 +179,7 @@ export class GameEngine {
         const target = action.target;
         if (!Number.isInteger(target.x) || !Number.isInteger(target.y) || distance(this.state.robot.position, target) !== 1 || this.level.tiles[target.y]?.[target.x] === undefined || this.level.tiles[target.y][target.x] === '#') return reject('INVALID_MOVE', '只能向可通行的相邻格移动。');
         if (samePosition(target, this.level.exit) && this.exitStatus === 'leaking') return reject('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法进入；请先修复气闸控制器。');
-        const blocker = this.state.entities.find(e => samePosition(e.position, target) && !e.removed && (e.type === 'cabinet' || e.type === 'door' && !e.opened || e.type === 'obstacle'));
+        const blocker = this.state.entities.find(e => samePosition(e.position, target) && !e.removed && (e.type === 'cabinet' || e.type === 'airlock' || e.type === 'switch' || e.type === 'door' && !e.opened || e.type === 'obstacle'));
         if (blocker) return reject('BLOCKED', '前方无法通行，请检查附近设施。');
         const hazard = this.state.entities.find(e => e.type === 'hazard' && samePosition(e.position, target) && this.state.circuitOn);
         if (hazard && !constraints.authorizedHazardIds.includes(hazard.id)) return reject('HAZARD_AUTH_REQUIRED', '前方有带电线路，需要断电或明确授权。');

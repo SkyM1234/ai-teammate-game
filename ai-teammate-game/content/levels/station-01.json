@@ -15,7 +15,7 @@
     "#......#...#",
     "#......#...#",
     "#......#...#",
-    "#......X...#",
+    "#..........#",
     "############"
   ],
   "humanStart": { "x": 1, "y": 9 },
@@ -64,7 +64,7 @@
   ],
   "entities": [
     { "id": "s-01", "type": "supply", "name": "维修材料", "position": { "x": 3, "y": 8 }, "itemType": "repair", "reflection": 1 },
-    { "id": "s-02", "type": "supply", "name": "维修材料", "position": { "x": 4, "y": 8 }, "itemType": "repair", "reflection": 1 },
+    { "id": "s-02", "type": "supply", "name": "维修材料", "position": { "x": 2, "y": 2 }, "itemType": "repair", "reflection": 1 },
     { "id": "s-03", "type": "supply", "name": "氧气补给", "position": { "x": 5, "y": 7 }, "itemType": "oxygen", "reflection": 1 },
     { "id": "c-01", "type": "cabinet", "name": "电池柜", "position": { "x": 5, "y": 3 }, "powerRequired": true, "reflection": 3 },
     { "id": "s-04", "type": "supply", "name": "备用电池", "position": { "x": 5, "y": 3 }, "itemType": "battery", "containerId": "c-01", "reflection": 1 },
