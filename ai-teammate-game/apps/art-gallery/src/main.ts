@@ -9,7 +9,7 @@ const state = document.getElementById('state') as HTMLInputElement;
 let station = new StationRenderer(canvas, stationThemes.industrial);
 
 function update() {
-  station.update(galleryView(layout.value as 'square' | 'long', state.checked), null);
+  station.update(galleryView(layout.value as 'square' | 'long' | 'walls', state.checked), null);
 }
 theme.addEventListener('change', () => {
   station.dispose();

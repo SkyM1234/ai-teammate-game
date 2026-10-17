@@ -79,7 +79,7 @@ export class ArtResources {
     }
   }
 
-  surface(kind: 'deck' | 'vent', color: number) {
+  surface(kind: 'deck' | 'vent' | 'wall-panel' | 'wall-ribbed', color: number) {
     const key = `${kind}:${color}`;
     let material = this.surfaces.get(key);
     if (material) return material;
@@ -102,6 +102,27 @@ export class ArtResources {
         for (const x of [27, 229]) for (const y of [27, 229]) {
           context.beginPath(); context.arc(x, y, 3, 0, Math.PI * 2); context.fill();
         }
+      } else if (kind === 'wall-panel' || kind === 'wall-ribbed') {
+        const paint = context.createLinearGradient(0, 0, 256, 256);
+        paint.addColorStop(0, '#f0f1ee'); paint.addColorStop(1, '#c5cbc7');
+        context.fillStyle = paint; context.fillRect(0, 0, 256, 256);
+        context.strokeStyle = '#a3ada7'; context.lineWidth = 3; context.strokeRect(9, 9, 238, 238);
+        context.strokeStyle = '#f3f4f0'; context.lineWidth = 2; context.strokeRect(13, 13, 230, 230);
+        if (kind === 'wall-ribbed') {
+          for (let x = 35; x < 235; x += 38) {
+            context.fillStyle = '#b0bab4'; context.fillRect(x, 26, 14, 204);
+            context.fillStyle = '#eff1ec'; context.fillRect(x, 26, 3, 204);
+            context.fillStyle = '#98a59d'; context.fillRect(x + 12, 26, 2, 204);
+          }
+        } else {
+          context.strokeStyle = '#b6bfb9'; context.lineWidth = 2; context.strokeRect(28, 28, 200, 200);
+          context.fillStyle = '#ffffff0a';
+          for (let y = 34; y < 226; y += 8) context.fillRect(30, y, 196, 1);
+        }
+        context.fillStyle = '#8c9991';
+        for (const x of [23, 233]) for (const y of [23, 233]) {
+          context.beginPath(); context.arc(x, y, 2.5, 0, Math.PI * 2); context.fill();
+        }
       } else {
         // Fine brushed finish; larger panel seams are built from public map geometry.
         context.fillStyle = '#d8dfd7'; context.fillRect(0, 0, 256, 256);
@@ -116,7 +137,7 @@ export class ArtResources {
       texture.anisotropy = Math.min(8, this.anisotropy);
       this.textures.set(kind, texture);
     }
-    material = new THREE.MeshStandardMaterial({ color, map: texture, roughness: .8, metalness: .2 });
+    material = new THREE.MeshStandardMaterial({ color, map: texture, roughness: kind === 'wall-ribbed' ? .58 : .8, metalness: kind === 'wall-ribbed' ? .45 : .2 });
     this.surfaces.set(key, material); return material;
   }
 

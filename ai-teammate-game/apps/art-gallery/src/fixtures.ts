@@ -1,7 +1,8 @@
 import type { ObservedEntity, PlayerView } from '../../../packages/game-core/src/types.ts';
 
 /** Synthetic, public observations for art review. No authoritative level entities. */
-export function galleryView(layout: 'square' | 'long', alternateState: boolean): PlayerView {
+export function galleryView(layout: 'square' | 'long' | 'walls', alternateState: boolean): PlayerView {
+  if (layout === 'walls') return wallGalleryView(alternateState);
   const width = layout === 'square' ? 12 : 9, height = layout === 'square' ? 12 : 14;
   const definitions: Omit<ObservedEntity, 'observedAt' | 'source' | 'scanned'>[] = [
     { id: 'oxygen', type: 'supply', name: '氧气', position: { x: 2, y: 3 }, itemType: 'oxygen', state: 'available' },
@@ -37,4 +38,23 @@ export function galleryView(layout: 'square' | 'long', alternateState: boolean):
     },
     observed, radar: [], markers: [], sensorCells, ledger: [], failureReason: null,
   };
+}
+
+function wallGalleryView(alternateState: boolean): PlayerView {
+  const view = galleryView('square', alternateState);
+  view.level.id = 'art-gallery-walls'; view.level.name = '墙面组合展示';
+  view.level.tiles = view.level.tiles.map((row, y) => {
+    if (y === 0 || y === 11) return row;
+    if (y === 6) return '###.####.###';
+    return y === 3 || y === 9 ? row : `${row.slice(0, 6)}#${row.slice(7)}`;
+  });
+  const positions = {
+    oxygen: { x: 3, y: 9 }, battery: { x: 8, y: 3 }, repair: { x: 3, y: 3 },
+    door: { x: 6, y: 3 }, cabinet: { x: 9, y: 2 }, airlock: { x: 9, y: 8 },
+    switch: { x: 8, y: 2 }, hazard: { x: 8, y: 4 }, obstacle: { x: 4, y: 8 },
+  };
+  for (const entity of view.observed) entity.position = positions[entity.id as keyof typeof positions];
+  view.robot.position = { x: 2, y: 8 }; view.human.position = { x: 2, y: alternateState ? 8 : 9 };
+  view.sensorCells = view.level.tiles.flatMap((row, y) => [...row].flatMap((tile, x) => tile === '#' ? [] : [{ x, y }]));
+  return view;
 }

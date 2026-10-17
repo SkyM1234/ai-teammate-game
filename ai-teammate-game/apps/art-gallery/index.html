@@ -8,14 +8,14 @@
   <header><h1>美术资源预览</h1><p>共享角色、设备和地形。当前展示使用合成观察数据。</p></header>
   <nav aria-label="预览设置">
     <label>环境主题 <select id="theme"><option value="industrial">工业绿灰</option><option value="cold">冷色舱室</option></select></label>
-    <label>地图布局 <select id="layout"><option value="square">12 × 12</option><option value="long">9 × 14</option></select></label>
+    <label>地图布局 <select id="layout"><option value="walls">墙面组合</option><option value="square">12 × 12</option><option value="long">9 × 14</option></select></label>
     <label><input type="checkbox" id="state"> 开启／修复／搬运状态</label>
     <button id="reset">复位</button><button id="rotate">旋转</button><button id="zoom-out" aria-label="缩小">−</button><button id="zoom-in" aria-label="放大">＋</button>
   </nav>
   <div class="viewport"><canvas id="map" aria-label="美术资源三维预览"></canvas></div>
   <p id="map-render-status">拖动旋转 · 右键平移 · 滚轮缩放</p>
   <ul class="legend"><li><i class="oxygen"></i>氧气：双瓶＋青色瓶肩</li><li><i class="battery"></i>电池：立式模块＋双端子</li><li><i class="repair"></i>维修：橙色提手箱＋十字</li></ul>
-  <p>由远至近：R-07 / 伤员 → 氧气 / 电池 / 维修箱 → 门 / 柜 / 控制器 → 开关 / 线缆 / 障碍。</p>
+  <p>墙面组合：平整覆板、压纹金属板与通风格栅。地面保持统一，不叠加区域涂装或边界线。</p>
 </main>
 <script type="module" src="/main.js"></script>
 </html>

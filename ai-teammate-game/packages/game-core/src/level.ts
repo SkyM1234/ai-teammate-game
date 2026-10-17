@@ -5,7 +5,10 @@ export function validateLevel(value: unknown): Level {
   const level = value as Level;
   if (!Number.isInteger(level.width) || !Number.isInteger(level.height) || level.width < 3 || level.height < 3) throw new Error('地图尺寸非法');
   if (!Array.isArray(level.tiles) || level.tiles.length !== level.height || level.tiles.some(row => typeof row !== 'string' || row.length !== level.width || /[^#.DEX]/.test(row))) throw new Error('地图行长度或字符非法');
-  if (!Array.isArray(level.entities) || !level.rules || typeof level.id !== 'string' || !Array.isArray(level.rooms)) throw new Error('关卡字段不完整');
+  if (!Array.isArray(level.entities) || !level.rules || typeof level.id !== 'string' || !level.id.trim() || typeof level.name !== 'string' || !level.name.trim() || !Number.isInteger(level.version) || level.version < 1 || !Array.isArray(level.rooms)) throw new Error('关卡字段不完整');
+  for (const name of ['oxygen', 'oxygenMax', 'oxygenRate', 'repairedOxygenRate', 'battery', 'batteryMax', 'batteryRefill', 'oxygenRefill', 'inventorySlots', 'sensorRadius', 'radarRadius', 'leakCost', 'moveLimit', 'toolLimit', 'requestLimit', 'actionTULimit'] as const) {
+    if (!Number.isInteger(level.rules[name]) || level.rules[name] < 0) throw new Error(`规则 ${name} 非法`);
+  }
   for (const [name, amount] of Object.entries(level.rules)) if (name !== 'actionCosts' && (!Number.isInteger(amount) || amount < 0)) throw new Error(`规则 ${name} 非法`);
   for (const name of ['move', 'carry_move', 'scan', 'open', 'collect', 'drop_item', 'use_battery', 'use_oxygen', 'repair_human', 'repair_airlock', 'clear', 'pickup_human', 'drop_human', 'circuit', 'extract'] as const) {
     const cost = level.rules.actionCosts?.[name];
@@ -32,5 +35,6 @@ export function validateLevel(value: unknown): Level {
     ids.add(entity.id);
   }
   for (const entity of level.entities) if (entity.containerId && !level.entities.some(container => container.id === entity.containerId && container.type === 'cabinet')) throw new Error('物品容器引用非法');
+  if (level.verification !== undefined && (!level.verification || !Array.isArray(level.verification.actions))) throw new Error('验证路线必须包含 actions 数组');
   return structuredClone(level);
 }

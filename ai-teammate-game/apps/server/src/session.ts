@@ -3,7 +3,7 @@ import { Type } from '../../../../pi-main/packages/ai/dist/index.js';
 import type { AgentMessage, AgentTool } from '../../../../pi-main/packages/agent/dist/index.js';
 import { defaultConstraints, diffKnowledge, GameEngine } from '../../../packages/game-core/src/engine.ts';
 import { sensorCells } from '../../../packages/game-core/src/navigation.ts';
-import { distance, emptyDelta, roomCenter, samePosition } from '../../../packages/game-core/src/types.ts';
+import { distance, emptyDelta, samePosition } from '../../../packages/game-core/src/types.ts';
 import type { Action, ActionOutcome, Constraints, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveModel, modelErrorMessage } from './model.ts';
 import type { CredentialSource } from './credentials.ts';
@@ -36,7 +36,7 @@ export interface SessionView extends PlayerView {
   modelConfig: ModelConfig; modelReady: boolean; modelError: string | null; modelCredentialSource: CredentialSource;
   pendingAuthorization: PendingAuthorization | null;
 }
-export interface SessionSave { version: 1; id: string; engine: GameState; task: Task | null; messages: ChatMessage[]; metrics: Metrics; eventId: number; modelConfig?: ModelConfig }
+export interface SessionSave { version: 1; id: string; level?: Level; engine: GameState; task: Task | null; messages: ChatMessage[]; metrics: Metrics; eventId: number; modelConfig?: ModelConfig }
 interface ToolOutcome {
   accepted: boolean; code: string; message: string; delta: ObservationDelta;
   executedSteps?: number; targetReached?: boolean; costTU: number;
@@ -441,7 +441,7 @@ export class GameSession {
   }
 
   private tools(): AgentTool[] {
-    const position = Type.Object({ x: Type.Integer({ minimum: 0, maximum: 11 }), y: Type.Integer({ minimum: 0, maximum: 11 }) }, { additionalProperties: false });
+    const position = Type.Object({ x: Type.Integer({ minimum: 0, maximum: this.engine.level.width - 1 }), y: Type.Integer({ minimum: 0, maximum: this.engine.level.height - 1 }) }, { additionalProperties: false });
     return [
       {
         name: 'move_to', label: '移动', description: '自动沿历史布局和已知阻挡寻路至最终目标坐标，无需拆分中间坐标，无单次格数上限；柜体、气闸控制器和辅助电路开关所在格不可进入，靠近交互时请选择可达的相邻格；逐格检查关键变化、资源与自动运行剩余 TU 预算，可中断。', executionMode: 'sequential',
@@ -574,22 +574,19 @@ export class GameSession {
         if (cabinet.scanned && cabinet.powerRequired && !this.engine.state.circuitOn) return this.demoCircuitIntents(true, cabinet);
         return [go(this.approach(cabinet)), ...(!cabinet.scanned ? [{ name: 'scan', arguments: { targetId: cabinet.id } }] : []), interact('open', cabinet.id)];
       }
-      const room = this.engine.level.rooms.find(room => room.name === '设备间');
-      return [go(room ? roomCenter(room) : { x: 4, y: 3 })];
+      return this.demoSearchIntents('尚未找到所需物资，请指示继续搜索的位置。', goal.searchPosition);
     }
     if (goal.kind === 'repair') {
       const material = this.engine.state.robot.inventory.find(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair');
       if (!material) {
         const item = known.find(e => e.itemType === 'repair' && e.state === 'available');
         if (item) return [go(this.approach(item)), interact('collect', item.id)];
-        const room = this.engine.level.rooms.find(room => room.name === '维修区');
-        return [go(room ? roomCenter(room) : { x: 4, y: 8 })];
+        return this.demoSearchIntents('尚未找到维修材料，请指示继续搜索的位置。');
       }
       const target = known.find(e => e.type === 'airlock');
       if (goal.targetId === 'human') return [go(this.engine.state.human.position), interact('repair', 'human')];
       if (target) return [go(this.approach(target)), interact('repair', target.id)];
-      const room = this.engine.level.rooms.find(room => room.name === '气闸室');
-      return room ? [go(roomCenter(room))] : [{ name: 'ask_player', arguments: { question: '尚未找到气闸控制器，请指示搜索区域。' } }];
+      return this.demoSearchIntents('尚未找到气闸控制器，请指示搜索区域。');
     }
     return [{ name: 'ask_player', arguments: { question: demoHelp } }];
   }
@@ -600,23 +597,30 @@ export class GameSession {
       { name: 'move_to', arguments: { target: this.approach(knownSwitch) } },
       { name: 'set_circuit', arguments: { targetId: knownSwitch.id, on } },
     ];
-    // Explore reachable floor around the known device/room; never consult hidden switch entities.
-    const room = this.engine.level.rooms.find(room => room.name === '设备间');
-    const center = device?.position ?? (room ? roomCenter(room) : undefined);
-    const positions = [this.engine.state.robot.position, ...this.engine.state.ledger.filter(e => e.action.kind === 'move').map(e => e.position)];
-    const visited = new Set(positions.map(p => `${p.x},${p.y}`));
-    const observedCells = new Set(positions.flatMap(p => sensorCells(this.engine.level, p, this.engine.level.rules.sensorRadius)).map(p => `${p.x},${p.y}`));
-    const candidates: { target: Position; length: number; newCells: number }[] = [];
-    if (center) for (let y = center.y - 2; y <= center.y + 2; y++) for (let x = center.x - 2; x <= center.x + 2; x++) {
+    return this.demoSearchIntents('尚未发现可触及的辅助电路开关，请指示我继续搜索的位置。', device?.position);
+  }
+
+  private demoSearchIntents(question: string, center?: Position): ToolIntent[] {
+    // Search public floor and unexplored echoes, without guessing their entity types.
+    const known = Object.values(this.engine.state.knowledge.entities);
+    const { width, height, tiles } = this.engine.level;
+    const map = { width, height, tiles, entities: known.filter(e => e.type === 'door') };
+    const radius = this.engine.level.rules.sensorRadius;
+    const positions = [this.engine.level.robotStart, this.engine.state.robot.position, ...this.engine.state.ledger.filter(e => e.action.kind === 'move').map(e => e.position)];
+    const observed = new Set(positions.flatMap(p => sensorCells(map, p, radius)).map(p => `${p.x},${p.y}`));
+    const unknown = this.engine.state.radarHistory.filter(echo => !known.some(e => samePosition(e.position, echo.position)));
+    const candidates: { target: Position; nearby: boolean; signal: boolean; distance: number; newCells: number }[] = [];
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const target = { x, y };
-      if (distance(target, center) > 2 || visited.has(`${x},${y}`)) continue;
-      const path = this.engine.knownPath(target, this.task?.constraints);
-      const newCells = sensorCells(this.engine.level, target, this.engine.level.rules.sensorRadius).filter(p => !observedCells.has(`${p.x},${p.y}`)).length;
-      if (path?.length && newCells > 0) candidates.push({ target, length: path.length, newCells });
+      if (tiles[y][x] === '#' || samePosition(target, this.engine.state.robot.position)) continue;
+      const visible = sensorCells(map, target, radius);
+      const newCells = visible.filter(p => !observed.has(`${p.x},${p.y}`)).length;
+      if (!newCells) continue;
+      candidates.push({ target, nearby: !!center && distance(target, center) <= 2, signal: unknown.some(echo => visible.some(p => samePosition(p, echo.position))), distance: distance(target, this.engine.state.robot.position), newCells });
     }
-    candidates.sort((a, b) => a.length - b.length || b.newCells - a.newCells);
-    if (candidates[0]) return [{ name: 'move_to', arguments: { target: candidates[0].target } }];
-    return [{ name: 'ask_player', arguments: { question: '尚未发现可触及的辅助电路开关，请指示我继续搜索的位置。' } }];
+    candidates.sort((a, b) => Number(b.nearby) - Number(a.nearby) || Number(b.signal) - Number(a.signal) || a.distance - b.distance || b.newCells - a.newCells);
+    const candidate = candidates.find(({ target }) => this.engine.knownPath(target, this.task?.constraints)?.length);
+    return candidate ? [{ name: 'move_to', arguments: { target: candidate.target } }] : [{ name: 'ask_player', arguments: { question } }];
   }
 
   private approach(entity: ObservedEntity): Position {
@@ -725,7 +729,7 @@ export class GameSession {
   }
 
   view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization) }; }
-  save(): SessionSave { return { version: 1, id: this.id, engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
+  save(): SessionSave { return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
   async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');
     this.engine.restore(save.engine); this.task = structuredClone(save.task); this.messages = save.messages; this.metrics = save.metrics; this.eventId = save.eventId;

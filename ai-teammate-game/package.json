@@ -12,6 +12,7 @@
     "art:preview": "node scripts/art-preview.mjs",
     "check": "node scripts/check.mjs",
     "verify:routes": "node scripts/verify-routes.ts",
+    "verify:levels": "node scripts/verify-levels.ts",
     "test:core": "node --test tests/core.test.ts",
     "test:runtime": "node --test tests/runtime.test.ts",
     "test": "node --test tests/*.test.ts"

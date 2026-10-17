@@ -11,15 +11,16 @@ import { validateLevel } from '../../../packages/game-core/src/level.ts';
 import { GameEngine } from '../../../packages/game-core/src/engine.ts';
 import { SessionJournal, readableGame } from './journal.ts';
 import { ModelPreferences } from './model-preferences.ts';
+import { loadLevels } from './levels.ts';
 import type { Action, Level, Position } from '../../../packages/game-core/src/types.ts';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const uuidPattern = /^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i;
 class HttpError extends Error { readonly status: number; constructor(status: number, message: string) { super(message); this.status = status; } }
 const json = (res: ServerResponse, value: unknown, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
-function position(value: unknown): Position {
+function position(value: unknown, level: Level): Position {
   const p = value as Position;
-  if (!p || !Number.isInteger(p.x) || !Number.isInteger(p.y) || p.x < 0 || p.x > 11 || p.y < 0 || p.y > 11) throw new HttpError(400, '坐标不合法');
+  if (!p || !Number.isInteger(p.x) || !Number.isInteger(p.y) || p.x < 0 || p.x >= level.width || p.y < 0 || p.y >= level.height) throw new HttpError(400, '坐标不合法');
   return { x: p.x, y: p.y };
 }
 async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -28,17 +29,20 @@ async function body(req: IncomingMessage): Promise<Record<string, unknown>> {
   try { const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8')); if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(); return parsed; }
   catch { throw new HttpError(400, '请求必须是 JSON 对象'); }
 }
-function actionFrom(value: unknown): Action {
+function actionFrom(value: unknown, level: Level): Action {
   const input = value as Record<string, unknown>;
   if (!input || typeof input.kind !== 'string') throw new HttpError(400, '动作不合法');
-  if (input.kind === 'move') return { kind: 'move', target: position(input.target) };
+  if (input.kind === 'move') return { kind: 'move', target: position(input.target, level) };
   if (input.kind === 'circuit' && typeof input.targetId === 'string' && typeof input.on === 'boolean') return { kind: 'circuit', targetId: input.targetId, on: input.on };
   if (input.kind === 'scan' && typeof input.targetId === 'string') return { kind: 'scan', targetId: input.targetId };
   const result = interactionAction({ operation: input.kind, targetId: typeof input.targetId === 'string' ? input.targetId : undefined, itemId: typeof input.itemId === 'string' ? input.itemId : undefined });
   if (!result) throw new HttpError(400, '动作参数不完整'); return result;
 }
 
-export function createAppServer(level: Level, options: { savesDir?: string; adapter?: ModelAdapter; delayMs?: number } = {}) {
+export function createAppServer(inputLevels: Level | Level[], options: { savesDir?: string; adapter?: ModelAdapter; delayMs?: number } = {}) {
+  const levels = (Array.isArray(inputLevels) ? inputLevels : [inputLevels]).map(validateLevel);
+  if (!levels.length || new Set(levels.map(level => level.id)).size !== levels.length) throw new Error('地图列表为空或 ID 重复');
+  const levelsById = new Map(levels.map(level => [level.id, level]));
   const savesDir = options.savesDir ?? join(root, '.saves');
   const modelPreferences = new ModelPreferences(savesDir, options.adapter);
   const sessions = new Map<string, GameSession>();
@@ -105,6 +109,8 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
       save = JSON.parse(contents);
     }
     catch { throw new HttpError(404, '没有找到有效存档'); }
+    const level = save.level ? validateLevel(save.level) : levelsById.get(save.engine.levelId);
+    if (!level || level.id !== save.engine.levelId || level.version !== save.engine.levelVersion) throw new HttpError(400, '存档对应的地图版本不可用');
     const previous = sessions.get(id); if (previous) { await previous.stop(); await previous.journal?.flush(); }
     clearTimeout(saveTimers.get(id)); saveTimers.delete(id);
     const session = new GameSession(level, { ...options, id });
@@ -131,9 +137,15 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
       }
       if (req.method === 'GET' && url.pathname === '/api/saves') { json(res, await listSaves()); return; }
       if (req.method === 'GET' && url.pathname === '/api/models') { json(res, await modelCatalog()); return; }
+      if (req.method === 'GET' && url.pathname === '/api/levels') {
+        json(res, levels.map(({ id, version, name, width, height }) => ({ id, version, name, width, height }))); return;
+      }
       if (req.method === 'GET' && url.pathname === '/api/model-settings') { json(res, await modelPreferences.view()); return; }
       if (req.method === 'POST' && url.pathname === '/api/sessions') {
-        await body(req); const session = register(new GameSession(level, { ...options, ...await modelPreferences.newSessionOptions() })); await persist(session); json(res, session.view(), 201); return;
+        const input = await body(req);
+        const level = input.levelId === undefined ? levels[0] : typeof input.levelId === 'string' ? levelsById.get(input.levelId) : undefined;
+        if (!level) throw new HttpError(400, '请选择有效地图');
+        const session = register(new GameSession(level, { ...options, ...await modelPreferences.newSessionOptions() })); await persist(session); json(res, session.view(), 201); return;
       }
       const match = url.pathname.match(/^\/api\/sessions\/([a-f\d-]+)(?:\/([\w-]+))?$/i);
       if (!match) throw new HttpError(404, '接口不存在');
@@ -149,7 +161,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
         res.on('close', () => { clearInterval(heartbeat); session.listeners.delete(send); eventClients.delete(res); }); return;
       }
       if (req.method === 'GET' && operation === 'replay') {
-        const replay = GameEngine.forReplay(level, session.engine.state.ledger); const frames = [replay.playerView()];
+        const replay = GameEngine.forReplay(session.engine.level, session.engine.state.ledger); const frames = [replay.playerView()];
         for (const entry of session.engine.state.ledger) {
           const outcome = replay.replayEntry(entry);
           if (!outcome.accepted) throw new HttpError(400, '回放记录无法按当前规则重现');
@@ -167,8 +179,8 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
           if (!['stop', 'continue', 'save', 'model', 'authorize'].includes(operation ?? '') && input.expectedRevision !== session.engine.state.stateRevision) throw new HttpError(409, '地图状态已更新，请根据最新信息重试');
           if (operation === 'command') {
             if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 2000) throw new HttpError(400, '指令长度应为 1–2000 字符');
-            await session.command(input.text.trim(), input.selected ? position(input.selected) : undefined, input.expectedRevision as number);
-          } else if (operation === 'action') await session.manual(actionFrom(input.action), input.requestId as string, input.allowHazard === true, input.expectedRevision as number);
+            await session.command(input.text.trim(), input.selected ? position(input.selected, session.engine.level) : undefined, input.expectedRevision as number);
+          } else if (operation === 'action') await session.manual(actionFrom(input.action, session.engine.level), input.requestId as string, input.allowHazard === true, input.expectedRevision as number);
           else if (operation === 'stop') await session.stop();
           else if (operation === 'continue') await session.continue();
           else if (operation === 'model') await modelPreferences.save(input.config, input.apiKey, (config, apiKey) => session.configureModel(config, apiKey));
@@ -178,7 +190,7 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
           }
           else if (operation === 'marker') {
             if (typeof input.note !== 'string' || typeof input.shared !== 'boolean') throw new HttpError(400, '标记参数不完整');
-            session.marker(position(input.position), input.note, input.shared);
+            session.marker(position(input.position, session.engine.level), input.note, input.shared);
           } else if (operation === 'remove-marker') {
             if (typeof input.markerId !== 'string' || !uuidPattern.test(input.markerId)) throw new HttpError(400, '缺少有效标记 ID');
             session.removeMarker(input.markerId);
@@ -205,9 +217,9 @@ export function createAppServer(level: Level, options: { savesDir?: string; adap
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const level = validateLevel(JSON.parse(await readFile(join(root, 'content/levels/station-01.json'), 'utf8')));
+  const levels = await loadLevels(join(root, 'content/levels'));
   const adapter = await configuredModel();
-  const app = createAppServer(level, adapter ? { adapter } : {});
+  const app = createAppServer(levels, adapter ? { adapter } : {});
   const port = Number(process.env.PORT ?? 4317);
   app.server.listen(port, '127.0.0.1', () => console.log(`LAST OXYGEN → http://127.0.0.1:${port} (${adapter?.label ?? '本地规则演示，无模型费用'})`));
   process.on('SIGINT', () => { void app.shutdown().then(() => process.exit(0)); });

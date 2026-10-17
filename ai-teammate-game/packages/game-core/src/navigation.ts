@@ -1,7 +1,7 @@
 import { distance, positionKey, samePosition } from './types.ts';
 import type { Knowledge, Level, Position } from './types.ts';
 
-export function sensorCells(level: Level, start: Position, radius: number): Position[] {
+export function sensorCells(level: Pick<Level, 'width' | 'height' | 'tiles'> & { entities: { type: string; position: Position }[] }, start: Position, radius: number): Position[] {
   const found: Position[] = [start];
   for (const direction of [{ x: 0, y: -1 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: -1, y: 0 }]) {
     for (let step = 1; step <= radius; step++) {

@@ -55,14 +55,23 @@ export function createTerrain(art: ArtResources, level: PlayerView['level'], the
     walls.setColorAt(i, new THREE.Color(boundary ? theme.wallOuter : theme.wallInner));
     // Wall cladding follows public floor-plan edges, never hidden gameplay objects.
     const cap = new THREE.Group(); cap.position.copy(world(cell));
-    art.box(cap, [.99, .065, .99], [0, wallHeight + .018, 0], boundary ? theme.capOuter : theme.capInner);
-    if ((cell.x + cell.y) % 3 === 0) {
+    // Keep finishes together in short wall runs, independently of room names or areas.
+    const horizontal = level.tiles[cell.y][cell.x - 1] === '#' || level.tiles[cell.y][cell.x + 1] === '#';
+    const section = Math.floor((horizontal ? cell.x : cell.y) / 3);
+    const variation = (section + (horizontal ? cell.y : cell.x) * 2) % 5;
+    const finish = variation === 3 ? 'wall-ribbed' : 'wall-panel';
+    const cover = art.box(cap, [.99, .065, .99], [0, wallHeight + .018, 0], boundary ? theme.capOuter : theme.capInner);
+    cover.material = art.surface(finish, boundary ? theme.capOuter : theme.capInner);
+    if (variation === 0) {
       const vent = art.box(cap, [.61, .018, .55], [0, wallHeight + .058, 0], colors.steel);
       vent.material = art.surface('vent', theme.capOuter);
     }
+    const sideColor = new THREE.Color(boundary ? theme.wallOuter : theme.wallInner)
+      .lerp(new THREE.Color(boundary ? theme.capOuter : theme.capInner), .45).getHex();
     for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
       if (!level.tiles[cell.y + dz]?.[cell.x + dx] || level.tiles[cell.y + dz][cell.x + dx] === '#') continue;
-      art.box(cap, dx ? [.06, wallHeight * .7, .82] : [.82, wallHeight * .7, .06], [dx * .51, wallHeight * .48, dz * .51], colors.steel);
+      const panel = art.box(cap, dx ? [.06, wallHeight * .7, .82] : [.82, wallHeight * .7, .06], [dx * .51, wallHeight * .48, dz * .51], sideColor);
+      panel.material = art.surface(variation === 0 ? 'vent' : finish, sideColor);
       art.box(cap, dx ? [.075, .035, .92] : [.92, .035, .075], [dx * .52, wallHeight * .82, dz * .52], colors.ivory);
       if ((cell.x + cell.y) % 2 === 0) {
         art.box(cap, dx ? [.09, wallHeight * .85, .085] : [.085, wallHeight * .85, .09], [dx * .535, wallHeight / 2, dz * .535], colors.dark);
@@ -102,10 +111,6 @@ export function createTerrain(art: ArtResources, level: PlayerView['level'], the
     const color = roomColors[index % roomColors.length];
     const group = new THREE.Group(); group.name = `room:${room.name}`;
     group.position.copy(world({ x: (minX + maxX) / 2, y: (minY + maxY) / 2 }));
-    for (const side of [-1, 1]) {
-      art.glow(group, [width - .4, .012, .035], [0, .065, side * (height / 2 - .2)], color);
-      art.glow(group, [.035, .012, height - .4], [side * (width / 2 - .2), .065, 0], color);
-    }
     const label = art.label(group, room.name, `#${color.toString(16).padStart(6, '0')}`, .15);
     if (width <= 2 && height <= 2) label.position.z = height / 2 + .5;
     roomLabels.push(label);

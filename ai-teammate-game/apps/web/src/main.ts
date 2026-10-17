@@ -1,6 +1,7 @@
 import type { SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
+import type { LevelSummary } from '../../server/src/levels.ts';
 import type { Action, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { StationRenderer } from './station-renderer.ts';
@@ -101,6 +102,7 @@ function render() {
   const p = current()!;
   const terminal = ['success', 'failure'].includes(p.phase);
   $('level-name').textContent = p.level.name;
+  $('map-dimensions').textContent = `${p.level.width} × ${p.level.height} / LOCAL`;
   $('level-name').title = p.level.name;
   $('clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${frames ? ' / 回放' : ''}`;
   $('oxygen-value').textContent = String(p.human.oxygen);
@@ -294,10 +296,12 @@ function setMarkerEditor(open: boolean) {
 }
 function geometry() {
   const { width, height } = canvas.getBoundingClientRect();
-  // Keep every corner of the square fallback map inside the circular viewport.
+  // Fit rectangular maps with square cells inside the circular viewport.
   const size = Math.min(width, height) * Math.SQRT1_2;
   const padding = Math.min(25, size * .07);
-  return { width, height, size, offsetX: (width - size) / 2, offsetY: (height - size) / 2, padding, cell: (size - padding * 2) / 12 };
+  const level = current()!.level;
+  const cell = (size - padding * 2) / Math.max(level.width, level.height);
+  return { width, height, size, offsetX: (width - level.width * cell - padding * 2) / 2, offsetY: (height - level.height * cell - padding * 2) / 2, padding, cell };
 }
 function drawMap() {
   const p = current(); if (!p) return;
@@ -324,7 +328,8 @@ function drawFlatMap() {
     if (sensed) { context.strokeStyle = '#66ddce33'; context.strokeRect(padding + x * cell + 1, padding + y * cell + 1, cell - 2, cell - 2); }
   }
   context.fillStyle = '#5a7383';
-  for (let i = 0; i < 12; i++) { context.fillText(String(i), padding + (i + .5) * cell, 12); context.fillText(String(i), 12, padding + (i + .5) * cell); }
+  for (let x = 0; x < p.level.width; x++) context.fillText(String(x), padding + (x + .5) * cell, 12);
+  for (let y = 0; y < p.level.height; y++) context.fillText(String(y), 12, padding + (y + .5) * cell);
   const exit = center(p.level.exit), leaking = p.exitStatus === 'leaking';
   canvas.dataset.exitStatus = p.exitStatus;
   context.fillStyle = leaking ? '#8f4035' : '#2f716b'; context.fillRect(exit.x - cell * .35, exit.y - cell * .35, cell * .7, cell * .7);
@@ -341,8 +346,6 @@ function drawFlatMap() {
   p.level.rooms.forEach((room, index) => {
     const { minX, minY, maxX, maxY } = room.bounds;
     const color = `#${roomColors[index % roomColors.length].toString(16).padStart(6, '0')}`;
-    context.strokeStyle = color; context.lineWidth = 1;
-    context.strokeRect(padding + (minX + .08) * cell, padding + (minY + .08) * cell, (maxX - minX + .84) * cell, (maxY - minY + .84) * cell);
     const c = center(roomCenter(room));
     const labelY = maxX - minX < 2 && maxY - minY < 2 ? padding + (maxY + 1.5) * cell : c.y;
     context.font = '11px "Microsoft YaHei",sans-serif';
@@ -380,6 +383,7 @@ function drawFlatMap() {
   }
 }
 canvas.onclick = event => {
+  const p = current(); if (!p) return;
   if (station) {
     if (!station.selectionClickAllowed(event)) return;
     const cell = station.pick(event.clientX, event.clientY);
@@ -389,7 +393,7 @@ canvas.onclick = event => {
   const { padding, cell, offsetX, offsetY } = geometry(); const box = canvas.getBoundingClientRect();
   if (cell <= 0) return;
   const x = Math.floor((event.clientX - box.left - offsetX - padding) / cell); const y = Math.floor((event.clientY - box.top - offsetY - padding) / cell);
-  if (x < 0 || y < 0 || x >= 12 || y >= 12) return;
+  if (x < 0 || y < 0 || x >= p.level.width || y >= p.level.height) return;
   selected = { x, y }; renderSelection(); drawMap(); openPanel('selection');
 };
 new ResizeObserver(drawMap).observe(canvas);
@@ -455,7 +459,39 @@ document.addEventListener('keydown', event => {
 });
 $('stop').onclick = () => void post('stop'); $('continue').onclick = () => void post('continue');
 $('save').onclick = async () => { if (await post('save')) toast('当前进度已保存。'); };
-$('new-game').onclick = async () => { try { if (view?.running) await post('stop'); attach(await api<SessionView>('/api/sessions', {})); toast('新的一局已准备好。'); } catch (error) { toast(String(error)); } };
+let creatingGame = false;
+async function chooseMap() {
+  const dialog = $<HTMLDialogElement>('new-game-dialog');
+  if (dialog.open) return;
+  if (drawer.open) drawer.close();
+  const select = $<HTMLSelectElement>('new-game-level');
+  const apply = $<HTMLButtonElement>('new-game-apply');
+  select.replaceChildren(new Option('正在读取地图…', '')); select.disabled = true; apply.disabled = true;
+  $('new-game-error').hidden = true; dialog.showModal();
+  try {
+    const levels = await api<LevelSummary[]>('/api/levels');
+    select.replaceChildren(...levels.map(level => new Option(`${level.name} · ${level.width} × ${level.height}`, level.id)));
+    if (levels.some(level => level.id === view?.level.id)) select.value = view!.level.id;
+    select.disabled = !levels.length; apply.disabled = !levels.length;
+    if (dialog.open) select.focus();
+  } catch (error) {
+    select.replaceChildren(new Option('地图读取失败', ''));
+    $('new-game-error').textContent = error instanceof Error ? error.message : String(error); $('new-game-error').hidden = false;
+  }
+}
+$('new-game').onclick = () => void chooseMap();
+$('new-game-close').onclick = () => { if (!creatingGame) $<HTMLDialogElement>('new-game-dialog').close(); };
+$('new-game-dialog').addEventListener('cancel', event => { if (creatingGame) event.preventDefault(); });
+$('new-game-form').onsubmit = async event => {
+  event.preventDefault(); if (creatingGame) return;
+  creatingGame = true; $<HTMLButtonElement>('new-game-apply').disabled = true; $('new-game-error').hidden = true;
+  try {
+    if (view?.running && !await post('stop')) return;
+    attach(await api<SessionView>('/api/sessions', { levelId: $<HTMLSelectElement>('new-game-level').value }));
+    $<HTMLDialogElement>('new-game-dialog').close(); toast('新的一局已准备好。');
+  } catch (error) { $('new-game-error').textContent = error instanceof Error ? error.message : String(error); $('new-game-error').hidden = false; }
+  finally { creatingGame = false; $<HTMLButtonElement>('new-game-apply').disabled = false; }
+};
 $('load').onclick = async () => {
   const open = $<HTMLButtonElement>('load');
   const dialog = $<HTMLDialogElement>('load-dialog');
@@ -530,7 +566,13 @@ $('replay').onclick = async () => {
 };
 $('exit-replay').onclick = () => { frames = null; render(); };
 $('replay-slider').oninput = () => { replayIndex = Number($<HTMLInputElement>('replay-slider').value); render(); };
-async function start() { try { attach(await api<SessionView | null>('/api/latest') ?? await api<SessionView>('/api/sessions', {})); } catch (error) { $('connection').textContent = '连接失败'; toast(String(error)); } }
+async function start() {
+  try {
+    const latest = await api<SessionView | null>('/api/latest');
+    if (latest) attach(latest);
+    else { $('connection').textContent = '请选择地图'; await chooseMap(); }
+  } catch (error) { $('connection').textContent = '连接失败'; toast(String(error)); }
+}
 void start();
 
 function updateModelFields(reset = false) {

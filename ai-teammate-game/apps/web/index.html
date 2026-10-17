@@ -31,7 +31,7 @@
         <g stroke="#bec4b0" stroke-width="2"><path d="m188 174 16-6m-11-5 5 15M826 789l10-10m-10 0 10 10M875 303l9 5m-2-7-5 11"/></g>
       </svg>
       <div class="sector-label"><span class="eyebrow">SECTOR 07 · 救援区域</span><h2 id="level-name">失联空间站</h2><span id="map-phase">正在连接</span></div>
-      <div class="coordinate-label" aria-hidden="true"><span>STATION LINK</span><span>12 × 12 / LOCAL</span></div>
+      <div class="coordinate-label" aria-hidden="true"><span>STATION LINK</span><span id="map-dimensions">— / LOCAL</span></div>
       <div class="scene-resources" aria-hidden="true"><span>O₂ <b id="map-oxygen">—</b></span><span>B <b id="map-battery">—</b></span></div>
       <p id="selection-hint" class="target-summary">点击格子查看情报与操作</p>
       <div class="camera-aux"><button id="map-zoom-out" type="button" data-camera aria-label="缩小地图" title="缩小地图">−</button><button id="map-zoom-in" type="button" data-camera aria-label="放大地图" title="放大地图">＋</button></div>
@@ -108,6 +108,15 @@
       <button id="load-apply" type="submit" class="primary" disabled>恢复所选存档</button>
     </form>
     <footer class="drawer-footer"><span>STATION 07 · MISSION ARCHIVE</span><span>RESCUE SYSTEM</span></footer>
+  </dialog>
+  <dialog id="new-game-dialog" class="game-dialog" aria-labelledby="new-game-title">
+    <form id="new-game-form">
+      <div class="section-title"><h2 id="new-game-title">开始新的救援</h2><button id="new-game-close" type="button" aria-label="关闭地图选择">关闭</button></div>
+      <label for="new-game-level">选择地图</label><select id="new-game-level" required disabled></select>
+      <p class="subtle">每张地图拥有独立的布局和资源配置。当前对局会保留在存档中。</p>
+      <p id="new-game-error" class="model-form-error" role="alert" hidden></p>
+      <button id="new-game-apply" type="submit" class="primary" disabled>开始救援</button>
+    </form>
   </dialog>
   <dialog id="model-dialog" class="game-dialog model-dialog" aria-labelledby="model-dialog-title">
     <form id="model-form" novalidate>
