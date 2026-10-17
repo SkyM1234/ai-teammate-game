@@ -440,9 +440,19 @@ function drawFlatMap() {
     context.beginPath(); context.moveTo(c.x, c.y - cell * .36); context.lineTo(c.x + cell * .36, c.y); context.lineTo(c.x, c.y + cell * .36); context.lineTo(c.x - cell * .36, c.y); context.closePath(); context.stroke();
   }
   for (const route of routeOverlays()) {
+    context.save(); context.globalAlpha = .85; context.setLineDash([cell * .22, cell * .12]);
     context.strokeStyle = route.color; context.lineWidth = Math.max(2, cell * .08); context.lineJoin = 'round';
     context.beginPath();
     route.path.forEach((point, i) => { const c = center(point); if (i) context.lineTo(c.x, c.y); else context.moveTo(c.x, c.y); }); context.stroke();
+    context.setLineDash([]); context.lineWidth = Math.max(1.5, cell * .05);
+    if (route.path.length > 1) {
+      const from = center(route.path[route.path.length - 2]), to = center(route.path[route.path.length - 1]);
+      const angle = Math.atan2(to.y - from.y, to.x - from.x);
+      context.save(); context.translate(to.x, to.y); context.rotate(angle);
+      context.beginPath(); context.moveTo(-cell * .18, -cell * .18); context.lineTo(0, 0); context.lineTo(-cell * .18, cell * .18); context.stroke();
+      context.restore();
+    }
+    context.restore();
     const point = route.path[1];
     if (point) { const c = center(point); context.fillStyle = '#102126'; context.fillRect(c.x - 8, c.y - 8, 16, 16); context.fillStyle = route.color; context.font = 'bold 12px monospace'; context.fillText(route.label, c.x, c.y); }
     context.lineWidth = 1;

@@ -37,7 +37,7 @@ textarea { resize: none; }
 .map-wrap { position: absolute; inset: 0; overflow: hidden; border-radius: 50%; }
 .map-wrap::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 45px #060c0699; pointer-events: none; }
 canvas { display: block; width: 100%; height: 100%; border-radius: 50%; touch-action: manipulation; }
-canvas[data-render-mode="3d"] { touch-action: none; cursor: grab; }
+canvas[data-render-mode="3d"] { touch-action: none; cursor: default; }
 canvas[data-dragging="true"] { cursor: grabbing !important; }
 .instrument-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; filter: drop-shadow(0 2px 1px #050905); }
 .utility-strip { position: absolute; z-index: 5; left: calc(50% - var(--dial) * .75); top: calc(50% - var(--dial) * .43); display: flex; gap: 18px; }

@@ -12,7 +12,7 @@ import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
 
-const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 async function fixture(t: TestContext, delayMs = 0) {
   const savesDir = await mkdtemp(join(tmpdir(), 'last-oxygen-'));
   const app = createAppServer(level, { savesDir, delayMs });

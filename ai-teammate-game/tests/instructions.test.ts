@@ -7,7 +7,7 @@ import type { ModelAdapter, ToolIntent } from '../apps/server/src/model.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import type { Level } from '../packages/game-core/src/types.ts';
 
-const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 const finish: ToolIntent = { name: 'finish_task', arguments: { reason: '本次委托结束。' } };
 const report: ToolIntent = { name: 'report', arguments: { text: '已核对当前状态。' } };
 const move = (x: number, y: number): ToolIntent => ({ name: 'move_to', arguments: { target: { x, y } } });

@@ -81,7 +81,7 @@ test('保存密钥自动创建 pi 用户目录，加锁合并并保留服务商�
 test('恢复和新会话自动使用 pi 密钥，每次模型请求重新读取；页面与存档不含密钥', async t => {
   const { path, setKey } = await piUser(t); await setKey(keyOne);
   const originalFile = await readFile(path, 'utf8');
-  const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+  const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
   const adapter = await liveModel(config);
   const seen: string[] = [];
   const mockFetch: typeof fetch = async (input, init) => {
@@ -144,7 +144,7 @@ test('pi OAuth 凭据通过真实 Anthropic 流式适配器接入游戏，令牌
     ];
     return new Response(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''), { headers: { 'Content-Type': 'text/event-stream' } });
   };
-  const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+  const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
   const session = new GameSession(level, { adapter, delayMs: 0 });
   session.agent.streamFunction = (model, context, options) => adapter.streamFn(model, context, { ...options, fetch: mockFetch });
   await session.command('检查状态'); await session.settled();

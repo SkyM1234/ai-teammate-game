@@ -14,7 +14,7 @@ import { validateLevel } from '../packages/game-core/src/level.ts';
 import { SessionJournal } from '../apps/server/src/journal.ts';
 import { deepseekProvider } from '../../pi-main/packages/ai/dist/providers/deepseek.js';
 
-const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 const secret = 'test-secret-never-save';
 type Request = { path: string; authorization: string | undefined; body: Record<string, unknown> };
 async function journal(t: TestContext, session: GameSession) {

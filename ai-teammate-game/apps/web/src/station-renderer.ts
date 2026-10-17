@@ -193,22 +193,38 @@ export class StationRenderer {
       for (const route of routes) {
         let material = this.routeMaterials.get(route.color);
         if (!material) {
-          material = new THREE.MeshBasicMaterial({ color: route.color, depthTest: false, depthWrite: false, toneMapped: false });
+          material = new THREE.MeshBasicMaterial({ color: new THREE.Color(route.color).multiplyScalar(.75), toneMapped: false });
           this.routeMaterials.set(route.color, material);
         }
         for (let i = 1; i < route.path.length; i++) {
           const from = this.world(route.path[i - 1]), to = this.world(route.path[i]);
-          const segment = new THREE.Mesh(this.routeGeometry, material);
-          segment.position.copy(from).lerp(to, .5); segment.position.y = .12;
-          segment.scale.set(.075, .025, from.distanceTo(to) + .075);
-          segment.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
-          segment.renderOrder = 20; this.routes.add(segment);
+          const length = from.distanceTo(to), dashes = Math.ceil(length * 3);
+          for (let dash = 0; dash < dashes; dash++) {
+            const segment = new THREE.Mesh(this.routeGeometry, material);
+            segment.position.copy(from).lerp(to, (dash + .5) / dashes); segment.position.y = .12;
+            segment.scale.set(.075, .025, length / dashes * .65);
+            segment.rotation.y = Math.atan2(to.x - from.x, to.z - from.z);
+            this.routes.add(segment);
+          }
+          if (i !== route.path.length - 1) continue;
+          const direction = to.clone().sub(from).normalize();
+          const sideways = new THREE.Vector3(direction.z, 0, -direction.x);
+          const tip = to;
+          for (const side of [-1, 1]) {
+            const wing = new THREE.Mesh(this.routeGeometry, material);
+            wing.position.copy(tip).addScaledVector(direction, -.09).addScaledVector(sideways, side * .09); wing.position.y = .12;
+            wing.scale.set(.05, .025, Math.SQRT2 * .18);
+            wing.rotation.y = Math.atan2(direction.x, direction.z) - side * Math.PI / 4;
+            this.routes.add(wing);
+          }
         }
         const point = route.path[1];
         if (point) {
           const label = new THREE.Group(); label.position.copy(this.world(point));
-          this.art.label(label, route.label, route.color, .65, .45);
-          label.children.forEach(child => { child.renderOrder = 21; }); this.routes.add(label);
+          const sprite = this.art.label(label, route.label, route.color, .65, .45);
+          sprite.material.depthTest = true;
+          sprite.material.depthWrite = false;
+          this.routes.add(label);
         }
       }
       this.routeSignature = routeSignature;
@@ -328,7 +344,6 @@ export class StationRenderer {
     if (this.hover.visible === !!cell && (!cell || this.hover.position.equals(this.world(cell)))) return;
     this.hover.visible = !!cell;
     if (cell) this.hover.position.copy(this.world(cell));
-    this.canvas.style.cursor = 'grab';
     this.draw();
   };
   private onPointerLeave = () => { if (this.hover.visible) { this.hover.visible = false; this.draw(); } };

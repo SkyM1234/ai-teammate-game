@@ -6,7 +6,7 @@ import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
 import type { Action, ActionCosts, ObservedEntity, RadarEcho } from '../packages/game-core/src/types.ts';
 
-const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 
 test('重复抱起已在搬运中的玩家返回已满足状态，不误报距离或消耗资源', () => {
   const engine = new GameEngine(level);

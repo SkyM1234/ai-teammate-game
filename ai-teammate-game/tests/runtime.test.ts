@@ -7,7 +7,7 @@ import type { ToolIntent } from '../apps/server/src/model.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import type { ActionCosts } from '../packages/game-core/src/types.ts';
 
-const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 function scripted(rounds: ToolIntent[][], delayMs = 0, customLevel = level) {
   const contexts: string[] = [];
   const session = new GameSession(customLevel, { delayMs, adapter: {

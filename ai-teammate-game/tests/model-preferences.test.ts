@@ -12,7 +12,7 @@ import type { ModelPreferencesView } from '../apps/server/src/model-preferences.
 import type { SessionView } from '../apps/server/src/session.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 
-const level = validateLevel(JSON.parse(await readFile(new URL('../content/levels/station-01.json', import.meta.url), 'utf8')));
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 const secret = 'fake-shared-model-key';
 
 async function fixture(t: TestContext) {
