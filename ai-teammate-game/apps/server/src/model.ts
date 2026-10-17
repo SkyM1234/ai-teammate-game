@@ -1,4 +1,4 @@
-import { createAssistantMessageEventStream, createModels, createProvider, envApiKeyAuth } from '../../../../pi-main/packages/ai/dist/index.js';
+import { createAssistantMessageEventStream, createModels, createProvider } from '../../../../pi-main/packages/ai/dist/index.js';
 import { builtinModels } from '../../../../pi-main/packages/ai/dist/providers/all.js';
 import { openAICompletionsApi } from '../../../../pi-main/packages/ai/dist/api/openai-completions.lazy.js';
 import type { Api, AssistantMessage, Model, JsonObject, Models } from '../../../../pi-main/packages/ai/dist/index.js';
@@ -35,7 +35,7 @@ export async function modelCatalog() {
   const models = builtinModels({ credentials: modelCredentials() });
   const entries = await Promise.all(providerCatalog().map(async provider => ({ ...provider, ...await authStatus(models, provider.id) })));
   return [...entries, { id: 'compatible', name: '自定义兼容接口', baseUrl: '', defaultModel: '', models: [] as string[],
-    ready: !!process.env.GAME_MODEL_API_KEY?.trim(), credentialSource: process.env.GAME_MODEL_API_KEY?.trim() ? 'environment' as const : 'none' as const }];
+    ready: false, credentialSource: 'none' as const }];
 }
 
 export function validateModelConfig(input: unknown): ModelConfig {
@@ -73,7 +73,10 @@ export async function liveModel(config: ModelConfig, apiKey?: string): Promise<M
       ...(deepseek ?? demoModel), id: config.modelId, name: deepseek?.name ?? config.modelId, api: 'openai-completions', provider: 'game-compatible', baseUrl: config.baseUrl,
       compat: { supportsStore: false, supportsDeveloperRole: false, maxTokensField: 'max_tokens', ...deepseek?.compat },
     };
-    models.setProvider(createProvider({ id: 'game-compatible', name: '兼容接口', baseUrl: config.baseUrl, models: [custom], auth: { apiKey: envApiKeyAuth('Game API key', ['GAME_MODEL_API_KEY']) }, api: openAICompletionsApi() }));
+    models.setProvider(createProvider({ id: 'game-compatible', name: '兼容接口', baseUrl: config.baseUrl, models: [custom], auth: { apiKey: {
+      name: 'Game API key',
+      async resolve({ credential }) { return credential?.key ? { auth: { apiKey: credential.key }, source: 'stored credential' } : undefined; },
+    } }, api: openAICompletionsApi() }));
     model = custom;
   } else {
     const selected = models.getModel(config.provider, config.modelId);
@@ -114,14 +117,4 @@ export function toolStream(calls: ToolIntent[]): ReturnType<typeof createAssista
   stream.push({ type: 'start', partial: message });
   stream.push({ type: 'done', reason: message.stopReason === 'toolUse' ? 'toolUse' : 'stop', message });
   return stream;
-}
-
-export async function configuredModel(): Promise<ModelAdapter | null> {
-  if (process.env.GAME_AGENT_MODE !== 'live') return null;
-  const provider = process.env.GAME_MODEL_PROVIDER ?? 'deepseek';
-  const entry = providerCatalog().find(p => p.id === provider);
-  const id = process.env.GAME_MODEL_ID ?? entry?.defaultModel;
-  return liveModel(validateModelConfig({ ...defaultModelConfig, mode: 'live', provider, modelId: id,
-    baseUrl: process.env.GAME_MODEL_BASE_URL ?? entry?.baseUrl,
-    timeoutMs: Number(process.env.GAME_MODEL_TIMEOUT_MS ?? 30000), maxTokens: Number(process.env.GAME_MODEL_MAX_TOKENS ?? 2000) }));
 }

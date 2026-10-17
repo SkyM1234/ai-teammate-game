@@ -59,7 +59,7 @@ test('所有动作按 JSON 配置扣时间和电量，氧气按当前耗氧率�
     assert.equal(outcome.accepted, true, `${name}: ${outcome.message}`);
     assert.deepEqual(outcome.cost, { tu: 2, battery: 3, oxygen: 4 }, name);
     assert.equal(engine.state.elapsedTU, 2, name);
-    assert.equal(engine.state.robot.battery, name === 'use_battery' ? 100 : 87, name);
+    assert.equal(engine.state.robot.battery, name === 'use_battery' ? Math.min(custom.rules.batteryMax, custom.rules.battery - 3 + custom.rules.batteryRefill) : custom.rules.battery - 3, name);
     assert.equal(engine.state.human.oxygen, name === 'use_oxygen' ? 156 : 116, name);
     if (action.kind === 'repair') assert.equal(engine.state.robot.inventory.length, 0, name);
   }
@@ -91,7 +91,7 @@ test('维修材料不足不扣资源，零材料维修及配置后的存档回�
   const material = engine.state.entities.find(e => e.id === 's-01')!; material.taken = true;
   engine.state.robot.inventory.push(material.id); engine.observe();
   assert.equal(engine.perform({ kind: 'repair', targetId: 'human' }).code, 'MATERIAL_REQUIRED');
-  assert.equal(engine.state.robot.battery, 90); assert.equal(engine.state.human.oxygen, 120); assert.equal(engine.state.elapsedTU, 0);
+  assert.equal(engine.state.robot.battery, custom.rules.battery); assert.equal(engine.state.human.oxygen, 120); assert.equal(engine.state.elapsedTU, 0);
   custom.rules.actionCosts.repair_human.materials = 0;
   const free = new GameEngine(custom);
   assert.equal(free.perform({ kind: 'repair', targetId: 'human' }).accepted, true);

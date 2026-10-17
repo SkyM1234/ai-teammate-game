@@ -307,7 +307,7 @@ test('移动、扫描、交互和开关工具按配置的完整 TU 检查预算'
     session.engine.state.robot.position = position; session.engine.state.circuitOn = circuitOn ?? false; session.engine.observe();
     await session.command('检查状态'); await session.settled();
     assert.equal(session.engine.state.elapsedTU, 0, cost);
-    assert.equal(session.engine.state.robot.battery, 90, cost);
+    assert.equal(session.engine.state.robot.battery, custom.rules.battery, cost);
     assert.equal(session.engine.state.ledger.length, 0, cost);
     assert.ok(session.messages.some(m => m.text.includes('预算不足')), cost);
   }
@@ -318,7 +318,7 @@ test('修改单步 TU 后预算允许的步数及累计资源一致', async () =
   const session = new GameSession(custom, { delayMs: 0 });
   await session.command('前往 (5,9)'); await session.settled();
   assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
-  assert.equal(session.engine.state.elapsedTU, 4); assert.equal(session.engine.state.robot.battery, 84); assert.equal(session.engine.state.human.oxygen, 112);
+  assert.equal(session.engine.state.elapsedTU, 4); assert.equal(session.engine.state.robot.battery, custom.rules.battery - 6); assert.equal(session.engine.state.human.oxygen, 112);
   await session.continue(); await session.settled();
   assert.deepEqual(session.engine.state.robot.position, { x: 5, y: 9 }); assert.equal(session.engine.state.elapsedTU, 6);
 });
@@ -472,7 +472,7 @@ test('维修、放下和开关授权提示使用配置消耗，批准后按提�
     await session.command('检查救援情况'); const pending = await authorization(session);
     assert.match(pending.consequence, consequence);
     await session.authorize(pending.id, true); await session.settled();
-    assert.equal(session.engine.state.elapsedTU, 3, cost); assert.equal(session.engine.state.robot.battery, 83, cost); assert.equal(session.engine.state.human.oxygen, 114, cost);
+    assert.equal(session.engine.state.elapsedTU, 3, cost); assert.equal(session.engine.state.robot.battery, custom.rules.battery - 7, cost); assert.equal(session.engine.state.human.oxygen, 114, cost);
     if (cost === 'repair_human') assert.equal(session.engine.state.robot.inventory.length, 0);
   }
 });
@@ -534,7 +534,7 @@ test('危险移动在工具前申请精确线路授权，仅作用于当前调�
   assert.equal(pending.kind, 'hazard'); assert.deepEqual(pending.hazardIds, ['h-01']);
   assert.equal(session.engine.state.elapsedTU, 0);
   await session.authorize(pending.id, true); await session.settled();
-  assert.equal(session.engine.state.elapsedTU, 1); assert.equal(session.engine.state.robot.battery, 83);
+  assert.equal(session.engine.state.elapsedTU, 1); assert.equal(session.engine.state.robot.battery, level.rules.battery - level.rules.actionCosts.move.battery - level.rules.leakCost);
   assert.deepEqual(session.engine.state.robot.position, { x: 8, y: 3 });
   assert.deepEqual(session.task?.constraints.authorizedHazardIds, []);
   assert.deepEqual(session.engine.state.ledger[0].constraints?.authorizedHazardIds, ['h-01']);

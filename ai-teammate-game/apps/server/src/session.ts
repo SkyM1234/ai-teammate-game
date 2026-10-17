@@ -270,7 +270,7 @@ export class GameSession {
       const retained = previous?.provider === config.provider && previous.baseUrl === config.baseUrl ? this.modelKey : '';
       const apiKey = typeof key === 'string' && key.trim() ? key.trim() : retained;
       const adapter = config.mode === 'live' ? await liveModel(config, apiKey || undefined) : this.demoAdapter(config);
-      if (adapter.ready === false) { this.pause(); this.emit(); throw new Error('未找到可用的模型凭据，请在 pi 中配置登录或 API Key，或填写密钥及服务端环境变量'); }
+      if (adapter.ready === false) { this.pause(); this.emit(); throw new Error('未找到可用的模型凭据，请在页面“模型设置”中填写 API Key，或在 pi 中配置登录凭据。'); }
       this.adapter = adapter;
       this.modelKey = config.mode === 'live' ? apiKey : '';
       this.agent.reset(); this.transcript = [];

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 import { GameSession, interactionAction, RevisionConflictError } from './session.ts';
 import type { SessionSave } from './session.ts';
-import { configuredModel, modelCatalog } from './model.ts';
+import { modelCatalog } from './model.ts';
 import type { ModelAdapter } from './model.ts';
 import { validateLevel } from '../../../packages/game-core/src/level.ts';
 import { GameEngine } from '../../../packages/game-core/src/engine.ts';
@@ -218,10 +218,9 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const levels = await loadLevels(join(root, 'content/levels'));
-  const adapter = await configuredModel();
-  const app = createAppServer(levels, adapter ? { adapter } : {});
+  const app = createAppServer(levels);
   const port = Number(process.env.PORT ?? 4317);
-  app.server.listen(port, '127.0.0.1', () => console.log(`LAST OXYGEN → http://127.0.0.1:${port} (${adapter?.label ?? '本地规则演示，无模型费用'})`));
+  app.server.listen(port, '127.0.0.1', () => console.log(`LAST OXYGEN → http://127.0.0.1:${port}（请在页面“模型设置”中配置模型）`));
   process.on('SIGINT', () => { void app.shutdown().then(() => process.exit(0)); });
   process.on('SIGTERM', () => { void app.shutdown().then(() => process.exit(0)); });
 }

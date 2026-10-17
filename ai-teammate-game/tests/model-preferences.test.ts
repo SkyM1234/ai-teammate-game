@@ -110,6 +110,26 @@ test('更改默认保留其他对局配置，旧存档复用对应接口密钥�
   assert.deepEqual((await app.call<ModelPreferencesView>('/api/model-settings')).data.config, other);
 });
 
+test('旧游戏环境配置不影响首次使用，自定义接口密钥需通过页面配置', async t => {
+  const legacy = { GAME_AGENT_MODE: 'live', GAME_MODEL_PROVIDER: 'compatible', GAME_MODEL_ID: 'old-model', GAME_MODEL_BASE_URL: 'https://old.example/v1', GAME_MODEL_API_KEY: 'fake-old-env-key', GAME_MODEL_TIMEOUT_MS: 'invalid', GAME_MODEL_MAX_TOKENS: 'invalid' };
+  const previous = new Map(Object.keys(legacy).map(name => [name, process.env[name]]));
+  Object.assign(process.env, legacy);
+  t.after(() => { for (const [name, value] of previous) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } });
+  const { start } = await fixture(t); const { config, requests } = await endpoint(t);
+  const app = await start(); const initial = (await app.call('/api/sessions', {})).data;
+  assert.equal(initial.agentMode, 'demo'); assert.deepEqual(initial.modelConfig, defaultModelConfig);
+  const catalog = (await app.call<{ id: string; ready: boolean; credentialSource: string }[]>('/api/models')).data;
+  const compatible = catalog.find(provider => provider.id === 'compatible')!;
+  assert.equal(compatible.ready, false); assert.equal(compatible.credentialSource, 'none');
+  const path = `/api/sessions/${initial.sessionId}`;
+  assert.equal((await app.call(`${path}/model`, { requestId: crypto.randomUUID(), config })).status, 400);
+  assert.deepEqual((await app.call<ModelPreferencesView>('/api/model-settings')).data.config, defaultModelConfig);
+  assert.equal((await app.call(`${path}/model`, { requestId: crypto.randomUUID(), config, apiKey: secret })).status, 200);
+  await app.call(`${path}/command`, { requestId: crypto.randomUUID(), expectedRevision: 0, text: '检查状态' });
+  await app.sessions.get(initial.sessionId)!.settled();
+  assert.equal(requests.length, 1); assert.equal(requests[0].authorization, `Bearer ${secret}`);
+});
+
 test('重启后新局自动复用 pi 凭据，演示模式的默认选择同样保留', async t => {
   const { start, piDir } = await fixture(t);
   await writeFile(join(piDir, 'auth.json'), JSON.stringify({ deepseek: { type: 'api_key', key: secret } }), 'utf8');
