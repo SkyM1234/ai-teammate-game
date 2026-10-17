@@ -66,22 +66,22 @@
     { "name": "气闸室", "bounds": { "minX": 8, "minY": 1, "maxX": 13, "maxY": 6 } }
   ],
   "entities": [
-    { "id": "s-01", "type": "supply", "name": "供氧管维修材料", "position": { "x": 4, "y": 12 }, "itemType": "repair", "reflection": 1 },
-    { "id": "s-02", "type": "supply", "name": "气闸维修材料", "position": { "x": 4, "y": 11 }, "itemType": "repair", "reflection": 1 },
+    { "id": "s-01", "type": "supply", "name": "维修材料", "position": { "x": 4, "y": 12 }, "itemType": "repair", "reflection": 1 },
+    { "id": "s-02", "type": "supply", "name": "维修材料", "position": { "x": 4, "y": 11 }, "itemType": "repair", "reflection": 1 },
     { "id": "s-03", "type": "supply", "name": "应急氧气", "position": { "x": 4, "y": 10 }, "itemType": "oxygen", "reflection": 1 },
     { "id": "c-01", "type": "cabinet", "name": "设备间电池柜", "position": { "x": 5, "y": 2 }, "powerRequired": true, "reflection": 3 },
     { "id": "s-04", "type": "supply", "name": "设备间备用电池", "position": { "x": 5, "y": 2 }, "itemType": "battery", "containerId": "c-01", "reflection": 1 },
     { "id": "sw-01", "type": "switch", "name": "辅助电路开关", "position": { "x": 6, "y": 4 }, "reflection": 2 },
-    { "id": "d-01", "type": "door", "name": "设备间手动门", "position": { "x": 3, "y": 7 }, "reflection": 2 },
-    { "id": "d-02", "type": "door", "name": "气闸室电动门", "position": { "x": 7, "y": 3 }, "powerRequired": true, "reflection": 2 },
-    { "id": "d-03", "type": "door", "name": "补给仓手动门", "position": { "x": 11, "y": 7 }, "reflection": 2 },
+    { "id": "d-01", "type": "door", "name": "设备间手动门", "position": { "x": 3, "y": 7 }, "orientation": "horizontal", "reflection": 2 },
+    { "id": "d-02", "type": "door", "name": "气闸室电动门", "position": { "x": 7, "y": 3 }, "orientation": "vertical", "powerRequired": true, "reflection": 2 },
+    { "id": "d-03", "type": "door", "name": "补给仓手动门", "position": { "x": 11, "y": 7 }, "orientation": "horizontal", "reflection": 2 },
     { "id": "h-01", "type": "hazard", "name": "气闸门外裸露线路", "position": { "x": 8, "y": 3 }, "reflection": 2 },
     { "id": "h-02", "type": "hazard", "name": "补给仓破损线路", "position": { "x": 11, "y": 9 }, "reflection": 2 },
     { "id": "o-01", "type": "obstacle", "name": "备用通道坍塌货架", "position": { "x": 7, "y": 11 }, "reflection": 3 },
     { "id": "c-02", "type": "cabinet", "name": "补给仓应急柜", "position": { "x": 12, "y": 12 }, "reflection": 3 },
     { "id": "s-05", "type": "supply", "name": "仓储备用电池", "position": { "x": 12, "y": 12 }, "itemType": "battery", "containerId": "c-02", "reflection": 1 },
     { "id": "s-06", "type": "supply", "name": "仓储氧气补给", "position": { "x": 9, "y": 9 }, "itemType": "oxygen", "reflection": 1 },
-    { "id": "s-07", "type": "supply", "name": "备用维修材料", "position": { "x": 13, "y": 10 }, "itemType": "repair", "reflection": 1 },
+    { "id": "s-07", "type": "supply", "name": "维修材料", "position": { "x": 13, "y": 10 }, "itemType": "repair", "reflection": 1 },
     { "id": "a-01", "type": "airlock", "name": "撤离气闸控制器", "position": { "x": 12, "y": 3 }, "reflection": 2 }
   ],
   "verification": {

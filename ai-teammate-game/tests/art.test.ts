@@ -5,6 +5,22 @@ import { ArtResources } from '../apps/web/src/art/resources.ts';
 import { createProp } from '../apps/web/src/art/props.ts';
 import { colors } from '../apps/web/src/art/themes.ts';
 
+test('门框按配置沿地图横向或纵向展开，开门及合批后保持朝向', () => {
+  const art = new ArtResources();
+  for (const state of ['closed', 'opened']) {
+    for (const orientation of ['horizontal', 'vertical', undefined] as const) {
+      const door = createProp(art, { id: 'door', type: 'door', name: '门', position: { x: 3, y: 7 }, orientation, state, scanned: false, observedAt: 0, source: 'sensor' }, true);
+      const size = new THREE.Box3().setFromObject(door).getSize(new THREE.Vector3());
+      assert.equal(size.x > size.z, orientation === 'horizontal');
+      art.batchMeshes(door);
+      const batchedSize = new THREE.Box3().setFromObject(door).getSize(new THREE.Vector3());
+      assert.ok(size.distanceTo(batchedSize) < 1e-6);
+      art.clear(door);
+    }
+  }
+  art.dispose();
+});
+
 test('清理模型实例不销毁共用资源，材质可以按表面类型复用', () => {
   const art = new ArtResources();
   const paint = art.material(colors.dark), rubber = art.material(colors.dark, 'rubber');

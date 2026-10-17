@@ -366,8 +366,15 @@ function drawFlatMap() {
     if (['cleared', 'inventory'].includes(e.state)) continue;
     const c = center(e.position); context.globalAlpha = p.sensorCells.some(point => same(point, e.position)) ? 1 : .55;
     context.fillStyle = e.type === 'hazard' ? e.state === 'active' ? '#ef817c' : '#a39883' : e.type === 'switch' ? e.state === 'on' ? '#f2b864' : '#9fb4c3' : e.type === 'supply' ? '#66ddce' : '#9fb4c3';
+    if (e.type === 'door') {
+      context.save(); context.translate(c.x, c.y);
+      if (e.orientation !== 'horizontal') context.rotate(Math.PI / 2);
+      for (const side of [-1, 1]) context.fillRect(side * cell * .3 - cell * .06, -cell * .2, cell * .12, cell * .4);
+      if (e.state !== 'opened') context.fillRect(-cell * .3, -cell * .07, cell * .6, cell * .14);
+      context.restore(); context.globalAlpha = 1; continue;
+    }
     context.font = `bold ${Math.max(12, cell * .4)}px monospace`;
-    const symbol = e.type === 'supply' ? e.itemType === 'repair' ? '+' : e.itemType === 'oxygen' ? 'O₂' : 'B' : e.type === 'switch' ? e.state === 'on' ? '⏻' : '○' : e.type === 'door' ? e.state === 'opened' ? '╌' : '▥' : e.type === 'cabinet' ? '▣' : e.type === 'obstacle' ? '×' : e.type === 'hazard' ? 'ϟ' : '⚙';
+    const symbol = e.type === 'supply' ? e.itemType === 'repair' ? '+' : e.itemType === 'oxygen' ? 'O₂' : 'B' : e.type === 'switch' ? e.state === 'on' ? '⏻' : '○' : e.type === 'cabinet' ? '▣' : e.type === 'obstacle' ? '×' : e.type === 'hazard' ? 'ϟ' : '⚙';
     context.fillText(symbol, c.x, c.y); context.globalAlpha = 1;
   }
   for (const marker of p.markers) {

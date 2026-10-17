@@ -32,6 +32,7 @@ export function validateLevel(value: unknown): Level {
   for (const entity of level.entities) {
     if (!inside(entity.position) || ids.has(entity.id) || !['supply', 'cabinet', 'door', 'hazard', 'obstacle', 'airlock', 'switch'].includes(entity.type)) throw new Error('实体位置、类型或 ID 非法');
     if (entity.type === 'supply' && !['repair', 'battery', 'oxygen'].includes(entity.itemType ?? '')) throw new Error('补给类型非法');
+    if (entity.orientation !== undefined && (entity.type !== 'door' || !['horizontal', 'vertical'].includes(entity.orientation))) throw new Error('门朝向非法：仅门可配置 horizontal 或 vertical');
     ids.add(entity.id);
   }
   for (const entity of level.entities) if (entity.containerId && !level.entities.some(container => container.id === entity.containerId && container.type === 'cabinet')) throw new Error('物品容器引用非法');

@@ -3362,7 +3362,7 @@
                 "battery": 1,
                 "oxygen": 2
               },
-              "message": "取得 供氧管维修材料",
+              "message": "取得 维修材料",
               "position": {
                 "x": 3,
                 "y": 12
@@ -3461,7 +3461,7 @@
                 "battery": 1,
                 "oxygen": 1
               },
-              "message": "取得 气闸维修材料",
+              "message": "取得 维修材料",
               "position": {
                 "x": 3,
                 "y": 11
@@ -4805,7 +4805,7 @@
                 "battery": 1,
                 "oxygen": 2
               },
-              "message": "取得 供氧管维修材料",
+              "message": "取得 维修材料",
               "position": {
                 "x": 3,
                 "y": 12
@@ -4904,7 +4904,7 @@
                 "battery": 1,
                 "oxygen": 1
               },
-              "message": "取得 气闸维修材料",
+              "message": "取得 维修材料",
               "position": {
                 "x": 3,
                 "y": 11

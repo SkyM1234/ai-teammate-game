@@ -1,6 +1,7 @@
 export type Position = { x: number; y: number };
 export type ItemType = 'repair' | 'battery' | 'oxygen';
 export type EntityType = 'supply' | 'cabinet' | 'door' | 'hazard' | 'obstacle' | 'airlock' | 'switch';
+export type DoorOrientation = 'horizontal' | 'vertical';
 export type Phase = 'awaiting_command' | 'agent_thinking' | 'executing' | 'awaiting_player' | 'paused' | 'success' | 'failure';
 
 export interface ActionCost { tu: number; battery: number }
@@ -20,6 +21,7 @@ export interface Rules {
 export interface EntityDefinition {
   id: string; type: EntityType; name: string; position: Position; reflection: number;
   itemType?: ItemType; containerId?: string; powerRequired?: boolean;
+  orientation?: DoorOrientation;
 }
 export interface Entity extends EntityDefinition {
   opened: boolean; repaired: boolean; removed: boolean; taken: boolean;
@@ -38,6 +40,7 @@ export interface ObservedEntity {
   id: string; type: EntityType; name: string; position: Position;
   state: string; itemType?: ItemType; scanned: boolean; details?: string;
   powerRequired?: boolean;
+  orientation?: DoorOrientation;
   observedAt: number; source: 'sensor' | 'scan';
 }
 export interface Knowledge {

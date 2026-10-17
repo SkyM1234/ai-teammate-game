@@ -14,6 +14,7 @@ import type { ToolIntent } from '../apps/server/src/model.ts';
 import type { SessionSave, SessionView } from '../apps/server/src/session.ts';
 import { parseDemoCommand } from '../apps/server/src/demo-task.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
+import { GameEngine } from '../packages/game-core/src/engine.ts';
 import type { Action, Level, PlayerView } from '../packages/game-core/src/types.ts';
 import { levelRoutes, verifyLevelRoute } from '../packages/game-core/src/verify-level.ts';
 
@@ -52,6 +53,29 @@ async function serve(levels: Level[], savesDir: string) {
   }
   return { ...app, call, close };
 }
+
+test('门朝向配置校验，按已知实体提供显示信息并兼容旧存档', () => {
+  for (const orientation of ['horizontal', 'vertical', undefined] as const) {
+    const level = map('doors', 8, 6);
+    level.entities = [{ id: 'door', type: 'door', name: '门', position: { x: 3, y: 1 }, reflection: 2, orientation }];
+    const engine = new GameEngine(validateLevel(level));
+    assert.equal(engine.playerView().observed.find(e => e.id === 'door')?.orientation, orientation);
+    const old = engine.snapshot();
+    delete old.entities[0].orientation;
+    engine.restore(old);
+    assert.equal(engine.playerView().observed.find(e => e.id === 'door')?.orientation, orientation);
+    engine.state.robot.position = { x: 6, y: 4 };
+    engine.state.knowledge.entities = {};
+    assert.equal(engine.playerView().observed.length, 0);
+    for (const invalid of ['diagonal', 90, null]) {
+      const value = structuredClone(level) as any;
+      value.entities[0].orientation = invalid;
+      assert.throws(() => validateLevel(value), /门朝向非法/);
+    }
+    level.entities[0].type = 'cabinet'; level.entities[0].orientation = 'horizontal';
+    assert.throws(() => validateLevel(level), /门朝向非法/);
+  }
+});
 
 test('新增 JSON 自动发现，顺序确定，重复 ID 和错误文件给出文件名', async t => {
   const path = await directory(t);

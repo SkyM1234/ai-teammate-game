@@ -309,13 +309,18 @@ export class GameEngine {
   }
 
   playerView(): PlayerView {
+    // Read static art data from the map, including for observations in older saves.
+    const observed = Object.values(this.state.knowledge.entities).map(entity => {
+      const orientation = entity.type === 'door' ? this.level.entities.find(definition => definition.id === entity.id)?.orientation : undefined;
+      return orientation ? { ...entity, orientation } : entity;
+    });
     return structuredClone({
       level: { id: this.level.id, name: this.level.name, width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       exitStatus: this.exitStatus,
       phase: this.state.phase, stateRevision: this.state.stateRevision, elapsedTU: this.state.elapsedTU, circuitOn: this.state.circuitOn,
       human: this.state.human,
       robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => this.state.knowledge.entities[id]).filter((e): e is ObservedEntity => !!e) },
-      rules: this.level.rules, observed: Object.values(this.state.knowledge.entities), radar: this.state.radarHistory, markers: this.state.markers,
+      rules: this.level.rules, observed, radar: this.state.radarHistory, markers: this.state.markers,
       sensorCells: sensorCells(this.level, this.state.robot.position, this.level.rules.sensorRadius), ledger: this.state.ledger.slice(-80), failureReason: this.state.failureReason,
     });
   }

@@ -45,7 +45,7 @@ export function createProp(art: ArtResources, entity: ObservedEntity, sensed: bo
       }
     }
   } else if (entity.type === 'door') {
-    group.rotation.y = Math.PI / 2;
+    group.rotation.y = entity.orientation === 'horizontal' ? 0 : Math.PI / 2;
     art.box(group, [.94, .045, .55], [0, .035, 0], colors.dark);
     for (const x of [-.39, .39]) {
       art.box(group, [.16, .96, .46], [x, .52, 0], steel);
