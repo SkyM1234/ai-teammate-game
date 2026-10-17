@@ -44,6 +44,8 @@ canvas[data-dragging="true"] { cursor: grabbing !important; }
 .utility-button { color: #c2c7b7; border: 0; background: transparent; padding: 3px; min-width: 42px; }
 .utility-button .icon { width: 27px; height: 27px; }
 .utility-button:hover:not(:disabled) { color: var(--yellow); background: transparent; }
+#music-toggle { min-width: 36px; }
+#music-toggle[aria-pressed="false"] .icon { opacity: .4; }
 .resource-rail { position: absolute; z-index: 5; top: calc(50% - var(--dial) * .46); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 24px; font-variant-numeric: tabular-nums; }
 .resource-rail > div { display: flex; align-items: center; gap: 8px; }
 .resource-rail strong { font-size: 17px; min-width: 3ch; font-weight: 650; }

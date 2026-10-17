@@ -7,6 +7,7 @@ import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { StationRenderer } from './station-renderer.ts';
 import type { RouteOverlay } from './station-renderer.ts';
 import { roomColors } from './art/themes.ts';
+import { GameMusic } from './music.ts';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 let canvas = $<HTMLCanvasElement>('map');
@@ -47,6 +48,18 @@ const dist = (a: Position, b: Position) => Math.abs(a.x - b.x) + Math.abs(a.y - 
 const same = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
 const current = () => frames?.[replayIndex] ?? view;
 function toast(message: string) { clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false; toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4500); }
+const music = new GameMusic(enabled => {
+  const button = $('music-toggle');
+  button.setAttribute('aria-pressed', String(enabled));
+  button.setAttribute('aria-label', enabled ? '关闭背景音乐' : '开启背景音乐');
+  button.title = enabled ? '关闭背景音乐' : '开启背景音乐';
+}, () => toast('背景音乐暂时无法播放，可点击音乐开关重试。'));
+document.addEventListener('pointerdown', () => void music.unlock());
+document.addEventListener('keydown', event => { if (!event.repeat) void music.unlock(); });
+$('music-toggle').onclick = () => music.toggle();
+document.addEventListener('visibilitychange', () => music.setVisible(!document.hidden));
+window.addEventListener('pagehide', event => { if (event.persisted) music.setVisible(false); else music.dispose(); });
+window.addEventListener('pageshow', () => music.setVisible(!document.hidden));
 async function api<T>(path: string, payload?: unknown): Promise<T> {
   const response = await fetch(path, payload === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await response.json(); if (!response.ok) throw new Error(data.error ?? '连接失败'); return data as T;
@@ -103,6 +116,7 @@ function itemArt(kind: string) {
 }
 function render() {
   if (!view) return;
+  music.update(`${view.sessionId}:${view.sessionInstanceId}`, view.phase, !!frames);
   const p = current()!;
   const terminal = ['success', 'failure'].includes(p.phase);
   $('map-sector').textContent = `${p.level.id.toUpperCase()} · 救援区域`;

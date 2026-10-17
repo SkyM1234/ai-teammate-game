@@ -28,6 +28,18 @@ async function fixture(t: TestContext, delayMs = 0) {
   return { ...app, call, base, savesDir, initial: created.data };
 }
 
+test('仅提供选定的三首 WAV 音乐，并使用正确的音频类型', async t => {
+  const { base } = await fixture(t);
+  for (const track of ['bgm-exploration', 'rescue-success', 'mission-failure']) {
+    const response = await fetch(`${base}/audio/${track}.wav`);
+    assert.equal(response.status, 200); assert.equal(response.headers.get('content-type'), 'audio/wav');
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assert.equal(bytes.toString('ascii', 0, 4), 'RIFF'); assert.equal(bytes.toString('ascii', 8, 12), 'WAVE');
+  }
+  assert.equal((await fetch(`${base}/audio/bgm-critical.wav`)).status, 404);
+  assert.equal((await fetch(`${base}/audio/README.md`)).status, 404);
+});
+
 test('每局单独目录保存可读对局和完整模型日志，恢复后追加而不覆盖', async t => {
   const { call, sessions, savesDir, initial } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`;

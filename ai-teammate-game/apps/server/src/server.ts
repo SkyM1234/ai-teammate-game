@@ -127,8 +127,9 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
       const url = new URL(req.url ?? '/', `http://${host}`);
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
         const files: Record<string, [string, string]> = { '/': ['index.html', 'text/html'], '/main.js': ['main.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
+        for (const track of ['bgm-exploration', 'rescue-success', 'mission-failure']) files[`/audio/${track}.wav`] = [`audio/${track}.wav`, 'audio/wav'];
         const file = files[url.pathname]; if (!file) throw new HttpError(404, '文件不存在');
-        const data = await readFile(join(root, 'dist', file[0])); res.writeHead(200, { 'Content-Type': `${file[1]}; charset=utf-8`, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' }); res.end(data); return;
+        const data = await readFile(join(root, 'dist', file[0])); res.writeHead(200, { 'Content-Type': file[1].startsWith('audio/') ? file[1] : `${file[1]}; charset=utf-8`, 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' }); res.end(data); return;
       }
       if (req.method === 'GET' && url.pathname === '/api/latest') {
         let session = latestId ? sessions.get(latestId) : undefined;
