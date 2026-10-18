@@ -229,8 +229,6 @@ function render() {
   const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${taskStatus}`;
   const taskText = document.createElement('p'); taskText.textContent = task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
   if (task?.question) { const question = document.createElement('p'); question.className = 'question'; question.textContent = task.question; $('task').append(question); }
-  $('continue').hidden = !task;
-  $<HTMLButtonElement>('continue').disabled = !!frames || terminal || view.running || !task || task.status === 'completed';
   $<HTMLButtonElement>('stop').disabled = !!frames || terminal || !view.running;
   $<HTMLButtonElement>('send').disabled = !!frames || terminal || sending;
   $('demo-rescue-controls').hidden = view.agentMode !== 'demo' || !view.demoRescueAvailable;
@@ -558,7 +556,7 @@ document.addEventListener('keydown', event => {
   if (!$('marker-form').hidden) { setMarkerEditor(false); $('toggle-marker').focus(); }
   else $('clear-selection').click();
 });
-$('stop').onclick = () => void stopAndReturnToComms(); $('continue').onclick = () => void post('continue');
+$('stop').onclick = () => void stopAndReturnToComms();
 $('save').onclick = async () => { if (await post('save')) toast('当前进度已保存。'); };
 let creatingGame = false;
 async function chooseMap() {

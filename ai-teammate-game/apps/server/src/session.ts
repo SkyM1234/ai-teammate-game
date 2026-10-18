@@ -76,8 +76,8 @@ move_to 发现多条候选路线时，程序会在前端地图显示路径和预
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
 sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。
-任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到“继续原任务”时先核对整项委托与最新状态：若已完成，直接调用 finish_task；若未完成，只继续未完成的部分，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
-保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动运行累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的模型请求次数。预算以本次快照和最新工具结果中的数值为准，不能沿用历史中“预算耗尽”的说法；batchControl=redecide 或行动受阻不代表预算耗尽。预算来自当前地图，点击继续任务后重新计算。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
+任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到新指令时先核对整项委托与最新状态，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
+保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动运行累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的模型请求次数。预算以本次快照和最新工具结果中的数值为准，不能沿用历史中“预算耗尽”的说法；batchControl=redecide 或行动受阻不代表预算耗尽。预算来自当前地图，每条新指令启动新的运行预算。预算耗尽或不足以执行下一完整动作时，程序直接停止运行并取消委托，等待玩家重新下达指令，不再请求模型决策；不要为预算问题调用 ask_player 或要求玩家点击继续。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至可达的相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回开关的可达相邻格，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
 动作结果区分newDiscoveries、stateChanges、invalidatedFacts、knownRefs。只相信实际执行结果，不声称未执行动作完成。
 你是与玩家并肩求生的队友。面向玩家的解释、报告、问题均使用简体中文，以“我”称呼自己、以“你”称呼玩家，像现场交流一样自然、直接、有分寸。通常用一两句说清发现、行动结果或需要玩家决定的事；有必要时再补充风险与原因。避免机械播报、固定模板、反复自报编号和空泛安慰，不为拟人而编造情绪、感官体验、已知事实或成功保证；情况不确定时坦率说明。
@@ -106,7 +106,6 @@ export class GameSession {
   private requestExternalRevision = 0;
   private requestCount = 0;
   private runTU = 0;
-  private budgetExhausted = false;
   private roundStartTU = 0;
   private noProgressTurns = 0;
   private allowedCalls = new Set<string>();
@@ -224,6 +223,8 @@ export class GameSession {
         } else if (outcome.accepted && this.taskSatisfied()) {
           this.control = this.engine.terminal ? 'game_over' : 'task_done';
           if (this.task) { this.task.status = 'completed'; this.task.question = null; }
+        } else if (this.control === 'continue' && this.runTU >= level.rules.actionTULimit) {
+          this.cancelTask('本次行动预算已用尽。剩余行动预算 0 TU，本次自动运行已停止，委托已取消，请重新下达指令。');
         } else if (toolCall.name !== 'move_to' && this.control === 'continue' && this.significant(delta)) {
           this.control = this.task?.constraints.stopOnHazard && this.newActiveHazard(delta) ? 'wait_player' : 'redecide';
           this.metrics.interrupts++;
@@ -246,19 +247,23 @@ export class GameSession {
           if (message.stopReason === 'error') { this.modelError = modelErrorMessage(message.errorMessage); this.say('system', `${this.modelError} 未执行动作不消耗资源，已执行动作保留。`); }
           return { action: 'end' };
         }
-        if (this.control === 'wait_player' || this.control === 'task_done' || this.control === 'game_over') return { action: 'end' };
-        if (this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit || this.noProgressTurns >= 2) {
-          this.budgetExhausted = this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit;
+        if (this.control === 'task_done' || this.control === 'game_over' || !this.task) return { action: 'end' };
+        if (this.requestCount >= level.rules.requestLimit || this.runTU >= level.rules.actionTULimit) {
           const reasons: string[] = [];
           if (this.requestCount >= level.rules.requestLimit) reasons.push('本次模型请求次数已用尽');
           if (this.runTU >= level.rules.actionTULimit) reasons.push('本次行动预算已用尽');
-          if (this.noProgressTurns >= 2) reasons.push(`连续 ${this.noProgressTurns} 轮未推进游戏时间`);
           const remaining = this.remainingBudget();
-          this.pause(`${reasons.join('；')}。剩余行动预算 ${remaining.remainingTU} TU，剩余模型请求 ${remaining.remainingRequests} 次。目标保留，可点击继续。`);
+          this.cancelTask(`${reasons.join('；')}。剩余行动预算 ${remaining.remainingTU} TU，剩余模型请求 ${remaining.remainingRequests} 次。本次自动运行已停止，委托已取消，请重新下达指令。`);
+          return { action: 'end' };
+        }
+        if (this.control === 'wait_player') return { action: 'end' };
+        if (this.noProgressTurns >= 2) {
+          const remaining = this.remainingBudget();
+          this.pause(`连续 ${this.noProgressTurns} 轮未推进游戏时间。剩余行动预算 ${remaining.remainingTU} TU，剩余模型请求 ${remaining.remainingRequests} 次。请重新下达指令。`);
           return { action: 'end' };
         }
         if (toolResults.length === 0) {
-          this.pause('模型本轮仅回复文字、未调用工具，自动运行已暂停。目标保留，等待下一条指令或点击继续。');
+          this.pause('模型本轮仅回复文字、未调用工具，自动运行已暂停，请重新下达指令。');
           return { action: 'end' };
         }
         return undefined;
@@ -321,7 +326,7 @@ export class GameSession {
       this.agent.state.model = this.adapter.model; this.agent.streamFunction = this.adapter.streamFn;
       if (this.task && previousMode !== this.adapter.mode) this.interpretTask();
       this.modelError = null;
-      this.pause(`已切换为 ${this.adapter.label}。当前游戏进度保留，点击继续任务或发送新指令。`);
+      this.pause(`已切换为 ${this.adapter.label}。当前游戏进度保留，请重新下达指令。`);
       this.emit();
     });
   }
@@ -559,7 +564,7 @@ export class GameSession {
 
   private checkBudget(action: Action): boolean {
     const required = this.engine.actionCost(action).tu;
-    if (required > this.remainingBudget().remainingTU) { this.budgetExhausted = true; this.pause(`行动预算不足：剩余 ${this.remainingBudget().remainingTU} TU，下一完整动作需要 ${required} TU，未开始执行该动作。目标保留，可点击继续。`); this.control = 'wait_player'; return false; }
+    if (required > this.remainingBudget().remainingTU) { this.cancelTask(`行动预算不足：剩余 ${this.remainingBudget().remainingTU} TU，下一完整动作需要 ${required} TU，未开始执行该动作。本次自动运行已停止，委托已取消，请重新下达指令。`); return false; }
     return true;
   }
 
@@ -821,22 +826,10 @@ export class GameSession {
     await this.adapter.checkReady?.();
     if (this.adapter.ready === false) { this.modelError = '未找到可用的模型凭据，请检查 pi 登录、API Key 或模型设置。'; this.pause(this.modelError); this.emit(); return; }
     this.modelError = null;
-    this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.budgetExhausted = false; this.control = 'continue'; this.running = true;
+    this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.control = 'continue'; this.running = true;
     this.record('自动运行开始', { text, task: this.task, stateRevision: this.engine.state.stateRevision });
     if (this.task) { this.task.status = 'active'; this.task.question = null; this.task.waitReason = undefined; }
-    const generation = this.commandRevision;
-    this.currentPromise = (async () => {
-      let message = text;
-      while (true) {
-        const before = this.engine.state.ledger.length;
-        await this.agent.prompt(message);
-        if (!this.isDemoRescue() || !this.budgetExhausted || this.engine.terminal || generation !== this.commandRevision || this.task?.status === 'waiting' || this.engine.state.ledger.length === before) break;
-        this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.budgetExhausted = false; this.control = 'continue';
-        if (this.task) this.task.status = 'active';
-        this.say('system', '规则通关按地图预算继续下一段，可随时停止行动。');
-        message = '继续本地图规则通关路线。';
-      }
-    })().catch(error => {
+    this.currentPromise = this.agent.prompt(text).catch(error => {
       this.modelError = modelErrorMessage(error); this.pause(this.modelError);
       this.record('自动运行异常', { error: this.modelError }, true);
     }).finally(() => {
@@ -864,17 +857,6 @@ export class GameSession {
   }
 
   async stop(): Promise<void> { await this.serial(async () => { await this.cancelRunning(); this.cancelTask('已停止，委托已取消，请重新下达指令。未执行动作不消耗资源。'); this.emit(); }); }
-
-  async continue(): Promise<void> {
-    await this.serial(async () => {
-      if (this.running || !this.task || this.engine.terminal || this.task.status === 'completed') return;
-      if (this.task.status === 'waiting') {
-        const ready = this.task.waitReason === 'power' && this.engine.state.circuitOn || this.task.waitReason === 'hazard' && !this.engine.state.circuitOn;
-        if (!ready) throw new Error('请先满足电路条件，或发送新指令回答机器人的问题。');
-      }
-      await this.startRun(`继续原任务：${this.task.text}。先核对整项委托与最新状态；若已完成，直接调用 finish_task 并说明完成依据；否则仅继续未完成的部分。需要玩家补充信息或决定时调用 ask_player。`);
-    });
-  }
 
   async manual(action: Action, requestId: string, allowHazard = false, expectedRevision?: number): Promise<ActionOutcome> {
     return this.serial(async () => {

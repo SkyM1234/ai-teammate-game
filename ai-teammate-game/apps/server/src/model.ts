@@ -96,7 +96,7 @@ export function modelErrorMessage(error: unknown): string {
   if (/EACCES|EPERM/.test(text)) return '模型网络访问被运行环境拒绝，请在允许联网的终端中启动服务。';
   if (/401|403|auth|api.?key|credential/i.test(text)) return '模型鉴权失败，请检查 API Key 和服务商权限。';
   if (/429|rate.?limit|quota|余额/i.test(text)) return '模型额度不足或请求过于频繁，请稍后重试。';
-  if (/timeout|timed.?out|abort/i.test(text)) return '模型请求超时或被取消，可以继续任务重试。';
+  if (/timeout|timed.?out|abort/i.test(text)) return '模型请求超时或被取消，请重新下达指令重试。';
   if (/fetch|network|connect|ENOTFOUND|ECONN/i.test(text)) return '无法连接模型服务，请检查接口地址与网络。';
   return '模型请求失败，请检查模型配置后重试。';
 }

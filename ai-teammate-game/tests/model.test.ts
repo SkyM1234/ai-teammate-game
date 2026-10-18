@@ -145,7 +145,7 @@ test('上游鉴权错误和超时暂停任务，不泄露上游错误内容或�
     const log = await readFile(join(directory, 'models', logs[0]), 'utf8');
     assert.ok(log.includes('模型响应')); assert.ok(log.includes('自动运行结束')); assert.ok(!log.includes(secret));
     if (failure === 'auth') {
-      await session.continue(); await session.settled();
+      await session.command('检查附近'); await session.settled();
       const files = await readdir(join(directory, 'models'));
       assert.equal(files.filter(name => name.endsWith('.md')).length, 2);
       for (const name of files) assert.ok(!(await readFile(join(directory, 'models', name), 'utf8')).includes(secret));
@@ -153,7 +153,7 @@ test('上游鉴权错误和超时暂停任务，不泄露上游错误内容或�
   }
 });
 
-test('执行一批动作后的下一次请求失败，仅保留已提交动作，恢复继续时不重放旧批次', async t => {
+test('执行一批动作后的下一次请求失败，仅保留已提交动作，重新下令时不重放旧批次', async t => {
   const { config, requests } = await endpoint(t, (res, index) => {
     if (index === 0) completion(res, [{ name: 'move_to', arguments: { target: { x: 3, y: 9 } } }]);
     else if (index === 1) { res.writeHead(500, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'server failure' } })); }
@@ -164,7 +164,7 @@ test('执行一批动作后的下一次请求失败，仅保留已提交动作�
   assert.equal(session.task?.status, 'paused'); assert.equal(session.engine.state.elapsedTU, 1);
   assert.equal(session.engine.state.human.oxygen, 118); assert.equal(session.engine.state.ledger.length, 1);
   assert.ok(session.modelError); assert.equal(requests.length, 2);
-  await session.continue(); await session.settled();
+  await session.command('检查附近通道'); await session.settled();
   assert.equal(session.task?.status, 'completed'); assert.equal(session.modelError, null);
   assert.equal(session.engine.state.elapsedTU, 1); assert.equal(session.engine.state.ledger.length, 1);
   assert.equal(requests.length, 3);
@@ -192,7 +192,7 @@ test('切换模型取消正在等待的网络请求，保留进度和委托；�
   const save = session.save(); assert.ok(!JSON.stringify(save).includes(secret));
   const restored = new GameSession(level, { id: session.id, delayMs: 0 }); await restored.restore(save);
   assert.equal(restored.adapter.mode, 'live'); assert.equal(restored.view().modelReady, false);
-  await restored.continue(); await restored.settled(); assert.equal(restored.running, false); assert.match(restored.modelError!, /API Key/);
+  await restored.command('检查附近通道'); await restored.settled(); assert.equal(restored.running, false); assert.match(restored.modelError!, /API Key/);
 });
 
 test('配置 API、SSE 和落盘存档只包含非敏感模型设置', async t => {

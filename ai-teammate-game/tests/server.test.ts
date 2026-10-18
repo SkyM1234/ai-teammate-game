@@ -324,12 +324,12 @@ test('HTTP 选路同步候选路径、校验与去重，选带电路线后拒绝
   const latest = (await call(path)).data;
   assert.equal(latest.running, false); assert.equal(latest.task, null); assert.equal(latest.phase, 'awaiting_command'); assert.equal(latest.elapsedTU, 0);
   assert.equal(latest.metrics.requests, 1); assert.equal(latest.pendingRouteSelection, null); assert.equal(latest.pendingAuthorization, null);
-  assert.equal((await call(`${path}/continue`, { requestId: crypto.randomUUID() })).status, 200);
+  assert.equal((await call(`${path}/continue`, { requestId: crypto.randomUUID(), expectedRevision: latest.stateRevision })).status, 404);
   assert.equal(session.metrics.requests, 1); assert.equal(session.task, null);
   await call(`${path}/save`, { requestId: crypto.randomUUID() });
   const loaded = await call(`${path}/load`, {});
   assert.equal(loaded.data.task, null);
-  assert.equal((await call(`${path}/continue`, { requestId: crypto.randomUUID() })).status, 200);
+  assert.equal((await call(`${path}/continue`, { requestId: crypto.randomUUID(), expectedRevision: loaded.data.stateRevision })).status, 404);
   assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.task, null);
 });
 

@@ -177,13 +177,12 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
       let promise = requests.get(key);
       if (!promise) {
         promise = (async () => {
-          if (!['stop', 'continue', 'save', 'model', 'authorize', 'select-route'].includes(operation ?? '') && input.expectedRevision !== session.engine.state.stateRevision) throw new HttpError(409, '地图状态已更新，请根据最新信息重试');
+          if (!['stop', 'save', 'model', 'authorize', 'select-route'].includes(operation ?? '') && input.expectedRevision !== session.engine.state.stateRevision) throw new HttpError(409, '地图状态已更新，请根据最新信息重试');
           if (operation === 'command') {
             if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 2000) throw new HttpError(400, '指令长度应为 1–2000 字符');
             await session.command(input.text.trim(), input.selected ? position(input.selected, session.engine.level) : undefined, input.expectedRevision as number);
           } else if (operation === 'action') await session.manual(actionFrom(input.action, session.engine.level), input.requestId as string, input.allowHazard === true, input.expectedRevision as number);
           else if (operation === 'stop') await session.stop();
-          else if (operation === 'continue') await session.continue();
           else if (operation === 'model') await modelPreferences.save(input.config, input.apiKey, (config, apiKey) => session.configureModel(config, apiKey));
           else if (operation === 'authorize') {
             if (typeof input.authorizationId !== 'string' || !uuidPattern.test(input.authorizationId) || typeof input.approve !== 'boolean') throw new HttpError(400, '授权参数不合法');

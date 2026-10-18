@@ -196,7 +196,6 @@ test('移动前向玩家比较22格避险与2格带电路线，等待不消耗�
   assert.ok(!session.messages.some(message => message.text === '状态报告'));
   await session.stop(); await session.settled();
   assert.equal(session.pendingRouteSelection, null); assert.equal(session.task, null);
-  await session.continue(); await session.settled();
   assert.equal(session.metrics.requests, 1); assert.equal(session.engine.state.elapsedTU, 0);
   await assert.rejects(session.selectRoute(pending.id, 'safe'), /失效/);
 });
@@ -222,8 +221,6 @@ test('人工选择后才请求危险授权，批准沿所选路线走2格，拒�
       assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.task, null); assert.equal(session.running, false);
       assert.ok(!session.messages.some(message => message.text === '状态报告'));
       assert.ok(session.messages.some(message => message.text.includes('拒绝经过带电线路')));
-      await session.continue(); await session.settled();
-      assert.equal(session.metrics.requests, 1); assert.equal(session.engine.state.elapsedTU, 0);
     }
   }
 });
@@ -279,7 +276,6 @@ test('危险授权时停止运行后，再次指挥同一位置仍会显示相�
   await session.stop(); await session.settled();
   assert.equal(session.pendingAuthorization, null); assert.equal(session.running, false); assert.equal(session.task, null);
   assert.equal(session.engine.state.elapsedTU, 0); assert.ok(!session.messages.some(message => message.text === '状态报告'));
-  await session.continue(); await session.settled();
   assert.equal(session.metrics.requests, 1); assert.equal(session.engine.state.elapsedTU, 0);
   await session.command('前往 (9,3)'); const secondSelection = await routeSelection(session);
   assert.notEqual(secondSelection.id, firstSelection.id); assert.deepEqual(secondSelection.options, firstSelection.options);
@@ -381,11 +377,9 @@ test('普通移动只在新障碍、关闭门或带电危险影响剩余路线�
     assert.equal(session.messages.some(message => message.text === '状态报告'), !blocked);
     if (blocked) {
       const stopped = session.engine.snapshot();
-      await session.continue(); await session.settled();
-      assert.equal(session.metrics.requests, 1); assert.deepEqual(session.engine.snapshot(), stopped);
       const restored = new GameSession(custom, { id: session.id, delayMs: 0 }); await restored.restore(session.save());
       assert.equal(restored.task, null);
-      await restored.continue(); await restored.settled();
+      await restored.settled();
       assert.equal(restored.metrics.requests, 1); assert.deepEqual(restored.engine.state.ledger, stopped.ledger);
     }
   }
@@ -440,16 +434,13 @@ test('忽略路旁危险后，仍在发现剩余路径上的障碍时停止', as
   assert.equal(session.pendingAuthorization, null); assert.ok(!session.messages.some(message => message.text === '状态报告'));
 });
 
-test('普通移动遇危险后取消委托，继续无效，重新委托可完成后续移动', async () => {
+test('普通移动遇危险后取消委托，重新委托可完成后续移动', async () => {
   const custom = structuredClone(level);
   custom.entities = [{ id: 'hidden-hazard', type: 'hazard', name: '未知线路', position: { x: 4, y: 9 }, reflection: 2 }];
   const { session } = scripted([[move(5, 9), report], [move(3, 8), finish]], 0, custom);
   session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
   await session.command('前往 (5,9)'); await session.settled();
   assert.equal(session.metrics.requests, 1); assert.equal(session.task, null);
-  const stopped = session.engine.snapshot();
-  await session.continue(); await session.settled();
-  assert.equal(session.metrics.requests, 1); assert.deepEqual(session.engine.snapshot(), stopped);
   await session.command('前往 (3,8)'); await session.settled();
   assert.equal(session.metrics.requests, 2); assert.equal(session.view().task?.status, 'completed');
   assert.deepEqual(session.engine.state.robot.position, { x: 3, y: 8 });
@@ -457,7 +448,7 @@ test('普通移动遇危险后取消委托，继续无效，重新委托可完�
   assert.equal(moveResults(session)[1].code, 'OK');
 });
 
-test('连续无进展、请求耗尽和行动预算耗尽分别说明真实暂停原因', async () => {
+test('无进展暂停，请求或行动预算耗尽则取消委托并说明原因', async () => {
   const cases = [
     { requestLimit: 12, budget: 16, rounds: [[report], [report]], reason: /连续 2 轮.*未推进.*剩余.*16 TU/ },
     { requestLimit: 1, budget: 16, rounds: [[report]], reason: /模型请求次数已用尽.*剩余.*16 TU/ },
@@ -468,7 +459,11 @@ test('连续无进展、请求耗尽和行动预算耗尽分别说明真实暂�
     const { session } = scripted(rounds, 0, custom);
     await session.command('检查移动'); await session.settled();
     const message = session.messages.filter(message => message.role === 'system').at(-1);
-    assert.match(message?.text ?? '', reason); assert.equal(session.task?.status, 'paused');
+    assert.match(message?.text ?? '', reason);
+    if (requestLimit === 1 || budget === 1) {
+      assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
+      assert.match(message!.text, /委托已取消.*重新下达指令/);
+    } else assert.equal(session.task?.status, 'paused');
   }
 });
 
@@ -483,7 +478,7 @@ test('一个模型响应中的多个安全工具串行执行，后续结果区�
   assert.ok(first.newDiscoveries.some((e: {id: string}) => e.id === 's-01'));
   assert.ok(second.knownRefs.includes('s-01'));
   assert.ok(!second.newDiscoveries.some((e: {id: string}) => e.id === 's-01'));
-  await assert.rejects(session.continue(), /新指令/);
+  assert.equal(session.task?.waitReason, 'decision');
 });
 
 test('移动途中发现相关物资，取消批次余下工具，再请求决策', async () => {
@@ -511,13 +506,12 @@ test('设备缺电不会远程通电或要求玩家开关，失败不扣资源�
   assert.equal(session.pendingAuthorization, null);
   assert.equal(session.engine.state.elapsedTU, 0);
   assert.equal(session.metrics.skippedTools, 1);
-  await assert.rejects(session.continue());
   assert.equal(session.metrics.requests, 2);
   assert.ok(contexts[1].includes('POWER_REQUIRED'));
   assert.ok(session.messages.some(m => m.text === '状态报告'));
 });
 
-test('停止移动取消委托，只保留已提交格子且继续无效', async () => {
+test('停止移动取消委托，只保留已提交格子', async () => {
   const { session } = scripted([[move(5, 9), report]], 30);
   await session.command('探索');
   await new Promise<void>(resolve => {
@@ -529,9 +523,6 @@ test('停止移动取消委托，只保留已提交格子且继续无效', async
   assert.equal(session.engine.state.elapsedTU, 1);
   assert.deepEqual(session.engine.state.robot.position, { x: 3, y: 9 });
   assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
-  const stopped = session.engine.snapshot(); const requests = session.metrics.requests;
-  await session.continue(); await session.settled();
-  assert.deepEqual(session.engine.snapshot(), stopped); assert.equal(session.metrics.requests, requests);
   assert.ok(!session.messages.some(m => m.text === '状态报告'));
   assert.equal(session.messages.find(message => message.tool?.name === 'move_to')?.tool?.status, 'partial');
   assert.equal(session.messages.find(message => message.tool?.name === 'report')?.tool?.status, 'cancelled');
@@ -664,15 +655,61 @@ test('规则演示根据房间范围选择落点', async () => {
   }
 });
 
-test('每轮行动预算在逐格边界停止，继续后不重复旧动作', async () => {
+test('行动预算在逐格边界取消委托，重新下令后不重复旧动作', async () => {
   const smallBudget = structuredClone(level); smallBudget.rules.actionTULimit = 2;
   const session = new GameSession(smallBudget, { delayMs: 0 });
   await session.command('前往 (5,9)'); await session.settled();
   assert.equal(session.engine.state.elapsedTU, 2);
   assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
-  assert.equal(session.task?.status, 'paused');
-  await session.continue(); await session.settled();
-  assert.equal(session.engine.state.elapsedTU, 3); assert.equal(session.task?.status, 'completed');
+  assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
+  const requests = session.metrics.requests;
+  assert.equal(session.running, false);
+  const restored = new GameSession(smallBudget, { id: session.id, delayMs: 0 }); await restored.restore(session.save());
+  await restored.settled();
+  assert.equal(restored.task, null); assert.equal(restored.metrics.requests, requests);
+  assert.deepEqual(restored.engine.state.ledger, session.engine.state.ledger);
+  await session.command('前往 (5,9)'); await session.settled();
+  assert.equal(session.engine.state.elapsedTU, 3); assert.equal(session.view().task?.status, 'completed');
+});
+
+test('真实模式行动预算用尽或不足时取消委托，跳过报告和询问且不再请求模型', async () => {
+  for (const targetX of [4, 5]) {
+    const custom = structuredClone(level); custom.entities = []; custom.rules.actionTULimit = 2;
+    const { session } = scripted([
+      [move(targetX, 9), report, { name: 'ask_player', arguments: { question: '请继续任务' } }, finish],
+      [{ name: 'ask_player', arguments: { question: '不应追加请求' } }],
+    ], 0, custom);
+    session.adapter.mode = 'live';
+    await session.command(`前往 (${targetX},9)`); await session.settled();
+    assert.equal(session.task, null); assert.equal(session.running, false);
+    assert.equal(session.engine.state.phase, 'awaiting_command');
+    assert.equal(session.metrics.requests, 1); assert.equal(session.metrics.skippedTools, 3);
+    assert.equal(session.engine.state.elapsedTU, 2);
+    assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
+    assert.equal(session.engine.state.robot.battery, custom.rules.battery - 2);
+    assert.equal(session.engine.state.human.oxygen, custom.rules.oxygen - 2 * custom.rules.oxygenRate);
+    assert.equal(session.pendingAuthorization, null); assert.equal(session.pendingRouteSelection, null);
+    assert.ok(!session.messages.some(message => message.text === '状态报告' || message.text === '请继续任务'));
+    assert.match(session.messages.filter(message => message.role === 'system').at(-1)!.text, /委托已取消.*重新下达指令/);
+    assert.equal(moveResults(session)[0].targetReached, targetX === 4);
+  }
+});
+
+test('最后一次模型请求提出询问也不能保留耗尽预算的委托，新指令获得新预算', async () => {
+  const custom = structuredClone(level); custom.rules.requestLimit = 1;
+  const { session, contexts } = scripted([
+    [{ name: 'ask_player', arguments: { question: '下一步怎么做？' } }],
+    [finish],
+  ], 0, custom);
+  session.adapter.mode = 'live';
+  await session.command('检查附近'); await session.settled();
+  assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
+  assert.equal(session.metrics.requests, 1); assert.equal(session.engine.state.elapsedTU, 0);
+  await session.command('结束检查'); await session.settled();
+  assert.equal(session.metrics.requests, 2); assert.equal(session.view().task?.status, 'completed');
+  const state = JSON.parse(JSON.parse(contexts[1]).messages[0].content.split('当前机器人知识与任务（仅可见事实）：\n')[1]);
+  assert.equal(state.remainingTU, custom.rules.actionTULimit);
+  assert.equal(state.remainingRequests, 0); assert.equal(state.task.text, '结束检查');
 });
 
 test('移动、扫描、交互和开关工具按配置的完整 TU 检查预算', async () => {
@@ -690,6 +727,7 @@ test('移动、扫描、交互和开关工具按配置的完整 TU 检查预算'
     assert.equal(session.engine.state.elapsedTU, 0, cost);
     assert.equal(session.engine.state.robot.battery, custom.rules.battery, cost);
     assert.equal(session.engine.state.ledger.length, 0, cost);
+    assert.equal(session.task, null, cost); assert.equal(session.engine.state.phase, 'awaiting_command', cost);
     assert.ok(session.messages.some(m => m.text.includes('预算不足')), cost);
   }
 });
@@ -700,7 +738,8 @@ test('修改单步 TU 后预算允许的步数及累计资源一致', async () =
   await session.command('前往 (5,9)'); await session.settled();
   assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
   assert.equal(session.engine.state.elapsedTU, 4); assert.equal(session.engine.state.robot.battery, custom.rules.battery - 6); assert.equal(session.engine.state.human.oxygen, 112);
-  await session.continue(); await session.settled();
+  assert.equal(session.task, null); assert.equal(session.running, false);
+  await session.command('前往 (5,9)'); await session.settled();
   assert.deepEqual(session.engine.state.robot.position, { x: 5, y: 9 }); assert.equal(session.engine.state.elapsedTU, 6);
 });
 
@@ -727,8 +766,12 @@ test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停�
     const outcome = JSON.parse(result.content[0].text);
     assert.equal(outcome.executedSteps, steps);
     assert.equal(outcome.targetReached, budget >= 18);
-    assert.equal(session.task?.status, budget >= 18 ? 'completed' : 'paused');
-    if (budget >= 18) assert.deepEqual(session.engine.state.robot.position, { x: 10, y: 1 });
+    if (budget >= 18) {
+      assert.equal(session.task?.status, 'completed');
+      assert.deepEqual(session.engine.state.robot.position, { x: 10, y: 1 });
+    } else {
+      assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
+    }
   }
 });
 

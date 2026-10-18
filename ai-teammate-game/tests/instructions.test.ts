@@ -127,11 +127,13 @@ test('真实模式修补后不提前结束复合指令，模型可继续取电�
   assert.equal(contextTask(contexts[1]).status, 'active');
 });
 
-test('继续真实任务沿用原文和选中位置，不重新产生关键词目标', async () => {
+test('重新委托真实任务使用新指令和选中位置，不产生关键词目标', async () => {
   const { session, contexts } = liveSession([[move(3, 9)], [], [move(4, 9), finish]]);
   await session.command('前往这里，返回时不要放下物资', { x: 4, y: 9 }); await session.settled();
   assert.equal(session.task?.status, 'paused');
-  await session.continue(); await session.settled();
+  const previousId = session.task.id;
+  await session.command('前往这里，返回时不要放下物资', { x: 4, y: 9 }); await session.settled();
+  assert.notEqual(session.task?.id, previousId);
   assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
   for (const context of contexts) {
     const task = contextTask(context);

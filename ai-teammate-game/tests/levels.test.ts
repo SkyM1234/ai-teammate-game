@@ -197,11 +197,11 @@ test('不同地图分别执行 TU 预算，模型收到对应限制和剩余预�
     await session.command('前往 (10,1)'); await session.settled();
     assert.equal(session.engine.state.elapsedTU, budget);
     assert.deepEqual(session.engine.state.robot.position, { x: 2 + budget, y: 1 });
-    assert.equal(session.task?.status, 'paused');
+    assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
   }
 });
 
-test('地图分别限制模型请求和每轮工具数，继续任务重置运行预算', async () => {
+test('地图分别限制模型请求和每轮工具数，耗尽取消委托，新指令重置预算', async () => {
   for (const [requests, tools] of [[1, 2], [3, 8]]) {
     const level = map(`requests-${requests}-tools-${tools}`, 16, 6); level.entities = [];
     level.rules.requestLimit = requests; level.rules.toolLimit = tools; level.rules.actionTULimit = 24;
@@ -224,12 +224,12 @@ test('地图分别限制模型请求和每轮工具数，继续任务重置运�
     assert.equal(session.metrics.requests, requests);
     assert.equal(session.metrics.executedTools, requests * tools);
     assert.equal(session.metrics.skippedTools, requests);
-    assert.equal(session.task?.status, 'paused');
+    assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
     assert.ok(!session.messages.some(message => message.text === '超出预算报告'));
     assert.deepEqual(contexts.map(context => context.remainingRequests), Array.from({ length: requests }, (_, i) => requests - i - 1));
     assert.deepEqual(contexts.map(context => context.remainingTU), Array.from({ length: requests }, (_, i) => 24 - i));
     for (const context of contexts) assert.equal(context.rules.toolLimit, tools);
-    await session.continue(); await session.settled();
+    await session.command('持续向右探索'); await session.settled();
     assert.equal(session.metrics.requests, requests * 2);
     assert.equal(contexts[requests].remainingRequests, requests - 1);
     assert.equal(contexts[requests].remainingTU, 24);
@@ -258,14 +258,26 @@ test('所有正式地图的主路线、备用路线按当前配置完成救援�
   assert.throws(() => verifyLevelRoute(template, 'missing'), /没有验证路线/);
 });
 
-test('规则通关按各地图预算自动分段完成救援，无需外部模型或逐步授权', async () => {
+test('规则通关达到地图预算即取消委托，仅新指令可启动后续步骤', async () => {
   const levels = await loadLevels(fileURLToPath(new URL('../content/levels/', import.meta.url)));
   const limitedRequests = structuredClone(template); limitedRequests.rules.requestLimit = 1;
   limitedRequests.rules.actionTULimit = 8;
   for (const level of [...levels, limitedRequests]) {
     const session = new GameSession(level, { delayMs: 0 });
     assert.equal(session.view().demoRescueAvailable, true);
-    await session.command('规则通关'); await session.settled();
+    let runs = 0;
+    while (!session.engine.terminal) {
+      const before = session.engine.state.elapsedTU;
+      await session.command('规则通关'); await session.settled();
+      runs++;
+      assert.ok(session.engine.state.elapsedTU > before, level.id);
+      assert.ok(session.engine.state.elapsedTU - before <= level.rules.actionTULimit);
+      assert.equal(session.pendingAuthorization, null);
+      if (!session.engine.terminal) {
+        assert.equal(session.task, null); assert.equal(session.running, false);
+        assert.equal(session.engine.state.phase, 'awaiting_command');
+      }
+    }
     assert.equal(session.engine.state.phase, 'success', level.id);
     assert.equal(session.task?.status, 'completed');
     assert.equal(session.pendingAuthorization, null);
@@ -273,7 +285,7 @@ test('规则通关按各地图预算自动分段完成救援，无需外部模�
     assert.deepEqual(session.engine.state.ledger.map(entry => entry.action), level.verification!.actions);
     if (level === limitedRequests) {
       assert.ok(session.engine.state.elapsedTU > level.rules.actionTULimit);
-      assert.ok(session.messages.some(message => message.text.includes('继续下一段')));
+      assert.ok(runs > 1);
     }
   }
 });
@@ -290,9 +302,9 @@ test('规则通关停止后取消委托，保存恢复须重新委托，偏离�
   const restored = new GameSession(source, { id: session.id, delayMs: 0 }); await restored.restore(session.save());
   assert.equal(restored.task, null);
   const stopped = restored.engine.snapshot(); const requests = restored.metrics.requests;
-  await restored.continue(); await restored.settled();
+  await restored.settled();
   assert.deepEqual(restored.engine.snapshot(), stopped); assert.equal(restored.metrics.requests, requests);
-  await restored.command('规则通关'); await restored.settled();
+  while (!restored.engine.terminal) { await restored.command('规则通关'); await restored.settled(); }
   assert.equal(restored.engine.state.phase, 'success');
   assert.deepEqual(restored.engine.state.ledger.map(entry => entry.action), source.verification!.actions);
   const deviated = new GameSession(source, { delayMs: 0 });
@@ -304,7 +316,7 @@ test('规则通关停止后取消委托，保存恢复须重新委托，偏离�
   assert.deepEqual(deviated.engine.state.ledger, before.ledger);
 });
 
-test('缺少路线或单个动作超过预算时规则通关不会无限续行，真实模型不读取预设步骤', async () => {
+test('缺少路线时询问玩家，预算不足时取消规则通关，真实模型不读取预设步骤', async () => {
   const noRoute = map('no-route', 7, 5);
   const missing = new GameSession(noRoute, { delayMs: 0 });
   await missing.command('规则通关'); await missing.settled();
@@ -314,7 +326,7 @@ test('缺少路线或单个动作超过预算时规则通关不会无限续行�
   const blocked = new GameSession(tooSmall, { delayMs: 0 });
   await blocked.command('规则通关'); await blocked.settled();
   assert.equal(blocked.engine.state.ledger.length, 1);
-  assert.equal(blocked.task?.status, 'paused');
+  assert.equal(blocked.task, null); assert.equal(blocked.engine.state.phase, 'awaiting_command');
   assert.ok(blocked.metrics.requests <= 3);
   const live = new GameSession(source, { delayMs: 0, adapter: {
     mode: 'live', label: '模拟真实模型', model: demoModel,
