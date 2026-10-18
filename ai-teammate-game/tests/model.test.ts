@@ -90,6 +90,24 @@ test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把�
   for (const name of files) assert.ok(!(await readFile(join(directory, 'models', name), 'utf8')).includes(secret));
 });
 
+test('预算收尾通过真实 pi HTTP 适配器仅声明报告和完成工具，并沿用指令与最后工具结果', async t => {
+  const { config, requests } = await endpoint(t, (res, index) => completion(res, index === 0
+    ? [{ name: 'move_to', arguments: { target: { x: 3, y: 9 } } }]
+    : [{ name: 'finish_task', arguments: { reason: '实际移动结果确认已到达。' } }]));
+  const custom = structuredClone(level); custom.entities = []; custom.rules.actionTULimit = 1; custom.rules.requestLimit = 1;
+  const session = new GameSession(custom, { adapter: await liveModel(config, secret), delayMs: 0 });
+  await session.command('前往 (3,9)'); await session.settled();
+  assert.equal(requests.length, 2); assert.equal(session.task?.status, 'completed'); assert.equal(session.modelError, null);
+  const body = requests[1].body;
+  assert.deepEqual((body.tools as { function: { name: string } }[]).map(tool => tool.function.name), ['report', 'finish_task']);
+  const messages = body.messages as { role: string; content: unknown }[];
+  assert.ok(messages.some(message => message.role === 'user' && JSON.stringify(message.content).includes('前往 (3,9)')));
+  assert.ok(messages.some(message => message.role === 'tool' && typeof message.content === 'string' && message.content.includes('"targetReached":true')));
+  assert.ok(JSON.stringify(messages[0].content).includes('唯一收尾请求'));
+  assert.equal(session.engine.state.elapsedTU, 1); assert.equal(session.engine.state.ledger.length, 1);
+  assert.equal(session.metrics.requests, 2); assert.equal(session.metrics.inputTokens, 40); assert.equal(session.metrics.outputTokens, 20);
+});
+
 test('DeepSeek 目录和兼容入口保留完整模型参数，pi-agent 正确发送 thinking 与推理工具历史', async t => {
   for (const modelId of ['deepseek-flash', 'deepseek-v4-pro']) {
     for (const provider of ['deepseek', 'compatible'] as const) {

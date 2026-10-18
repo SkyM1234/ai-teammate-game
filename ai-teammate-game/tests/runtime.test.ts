@@ -672,18 +672,18 @@ test('行动预算在逐格边界取消委托，重新下令后不重复旧动�
   assert.equal(session.engine.state.elapsedTU, 3); assert.equal(session.view().task?.status, 'completed');
 });
 
-test('真实模式行动预算用尽或不足时取消委托，跳过报告和询问且不再请求模型', async () => {
+test('真实模式行动预算用尽或不足时跳过原批次余下调用，额外收尾不能询问或恢复行动', async () => {
   for (const targetX of [4, 5]) {
     const custom = structuredClone(level); custom.entities = []; custom.rules.actionTULimit = 2;
     const { session } = scripted([
       [move(targetX, 9), report, { name: 'ask_player', arguments: { question: '请继续任务' } }, finish],
-      [{ name: 'ask_player', arguments: { question: '不应追加请求' } }],
+      [{ name: 'ask_player', arguments: { question: '不应恢复行动' } }],
     ], 0, custom);
     session.adapter.mode = 'live';
     await session.command(`前往 (${targetX},9)`); await session.settled();
     assert.equal(session.task, null); assert.equal(session.running, false);
     assert.equal(session.engine.state.phase, 'awaiting_command');
-    assert.equal(session.metrics.requests, 1); assert.equal(session.metrics.skippedTools, 3);
+    assert.equal(session.metrics.requests, 2); assert.equal(session.metrics.skippedTools, 3);
     assert.equal(session.engine.state.elapsedTU, 2);
     assert.deepEqual(session.engine.state.robot.position, { x: 4, y: 9 });
     assert.equal(session.engine.state.robot.battery, custom.rules.battery - 2);
