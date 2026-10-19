@@ -5,7 +5,7 @@ import { GameSession } from '../apps/server/src/session.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
 import type { ToolIntent } from '../apps/server/src/model.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
-import type { ActionCosts } from '../packages/game-core/src/types.ts';
+import type { ActionCost, Level } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 function scripted(rounds: ToolIntent[][], delayMs = 0, customLevel = level) {
@@ -35,7 +35,7 @@ test('请求、动作结果与状态查询共享完整遥测和预算，背包�
   assert.equal(knowledge.length, 2);
   assert.equal(knowledge[0].telemetry.human.carried, false);
   assert.deepEqual(knowledge[0].telemetry.robot.inventory, [
-    { id: 's-01', name: '维修材料', itemType: 'repair' }, { id: 's-03', name: '氧气补给', itemType: 'oxygen' },
+    { id: 's-01', name: '维修材料', itemType: 'repair', actionCosts: level.entities.find(e => e.id === 's-01')!.actionCosts }, { id: 's-03', name: '氧气补给', itemType: 'oxygen', actionCosts: level.entities.find(e => e.id === 's-03')!.actionCosts },
   ]);
   const results = session.agent.state.messages.filter(message => message.role === 'toolResult').map(message => {
     assert.ok(message.content[0].type === 'text');
@@ -45,7 +45,7 @@ test('请求、动作结果与状态查询共享完整遥测和预算，背包�
   assert.equal(used.telemetry.human.carried, true);
   assert.deepEqual(used.telemetry.human.position, { x: 2, y: 9 });
   assert.equal(used.telemetry.human.oxygenRate, level.rules.oxygenRate);
-  assert.deepEqual(used.telemetry.robot.inventory, [{ id: 's-01', name: '维修材料', itemType: 'repair' }]);
+  assert.deepEqual(used.telemetry.robot.inventory, [{ id: 's-01', name: '维修材料', itemType: 'repair', actionCosts: level.entities.find(e => e.id === 's-01')!.actionCosts }]);
   assert.deepEqual(used.telemetry, knowledge[1].telemetry);
   assert.deepEqual(results[3].data.telemetry, knowledge[1].telemetry);
   assert.equal(used.remainingTU, level.rules.actionTULimit - 4);
@@ -92,7 +92,7 @@ test('模型明确获知出口喷气规则，move_to 拒绝进入且不扣资源
   assert.ok(session.messages.some(message => message.tool?.name === 'move_to' && message.tool.status === 'failed' && /漏气/.test(message.text)));
   session.engine.state.entities.find(e => e.type === 'airlock')!.repaired = true;
   await session.command('前往出口'); await session.settled();
-  assert.deepEqual(session.engine.state.robot.position, level.exit);
+  assert.deepEqual(session.engine.state.robot.position, { x: level.exit.x, y: level.exit.y });
   assert.equal(session.engine.state.elapsedTU, 1);
 });
 
@@ -713,14 +713,14 @@ test('最后一次模型请求提出询问也不能保留耗尽预算的委托�
 });
 
 test('移动、扫描、交互和开关工具按配置的完整 TU 检查预算', async () => {
-  const cases: { cost: keyof ActionCosts; tool: ToolIntent; position: { x: number; y: number }; circuitOn?: boolean }[] = [
-    { cost: 'move', tool: move(3, 9), position: { x: 2, y: 9 } },
-    { cost: 'scan', tool: { name: 'scan', arguments: { targetId: 's-01' } }, position: { x: 3, y: 9 } },
-    { cost: 'clear', tool: { name: 'interact', arguments: { operation: 'clear', targetId: 'o-01' } }, position: { x: 6, y: 10 } },
-    { cost: 'circuit', tool: { name: 'set_circuit', arguments: { targetId: 'sw-01', on: false } }, position: { x: 6, y: 2 }, circuitOn: true },
+  const cases: { cost: string; configured: (map: Level) => ActionCost; tool: ToolIntent; position: { x: number; y: number }; circuitOn?: boolean }[] = [
+    { cost: 'move', configured: map => map.rules.actionCosts.move, tool: move(3, 9), position: { x: 2, y: 9 } },
+    { cost: 'scan', configured: map => map.rules.actionCosts.scan, tool: { name: 'scan', arguments: { targetId: 's-01' } }, position: { x: 3, y: 9 } },
+    { cost: 'clear', configured: map => map.entities.find(e => e.id === 'o-01')!.actionCosts!.clear!, tool: { name: 'interact', arguments: { operation: 'clear', targetId: 'o-01' } }, position: { x: 6, y: 10 } },
+    { cost: 'circuit', configured: map => map.entities.find(e => e.id === 'sw-01')!.actionCosts!.circuit_off!, tool: { name: 'set_circuit', arguments: { targetId: 'sw-01', on: false } }, position: { x: 6, y: 2 }, circuitOn: true },
   ];
-  for (const { cost, tool, position, circuitOn } of cases) {
-    const custom = structuredClone(level); custom.rules.actionCosts[cost].tu = 5; custom.rules.actionTULimit = 4;
+  for (const { cost, configured, tool, position, circuitOn } of cases) {
+    const custom = structuredClone(level); configured(custom).tu = 5; custom.rules.actionTULimit = 4;
     const { session } = scripted([[tool]], 0, custom);
     session.engine.state.robot.position = position; session.engine.state.circuitOn = circuitOn ?? false; session.engine.observe();
     await session.command('检查状态'); await session.settled();
@@ -748,7 +748,7 @@ test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停�
     const longRoute = structuredClone(level);
     longRoute.robotStart = { x: 1, y: 10 };
     longRoute.entities = [];
-    longRoute.exit = { x: 10, y: 10 };
+    longRoute.exit = { ...longRoute.exit, x: 10, y: 10 };
     longRoute.rules.actionTULimit = budget;
     const session = new GameSession(longRoute, { delayMs: 0, adapter: {
       mode: 'test', label: 'long route', model: demoModel,
@@ -883,14 +883,14 @@ test('维修工具前暂停，授权后继续同一响应的工具，不新增�
 });
 
 test('维修、放下和开关授权提示使用配置消耗，批准后按提示扣除', async t => {
-  const cases: { cost: keyof ActionCosts; tool: ToolIntent; setup: (session: GameSession) => void; consequence: RegExp }[] = [
-    { cost: 'repair_human', tool: repair, setup: s => { giveMaterial(s); const material = s.engine.state.entities.find(e => e.id === 's-02')!; material.taken = true; s.engine.state.robot.inventory.push(material.id); }, consequence: /2 份维修材料、3 TU、7 电量；预计消耗 6 氧气/ },
-    { cost: 'drop_item', tool: { name: 'interact', arguments: { operation: 'drop_item', itemId: 's-01' } }, setup: giveMaterial, consequence: /3 TU、7 电量和 6 氧气/ },
-    { cost: 'drop_human', tool: { name: 'interact', arguments: { operation: 'drop_human' } }, setup: s => { s.engine.state.human.carried = true; }, consequence: /3 TU、7 电量和 6 氧气/ },
-    { cost: 'circuit', tool: { name: 'set_circuit', arguments: { targetId: 'sw-01', on: true } }, setup: s => { s.engine.state.robot.position = { x: 6, y: 2 }; }, consequence: /3 TU、7 电量和 6 氧气/ },
+  const cases: { cost: string; configured: (map: Level) => ActionCost; tool: ToolIntent; setup: (session: GameSession) => void; consequence: RegExp }[] = [
+    { cost: 'repair_human', configured: map => map.human.actionCosts.repair, tool: repair, setup: s => { giveMaterial(s); const material = s.engine.state.entities.find(e => e.id === 's-02')!; material.taken = true; s.engine.state.robot.inventory.push(material.id); }, consequence: /2 份维修材料、3 TU、7 电量；预计消耗 6 氧气/ },
+    { cost: 'drop_item', configured: map => map.entities.find(e => e.id === 's-01')!.actionCosts!.drop_item!, tool: { name: 'interact', arguments: { operation: 'drop_item', itemId: 's-01' } }, setup: giveMaterial, consequence: /3 TU、7 电量和 6 氧气/ },
+    { cost: 'drop_human', configured: map => map.human.actionCosts.drop_human, tool: { name: 'interact', arguments: { operation: 'drop_human' } }, setup: s => { s.engine.state.human.carried = true; }, consequence: /3 TU、7 电量和 6 氧气/ },
+    { cost: 'circuit', configured: map => map.entities.find(e => e.id === 'sw-01')!.actionCosts!.circuit_on!, tool: { name: 'set_circuit', arguments: { targetId: 'sw-01', on: true } }, setup: s => { s.engine.state.robot.position = { x: 6, y: 2 }; }, consequence: /3 TU、7 电量和 6 氧气/ },
   ];
-  for (const { cost, tool, setup, consequence } of cases) {
-    const custom = structuredClone(level); Object.assign(custom.rules.actionCosts[cost], { tu: 3, battery: 7 }); custom.rules.actionCosts.repair_human.materials = 2;
+  for (const { cost, configured, tool, setup, consequence } of cases) {
+    const custom = structuredClone(level); Object.assign(configured(custom), { tu: 3, battery: 7 }); custom.human.actionCosts.repair.materials = 2;
     const { session } = scripted([[tool, finish]], 0, custom); t.after(() => session.stop());
     setup(session); session.engine.observe();
     await session.command('检查救援情况'); const pending = await authorization(session);

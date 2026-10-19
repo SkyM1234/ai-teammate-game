@@ -24,15 +24,55 @@
 | --- | --- |
 | `id`、`version`、`name` | 唯一标识、正整数版本、显示名称 |
 | `width`、`height`、`tiles` | 宽高可以不同，均至少为 3；行数等于 height，每行长度等于 width |
-| `humanStart`、`robotStart`、`exit` | 起点与出口，坐标从 0 开始，必须位于非墙格 |
+| `humanStart`、`robotStart`、`exit` | 起点与出口，坐标从 0 开始，必须位于非墙格；`exit.actionCosts.extract` 定义撤离费用 |
+| `human.actionCosts` | 人类的维修、抱起和放下费用 |
 | `rooms` | 任意名称及矩形范围；范围含端点，必须在地图内；可以为空数组 |
-| `entities` | 实体类型、唯一 ID、名称、坐标、反射强度、补给种类、容器关系与供电要求 |
-| `rules` | 完整的资源、感知、预算与动作消耗配置；可先沿用模板后调整 |
+| `entities` | 实体类型、唯一 ID、名称、坐标、反射强度、补给种类、容器关系、供电要求及各操作的 `actionCosts` |
+| `rules` | 资源、感知、预算与通用动作消耗；`rules.actionCosts` 只包含 `move`、`carry_move`、`scan` |
 | `verification`（制作期可选） | 本地图完整通关路线，同时供游戏内规则通关和开发验证使用 |
 
 `#` 是墙，`.` 是地面，`E` 是出口标记；实际出口位置使用 `exit`。`D`、`X` 是历史门位和障碍标记，实际门与障碍仍需在 `entities` 中定义。柜体、开关、气闸控制器会占据格子，交互时需要保留可达相邻格。使用当前胜利条件时，需要气闸控制器、可到达的撤离出口及符合维修消耗配置的材料。
 
 所有 `itemType: "repair"` 的补给统一命名为“维修材料”，不按供氧管、气闸或备用用途区分；它们可以用于任意维修目标。实体通过唯一 `id` 和坐标区分，`name` 可以相同。
+
+### 交互消耗
+
+每个可交互对象必须完整配置其支持的操作。`tu`、`battery` 以及维修的 `materials` 均为非负整数，允许为 `0`；漏填费用、配置不适用的操作或未知费用字段会在加载地图时明确报错。同类对象可以有不同费用，不会回退到关卡级交互默认值。
+
+| 对象 | `actionCosts` 中必填的操作 |
+| --- | --- |
+| 维修材料 | `collect`、`drop_item` |
+| 氧气、电池补给 | `collect`、`drop_item`、`use_item` |
+| 门、柜子 | `open` |
+| 开关 | `circuit_on`、`circuit_off`，分别定义开启和关闭电路费用 |
+| 障碍物 | `clear` |
+| 气闸控制器 | `repair`，额外包含 `materials` |
+| `human` | `repair`（包含 `materials`）、`pickup_human`、`drop_human` |
+| `exit` | `extract` |
+
+危险线路没有主动交互，不需要配置 `actionCosts`；通电时进入线路的额外扣电仍使用 `rules.leakCost`。
+
+例如，同一氧气补给可以分别定义拾取、放下和使用费用：
+
+```json
+{
+  "id": "oxygen-a",
+  "type": "supply",
+  "name": "氧气补给",
+  "position": { "x": 3, "y": 2 },
+  "itemType": "oxygen",
+  "reflection": 1,
+  "actionCosts": {
+    "collect": { "tu": 1, "battery": 1 },
+    "drop_item": { "tu": 1, "battery": 0 },
+    "use_item": { "tu": 2, "battery": 2 }
+  }
+}
+```
+
+维修费用属于被维修的人类或控制器，例如 `"repair": { "tu": 4, "battery": 4, "materials": 1 }`；维修材料的拾取费用只在拾取时支付，维修时按目标所需数量消耗材料，不再次支付拾取或使用费用。物资恢复量仍使用 `rules.batteryRefill` 和 `rules.oxygenRefill`。
+
+氧气消耗统一按动作 TU 乘当前耗氧率计算，修补供氧管本次仍使用修复前的耗氧率。预算检查、授权提示和实际结算读取同一份对象费用；AI 上下文提供已识别物体和背包物品的 `actionCosts`、`telemetry.human.actionCosts` 及 `historicalMap.exit.actionCosts`，不会提供未发现物体的配置。
 
 门实体可配置 `orientation`，表示门框在地图俯视坐标中的延伸方向，与镜头旋转无关：
 
@@ -44,7 +84,7 @@
 例如横向墙上的门：
 
 ```json
-{ "id": "d-01", "type": "door", "name": "手动门", "position": { "x": 3, "y": 7 }, "orientation": "horizontal", "reflection": 2 }
+{ "id": "d-01", "type": "door", "name": "手动门", "position": { "x": 3, "y": 7 }, "orientation": "horizontal", "reflection": 2, "actionCosts": { "open": { "tu": 1, "battery": 1 } } }
 ```
 
 未填写时保持原来的 `"vertical"` 显示；该字段仅适用于门，同时影响三维模型和平面地图，不改变开门、通行及动作消耗规则。
@@ -88,11 +128,13 @@ npm run verify:routes
 
 `verify:levels` 自动发现所有地图并执行全部已配置路线。未配置 `verification` 的地图只报告格式通过，并明确标注未验证救援可行性；配置了路线但执行失败或没有成功撤离时，命令失败并指出地图、路线及步骤。
 
-`verify:routes` 要求每张正式地图都有路线，通过后统一更新本目录的 [route-ledgers.json](route-ledgers.json)，包含地图版本、规则及逐动作资源账本。新增地图、修改布局或调资源后重新运行即可，不再维护专用坐标脚本。`scripts/routes.ts` 仅保留旧测试入口，实际也读取地图 JSON。
+`verify:routes` 要求每张正式地图都有路线，通过后统一更新本目录的 [route-ledgers.json](route-ledgers.json)，包含地图版本、通用规则、对象交互费用及逐动作资源账本。新增地图、修改布局或调资源后重新运行即可，不再维护专用坐标脚本。`scripts/routes.ts` 仅保留旧测试入口，实际也读取地图 JSON。
 
 ## 存档与地图更新
 
 新存档包含创建该局时的完整地图副本，恢复与回放使用该副本。修改尺寸、资源、实体或移除地图文件后，已有对局仍按原地图运行；新局使用服务器启动时读到的新配置。
+
+旧格式地图将全部费用写在 `rules.actionCosts`，加载时会一次性转换为对象费用，保留原消耗和地图版本，并在下次保存时写入新结构。旧格式仍要求原有费用完整有效；不支持将新格式对象费用与旧格式全局交互费用混用。
 
 旧存档没有地图副本时，按其 `levelId` 和 `levelVersion` 匹配已安装地图。缺少匹配版本会明确拒绝恢复，不会套用另一张地图。需要保留这类旧存档时，应先在对应版本仍可用时恢复并保存，使其补入地图副本。
 

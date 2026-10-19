@@ -24,12 +24,12 @@ function map(id: string, width: number, height: number): Level {
   return validateLevel({
     ...source, verification: undefined, id, version: 1, name: `测试地图 ${id}`, width, height,
     tiles: Array.from({ length: height }, (_, y) => y === 0 || y === height - 1 ? '#'.repeat(width) : `#${'.'.repeat(width - 2)}#`),
-    humanStart: { x: 1, y: 1 }, robotStart: { x: 2, y: 1 }, exit: { x: width - 2, y: height - 2 },
+    humanStart: { x: 1, y: 1 }, robotStart: { x: 2, y: 1 }, exit: { ...source.exit, x: width - 2, y: height - 2 },
     rooms: [{ name: '北侧动力舱', bounds: { minX: 1, minY: 1, maxX: width - 2, maxY: height - 2 } }],
     entities: [
-      { id: 'kit-a', type: 'supply', itemType: 'repair', name: '维修包甲', reflection: 1, position: { x: 3, y: 1 } },
-      { id: 'kit-b', type: 'supply', itemType: 'repair', name: '维修包乙', reflection: 1, position: { x: 2, y: 2 } },
-      { id: 'control', type: 'airlock', name: '独立控制器', reflection: 2, position: { x: width - 3, y: height - 3 } },
+      { id: 'kit-a', type: 'supply', itemType: 'repair', name: '维修包甲', reflection: 1, position: { x: 3, y: 1 }, actionCosts: source.entities.find(e => e.id === 's-01')!.actionCosts },
+      { id: 'kit-b', type: 'supply', itemType: 'repair', name: '维修包乙', reflection: 1, position: { x: 2, y: 2 }, actionCosts: source.entities.find(e => e.id === 's-02')!.actionCosts },
+      { id: 'control', type: 'airlock', name: '独立控制器', reflection: 2, position: { x: width - 3, y: height - 3 }, actionCosts: source.entities.find(e => e.id === 'a-01')!.actionCosts },
     ],
   });
 }
@@ -57,7 +57,7 @@ async function serve(levels: Level[], savesDir: string) {
 test('门朝向配置校验，按已知实体提供显示信息并兼容旧存档', () => {
   for (const orientation of ['horizontal', 'vertical', undefined] as const) {
     const level = map('doors', 8, 6);
-    level.entities = [{ id: 'door', type: 'door', name: '门', position: { x: 3, y: 1 }, reflection: 2, orientation }];
+    level.entities = [{ id: 'door', type: 'door', name: '门', position: { x: 3, y: 1 }, reflection: 2, orientation, actionCosts: { open: { tu: 1, battery: 1 } } }];
     const engine = new GameEngine(validateLevel(level));
     assert.equal(engine.playerView().observed.find(e => e.id === 'door')?.orientation, orientation);
     const old = engine.snapshot();
@@ -140,6 +140,34 @@ test('移除地图文件后仍按存档地图恢复和回放，旧存档按 ID �
   await writeFile(file, JSON.stringify(legacy));
   const mismatch = await serve([incompatible], savesDir);
   assert.equal((await mismatch.call(`${path}/load`, {})).status, 400);
+});
+
+test('内嵌旧格式地图的存档经 HTTP 恢复后保存对象费用，并继续按原费用执行和回放', async t => {
+  const savesDir = await directory(t);
+  const first = await serve([source], savesDir);
+  const created = (await first.call('/api/sessions', {})).data;
+  const path = `/api/sessions/${created.sessionId}`;
+  await first.close();
+  const file = join(savesDir, created.sessionId, 'game.json');
+  const save: SessionSave = JSON.parse(await readFile(file, 'utf8'));
+  save.level = JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8'));
+  for (const entity of save.engine.entities) delete entity.actionCosts;
+  for (const entity of Object.values(save.engine.knowledge.entities)) delete entity.actionCosts;
+  await writeFile(file, JSON.stringify(save));
+  const next = await serve([map('other-map', 6, 16)], savesDir);
+  const restored = await next.call(`${path}/load`, {});
+  assert.equal(restored.status, 200);
+  assert.deepEqual(restored.data.human.actionCosts, source.human.actionCosts);
+  const moved = (await next.call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: restored.data.stateRevision, action: { kind: 'move', target: { x: 3, y: 9 } } })).data;
+  const collected = await next.call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: moved.stateRevision, action: { kind: 'collect', targetId: 's-01' } });
+  assert.equal(collected.status, 200); assert.equal(collected.data.elapsedTU, 2);
+  assert.equal(collected.data.robot.battery, source.rules.battery - 2);
+  const replay = await next.call<ReplayView>(`${path}/replay?step=2`);
+  assert.equal(replay.status, 200); assert.deepEqual(replay.data.state.robot, collected.data.robot);
+  await next.close();
+  const persisted: SessionSave = JSON.parse(await readFile(file, 'utf8'));
+  assert.deepEqual(Object.keys(persisted.level!.rules.actionCosts), ['move', 'carry_move', 'scan']);
+  assert.deepEqual(persisted.level!.entities.find(e => e.id === 's-01')!.actionCosts, source.entities.find(e => e.id === 's-01')!.actionCosts);
 });
 
 test('演示模式使用任意房间名、三位坐标及已知信息搜索，不需要地图专用脚本', async () => {

@@ -5,11 +5,16 @@ export type DoorOrientation = 'horizontal' | 'vertical';
 export type Phase = 'awaiting_command' | 'agent_thinking' | 'executing' | 'awaiting_player' | 'paused' | 'success' | 'failure';
 
 export interface ActionCost { tu: number; battery: number }
+export interface RepairCost extends ActionCost { materials: number }
 export interface ActionCosts {
-  move: ActionCost; carry_move: ActionCost; scan: ActionCost; open: ActionCost; collect: ActionCost;
-  drop_item: ActionCost; use_battery: ActionCost; use_oxygen: ActionCost;
-  repair_human: ActionCost & { materials: number }; repair_airlock: ActionCost & { materials: number };
-  clear: ActionCost; pickup_human: ActionCost; drop_human: ActionCost; circuit: ActionCost; extract: ActionCost;
+  move: ActionCost; carry_move: ActionCost; scan: ActionCost;
+}
+export interface EntityActionCosts {
+  open?: ActionCost; collect?: ActionCost; drop_item?: ActionCost; use_item?: ActionCost;
+  repair?: RepairCost; clear?: ActionCost; circuit_on?: ActionCost; circuit_off?: ActionCost;
+}
+export interface HumanActionCosts {
+  repair: RepairCost; pickup_human: ActionCost; drop_human: ActionCost;
 }
 export interface Rules {
   oxygen: number; oxygenMax: number; oxygenRate: number; repairedOxygenRate: number;
@@ -22,6 +27,7 @@ export interface EntityDefinition {
   id: string; type: EntityType; name: string; position: Position; reflection: number;
   itemType?: ItemType; containerId?: string; powerRequired?: boolean;
   orientation?: DoorOrientation;
+  actionCosts?: EntityActionCosts;
 }
 export interface Entity extends EntityDefinition {
   opened: boolean; repaired: boolean; removed: boolean; taken: boolean;
@@ -32,13 +38,15 @@ export interface Room {
 }
 export interface Level {
   id: string; version: number; name: string; width: number; height: number; tiles: string[];
-  humanStart: Position; robotStart: Position; exit: Position; rules: Rules;
+  humanStart: Position; robotStart: Position; exit: Position & { actionCosts: { extract: ActionCost } }; rules: Rules;
+  human: { actionCosts: HumanActionCosts };
   rooms: Room[]; entities: EntityDefinition[];
   verification?: { actions: Action[]; alternatives?: Record<string, Action[]> };
 }
 export interface ObservedEntity {
   id: string; type: EntityType; name: string; position: Position;
   state: string; itemType?: ItemType; scanned: boolean; details?: string;
+  actionCosts?: EntityActionCosts;
   powerRequired?: boolean;
   orientation?: DoorOrientation;
   observedAt: number; source: 'sensor' | 'scan';
@@ -93,7 +101,7 @@ export interface PlayerView {
   level: Pick<Level, 'id' | 'name' | 'width' | 'height' | 'tiles' | 'rooms' | 'exit'>;
   exitStatus: 'leaking' | 'safe';
   phase: Phase; stateRevision: number; elapsedTU: number; circuitOn: boolean;
-  human: GameState['human']; robot: Omit<GameState['robot'], 'inventory'> & { inventory: ObservedEntity[] };
+  human: GameState['human'] & { actionCosts: HumanActionCosts }; robot: Omit<GameState['robot'], 'inventory'> & { inventory: ObservedEntity[] };
   rules: Rules; observed: ObservedEntity[]; radar: RadarEcho[]; markers: Marker[];
   sensorCells: Position[]; ledger: LedgerEntry[]; failureReason: string | null;
 }

@@ -152,7 +152,7 @@ test('HTTP 手动移动不能进入喷气出口，维修后同一出口恢复通
   session.engine.state.robot.position = { x: 10, y: 2 };
   const allowed = await move();
   assert.equal(allowed.status, 200); assert.equal(allowed.data.exitStatus, 'safe');
-  assert.deepEqual(allowed.data.robot.position, level.exit);
+  assert.deepEqual(allowed.data.robot.position, { x: level.exit.x, y: level.exit.y });
 });
 
 test('SSE 发送的玩家投影不含隐藏实体，跨来源请求被拒绝', async t => {

@@ -1,6 +1,6 @@
 import { canObserve, findKnownPath, sensorCells } from './navigation.ts';
 import { distance, emptyDelta, positionKey, samePosition } from './types.ts';
-import type { Action, ActionOutcome, Constraints, Cost, Entity, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position, RadarEcho, ReplayView } from './types.ts';
+import type { Action, ActionCost, ActionOutcome, Constraints, Cost, Entity, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position, RadarEcho, RepairCost, ReplayView } from './types.ts';
 
 export const defaultConstraints = (): Constraints => ({ reserveReturnBattery: false, reserveMargin: 5, authorizedHazardIds: [], stopOnHazard: false, allowedRepairs: [] });
 const consumedSupplyDetails = '该物资已消耗，不能再次拾取或使用。';
@@ -90,16 +90,18 @@ export class GameEngine {
       scanned, observedAt: this.state.elapsedTU, source: scanned ? 'scan' : 'sensor',
     };
     if (entity.itemType) result.itemType = entity.itemType;
+    const costs = this.level.entities.find(definition => definition.id === entity.id)?.actionCosts;
+    if (costs) result.actionCosts = structuredClone(costs);
     if (entity.type === 'supply' && entity.removed) result.details = consumedSupplyDetails;
     else if (scanned) {
       if (entity.powerRequired) result.powerRequired = true;
       if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
       else if (entity.type === 'switch') result.details = '机器人须在可达的相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
-      else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : `控制器损坏导致出口喷气，出口格不可进入；需要 ${this.level.rules.actionCosts.repair_airlock.materials} 份维修材料修复。`;
+      else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : `控制器损坏导致出口喷气，出口格不可进入；需要 ${this.repairCost(entity.id)!.materials} 份维修材料修复。`;
       else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${this.level.rules.leakCost} 电量。`;
       else if (entity.itemType === 'battery') result.details = `可恢复 ${this.level.rules.batteryRefill} 电量。`;
       else if (entity.itemType === 'oxygen') result.details = `可恢复 ${this.level.rules.oxygenRefill} 氧气。`;
-      else if (entity.type === 'obstacle') result.details = `清理需要 ${this.level.rules.actionCosts.clear.tu} TU、${this.level.rules.actionCosts.clear.battery} 电量。`;
+      else if (entity.type === 'obstacle') result.details = `清理需要 ${costs!.clear!.tu} TU、${costs!.clear!.battery} 电量。`;
       else result.details = '状态已确认。';
       if (['cabinet', 'airlock', 'switch'].includes(entity.type)) result.details += ' 本设施所在格不可进入或穿越，需在可达的相邻格交互；开启、修复或通断电均不会解除阻挡。';
     }
@@ -139,12 +141,26 @@ export class GameEngine {
     return this.performAction(action, actionId, constraints);
   }
 
+  repairCost(targetId: string): RepairCost | undefined {
+    return targetId === 'human' ? this.level.human.actionCosts.repair : this.level.entities.find(entity => entity.id === targetId)?.actionCosts?.repair;
+  }
+
+  configuredActionCost(action: Action): ActionCost | undefined {
+    switch (action.kind) {
+      case 'move': return this.level.rules.actionCosts[this.state.human.carried ? 'carry_move' : 'move'];
+      case 'scan': return this.level.rules.actionCosts.scan;
+      case 'pickup_human': case 'drop_human': return this.level.human.actionCosts[action.kind];
+      case 'extract': return this.level.exit.actionCosts.extract;
+      case 'repair': return this.repairCost(action.targetId);
+      case 'use_item': case 'drop_item': return this.level.entities.find(entity => entity.id === action.itemId)?.actionCosts?.[action.kind];
+      case 'circuit': return this.level.entities.find(entity => action.targetId ? entity.id === action.targetId : entity.type === 'switch')?.actionCosts?.[action.on ? 'circuit_on' : 'circuit_off'];
+      default: return this.level.entities.find(entity => entity.id === action.targetId)?.actionCosts?.[action.kind];
+    }
+  }
+
   actionCost(action: Action): Cost {
-    const costs = this.level.rules.actionCosts;
-    const base = action.kind === 'move' && this.state.human.carried ? costs.carry_move
-      : action.kind === 'repair' ? costs[action.targetId === 'human' ? 'repair_human' : 'repair_airlock']
-      : action.kind === 'use_item' ? costs[action.targetId === 'human' ? 'use_oxygen' : 'use_battery']
-      : costs[action.kind];
+    const base = this.configuredActionCost(action);
+    if (!base) throw new Error(`动作消耗未配置：${action.kind}`);
     const hazard = action.kind === 'move' && this.state.circuitOn && this.state.entities.some(e => e.type === 'hazard' && samePosition(e.position, action.target));
     return { tu: base.tu, battery: base.battery + (hazard ? this.level.rules.leakCost : 0), oxygen: this.state.human.oxygenRate * base.tu };
   }
@@ -239,7 +255,7 @@ export class GameEngine {
         const hazard = this.state.entities.find(e => e.type === 'hazard' && samePosition(e.position, target) && this.state.circuitOn);
         if (hazard && !constraints.authorizedHazardIds.includes(hazard.id)) return reject('HAZARD_AUTH_REQUIRED', '前方有带电线路，需要断电或明确授权。');
         message = `移动至 (${target.x}, ${target.y})${this.state.human.carried ? ' · 搬运中' : ''}`;
-        effect = () => { this.state.robot.position = { ...target }; if (this.state.human.carried) this.state.human.position = { ...target }; };
+        effect = () => { this.state.robot.position = { x: target.x, y: target.y }; if (this.state.human.carried) this.state.human.position = { x: target.x, y: target.y }; };
         break;
       }
       case 'scan':
@@ -283,7 +299,7 @@ export class GameEngine {
         const target = action.targetId;
         if (target === 'human' && (!this.reachable(this.state.human.position) || this.state.human.oxygenRate === this.level.rules.repairedOxygenRate)) return reject('PRECONDITION_FAILED', '需靠近玩家，且供氧管尚未修补。');
         if (target !== 'human' && (!entity || entity.type !== 'airlock' || entity.repaired)) return reject('PRECONDITION_FAILED', '没有需要修复的已知控制器。');
-        const required = this.level.rules.actionCosts[target === 'human' ? 'repair_human' : 'repair_airlock'].materials;
+        const required = this.repairCost(target)!.materials;
         const materials = this.state.robot.inventory.filter(id => this.getEntity(id)?.itemType === 'repair').slice(0, required);
         if (materials.length < required) return reject('MATERIAL_REQUIRED', `需要 ${required} 份维修材料。`);
         message = target === 'human' ? '修补玩家供氧管' : '修复气闸控制器';
@@ -371,14 +387,15 @@ export class GameEngine {
     // Read static art data from the map, including for observations in older saves.
     const observed = Object.values(this.state.knowledge.entities).map(entity => {
       const orientation = entity.type === 'door' ? this.level.entities.find(definition => definition.id === entity.id)?.orientation : undefined;
-      return orientation ? { ...entity, orientation } : entity;
+      const actionCosts = this.level.entities.find(definition => definition.id === entity.id)?.actionCosts;
+      return { ...entity, ...(orientation ? { orientation } : {}), ...(actionCosts ? { actionCosts } : {}) };
     });
     return structuredClone({
       level: { id: this.level.id, name: this.level.name, width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       exitStatus: this.exitStatus,
       phase: this.state.phase, stateRevision: this.state.stateRevision, elapsedTU: this.state.elapsedTU, circuitOn: this.state.circuitOn,
-      human: this.state.human,
-      robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => this.state.knowledge.entities[id]).filter((e): e is ObservedEntity => !!e) },
+      human: { ...this.state.human, actionCosts: this.level.human.actionCosts },
+      robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => observed.find(entity => entity.id === id)).filter((e): e is ObservedEntity => !!e) },
       rules: this.level.rules, observed, radar: this.state.radarHistory, markers: this.state.markers,
       sensorCells: sensorCells(this.level, this.state.robot.position, this.level.rules.sensorRadius), ledger: this.state.ledger.slice(-80), failureReason: this.state.failureReason,
     });
@@ -387,16 +404,16 @@ export class GameEngine {
   robotTelemetry() {
     return structuredClone({
       elapsedTU: this.state.elapsedTU, exitStatus: this.exitStatus, circuitOn: this.state.circuitOn,
-      human: this.state.human,
+      human: { ...this.state.human, actionCosts: this.level.human.actionCosts },
       robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => {
         const item = this.state.knowledge.entities[id];
-        return { id, name: item?.name, itemType: item?.itemType };
+        return { id, name: item?.name, itemType: item?.itemType, actionCosts: this.level.entities.find(entity => entity.id === id)?.actionCosts };
       }) },
     });
   }
 
   robotContext(): object {
-    const knownEntities = Object.values(this.state.knowledge.entities);
+    const knownEntities = Object.values(this.state.knowledge.entities).map(entity => ({ ...entity, actionCosts: this.level.entities.find(definition => definition.id === entity.id)?.actionCosts }));
     const identifiedRadar = this.state.radarHistory.map(echo => ({
       echoId: echo.id, knownEntityIds: knownEntities.filter(entity => samePosition(entity.position, echo.position)).map(entity => entity.id),
     })).filter(echo => echo.knownEntityIds.length > 0);

@@ -35,7 +35,7 @@ async function waitFor(session: GameSession, condition: () => boolean) {
 
 test('维修恰好耗尽 TU 和请求预算后，沿原对话只用报告与完成工具收尾并保留日志', async t => {
   const custom = structuredClone(level);
-  custom.rules.actionTULimit = custom.rules.actionCosts.repair_human.tu; custom.rules.requestLimit = 1;
+  custom.rules.actionTULimit = custom.human.actionCosts.repair.tu; custom.rules.requestLimit = 1;
   const { session, contexts } = scripted([
     [{ name: 'interact', arguments: { operation: 'repair', targetId: 'human' } }, move(3), finish],
     [report, finish],
@@ -52,7 +52,7 @@ test('维修恰好耗尽 TU 和请求预算后，沿原对话只用报告与完�
   await session.authorize(session.pendingAuthorization!.id, true); await session.settled();
   assert.equal(session.task?.status, 'completed'); assert.equal(session.running, false);
   assert.equal(session.engine.state.phase, 'awaiting_command');
-  assert.equal(session.engine.state.elapsedTU, custom.rules.actionCosts.repair_human.tu);
+  assert.equal(session.engine.state.elapsedTU, custom.human.actionCosts.repair.tu);
   assert.equal(session.engine.state.human.oxygenRate, custom.rules.repairedOxygenRate);
   assert.equal(session.engine.state.ledger.length, 1); assert.equal(session.metrics.requests, 2);
   assert.equal(session.metrics.skippedTools, 2); assert.equal(contexts.length, 2);

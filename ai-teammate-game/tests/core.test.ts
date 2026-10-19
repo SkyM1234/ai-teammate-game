@@ -4,7 +4,7 @@ import test from 'node:test';
 import { diffKnowledge, GameEngine } from '../packages/game-core/src/engine.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
-import type { Action, ActionCosts, ObservedEntity, RadarEcho } from '../packages/game-core/src/types.ts';
+import type { Action, ActionCost, Level, ObservedEntity, RadarEcho } from '../packages/game-core/src/types.ts';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 
@@ -127,23 +127,25 @@ test('维修材料不能当作氧气使用，失败提示指出正确操作', ()
 });
 
 test('动作消耗配置必须完整且为非负整数，维修材料数量同样校验', () => {
-  for (const name of Object.keys(level.rules.actionCosts) as (keyof ActionCosts)[]) {
-    const missing = structuredClone(level); Reflect.deleteProperty(missing.rules.actionCosts, name);
-    assert.throws(() => validateLevel(missing), /动作消耗/);
-    for (const field of ['tu', 'battery'] as const) for (const amount of [undefined, -1, 0.5, Infinity, '2']) {
-      const invalid = structuredClone(level); Reflect.set(invalid.rules.actionCosts[name], field, amount);
-      assert.throws(() => validateLevel(invalid), /动作消耗/);
+  const groups = (map: Level) => [map.rules.actionCosts, map.human.actionCosts, map.exit.actionCosts, ...map.entities.flatMap(entity => entity.actionCosts ? [entity.actionCosts] : [])] as Record<string, ActionCost & { materials?: number }>[];
+  for (const [index, group] of groups(level).entries()) {
+    for (const name of Object.keys(group)) {
+      const missing = structuredClone(level); Reflect.deleteProperty(groups(missing)[index], name);
+      assert.throws(() => validateLevel(missing), /动作消耗/);
+      for (const field of ['tu', 'battery'] as const) for (const amount of [undefined, -1, 0.5, Infinity, '2']) {
+        const invalid = structuredClone(level); Reflect.set(groups(invalid)[index][name], field, amount);
+        assert.throws(() => validateLevel(invalid), /动作消耗/);
+      }
+      if (name === 'repair') for (const amount of [undefined, -1, 0.5, Infinity, '1']) {
+        const invalid = structuredClone(level); Reflect.set(groups(invalid)[index][name], 'materials', amount);
+        assert.throws(() => validateLevel(invalid), /维修材料/);
+      }
     }
   }
   const missing = structuredClone(level); Reflect.deleteProperty(missing.rules, 'actionCosts');
   assert.throws(() => validateLevel(missing), /动作消耗/);
-  for (const name of ['repair_human', 'repair_airlock'] as const) for (const amount of [undefined, -1, 0.5, '1']) {
-    const invalid = structuredClone(level); Reflect.set(invalid.rules.actionCosts[name], 'materials', amount);
-    assert.throws(() => validateLevel(invalid), /维修材料/);
-  }
   const free = structuredClone(level);
-  for (const cost of Object.values(free.rules.actionCosts)) { cost.tu = 0; cost.battery = 0; }
-  free.rules.actionCosts.repair_human.materials = 0; free.rules.actionCosts.repair_airlock.materials = 0;
+  for (const group of groups(free)) for (const cost of Object.values(group)) { cost.tu = 0; cost.battery = 0; if ('materials' in cost) cost.materials = 0; }
   assert.doesNotThrow(() => validateLevel(free));
 });
 
@@ -151,7 +153,7 @@ test('所有动作按 JSON 配置扣时间和电量，氧气按当前耗氧率�
   const give = (engine: GameEngine, ...ids: string[]) => {
     for (const id of ids) { engine.state.entities.find(e => e.id === id)!.taken = true; engine.state.robot.inventory.push(id); }
   };
-  const cases: { name: keyof ActionCosts; action: Action; setup?: (engine: GameEngine) => void }[] = [
+  const cases: { name: string; action: Action; setup?: (engine: GameEngine) => void }[] = [
     { name: 'move', action: { kind: 'move', target: { x: 3, y: 9 } } },
     { name: 'carry_move', action: { kind: 'move', target: { x: 3, y: 9 } }, setup: e => { e.state.human.carried = true; } },
     { name: 'scan', action: { kind: 'scan', targetId: 's-01' }, setup: e => { e.state.robot.position = { x: 3, y: 9 }; } },
@@ -170,8 +172,10 @@ test('所有动作按 JSON 配置扣时间和电量，氧气按当前耗氧率�
   ];
   for (const { name, action, setup } of cases) {
     const custom = structuredClone(level);
-    Object.assign(custom.rules.actionCosts[name], { tu: 2, battery: 3 });
-    custom.rules.actionCosts.repair_human.materials = 2; custom.rules.actionCosts.repair_airlock.materials = 2;
+    for (const group of [custom.rules.actionCosts, custom.human.actionCosts, custom.exit.actionCosts, ...custom.entities.map(entity => entity.actionCosts ?? {})]) {
+      for (const cost of Object.values(group)) Object.assign(cost, { tu: 2, battery: 3 });
+    }
+    custom.human.actionCosts.repair.materials = 2; custom.entities.find(e => e.id === 'a-01')!.actionCosts!.repair!.materials = 2;
     const engine = new GameEngine(validateLevel(custom)); setup?.(engine); engine.observe();
     const outcome = engine.perform(action);
     assert.equal(outcome.accepted, true, `${name}: ${outcome.message}`);
@@ -185,7 +189,7 @@ test('所有动作按 JSON 配置扣时间和电量，氧气按当前耗氧率�
 
 test('清障说明、漏电附加消耗和返回电量储备随配置更新', () => {
   const custom = structuredClone(level);
-  custom.rules.actionCosts.clear = { tu: 5, battery: 7 };
+  custom.entities.find(e => e.id === 'o-01')!.actionCosts!.clear! = { tu: 5, battery: 7 };
   custom.rules.actionCosts.move = { tu: 2, battery: 8 };
   custom.rules.actionCosts.carry_move = { tu: 3, battery: 9 };
   custom.rules.leakCost = 11;
@@ -204,13 +208,13 @@ test('清障说明、漏电附加消耗和返回电量储备随配置更新', ()
 
 test('维修材料不足不扣资源，零材料维修及配置后的存档回放可执行', () => {
   const custom = structuredClone(level);
-  custom.rules.actionCosts.repair_human = { tu: 2, battery: 3, materials: 2 };
+  custom.human.actionCosts.repair = { tu: 2, battery: 3, materials: 2 };
   const engine = new GameEngine(custom);
   const material = engine.state.entities.find(e => e.id === 's-01')!; material.taken = true;
   engine.state.robot.inventory.push(material.id); engine.observe();
   assert.equal(engine.perform({ kind: 'repair', targetId: 'human' }).code, 'MATERIAL_REQUIRED');
   assert.equal(engine.state.robot.battery, custom.rules.battery); assert.equal(engine.state.human.oxygen, 120); assert.equal(engine.state.elapsedTU, 0);
-  custom.rules.actionCosts.repair_human.materials = 0;
+  custom.human.actionCosts.repair.materials = 0;
   const free = new GameEngine(custom);
   assert.equal(free.perform({ kind: 'repair', targetId: 'human' }).accepted, true);
   assert.equal(free.perform({ kind: 'move', target: { x: 3, y: 9 } }).cost.oxygen, 1);
@@ -359,7 +363,7 @@ test('两条固定救援路线均成功且有资源余量', () => {
     assert.equal(engine.state.phase, 'success');
     assert.ok(engine.state.human.oxygen > 0);
     assert.ok(engine.state.robot.battery > 0);
-    assert.deepEqual(engine.state.human.position, level.exit);
+    assert.deepEqual(engine.state.human.position, { x: level.exit.x, y: level.exit.y });
   }
 });
 
@@ -386,7 +390,7 @@ test('出口喷气时空载和搬运均禁止进入，不扣资源；实际维�
     assert.equal(restored.playerView().exitStatus, 'safe');
     assert.equal((restored.robotContext() as { exitStatus: string }).exitStatus, 'safe');
     restored.state.robot.position = { x: 10, y: 2 };
-    assert.deepEqual(restored.knownPath(level.exit), [level.exit]);
+    assert.deepEqual(restored.knownPath(level.exit), [{ x: level.exit.x, y: level.exit.y }]);
     assert.equal(restored.perform({ kind: 'move', target: level.exit }).accepted, true);
   }
 });
@@ -394,7 +398,7 @@ test('出口喷气时空载和搬运均禁止进入，不扣资源；实际维�
 test('寻路不能穿过喷气出口，但仍可到达出口附近；修复后可穿过', () => {
   const corridor = structuredClone(level);
   corridor.width = 5; corridor.height = 4; corridor.tiles = ['#####', '#...#', '#...#', '#####'];
-  corridor.exit = { x: 2, y: 1 }; corridor.robotStart = { x: 1, y: 1 }; corridor.humanStart = { x: 1, y: 1 };
+  corridor.exit = { ...corridor.exit, x: 2, y: 1 }; corridor.robotStart = { x: 1, y: 1 }; corridor.humanStart = { x: 1, y: 1 };
   corridor.entities = corridor.entities.filter(e => e.type === 'airlock');
   const engine = new GameEngine(corridor);
   const route = engine.knownPath({ x: 3, y: 1 });

@@ -2,7 +2,7 @@
   "levels": [
     {
       "levelId": "station-01",
-      "levelVersion": 2,
+      "levelVersion": 3,
       "rules": {
         "oxygen": 120,
         "oxygenMax": 180,
@@ -32,40 +32,15 @@
           "scan": {
             "tu": 1,
             "battery": 2
-          },
-          "open": {
-            "tu": 1,
-            "battery": 1
-          },
-          "collect": {
-            "tu": 1,
-            "battery": 1
-          },
-          "drop_item": {
-            "tu": 1,
-            "battery": 1
-          },
-          "use_battery": {
-            "tu": 1,
-            "battery": 1
-          },
-          "use_oxygen": {
-            "tu": 2,
-            "battery": 2
-          },
-          "repair_human": {
+          }
+        }
+      },
+      "interactionCosts": {
+        "human": {
+          "repair": {
             "tu": 6,
             "battery": 4,
             "materials": 1
-          },
-          "repair_airlock": {
-            "tu": 4,
-            "battery": 4,
-            "materials": 1
-          },
-          "clear": {
-            "tu": 3,
-            "battery": 4
           },
           "pickup_human": {
             "tu": 1,
@@ -74,14 +49,97 @@
           "drop_human": {
             "tu": 1,
             "battery": 1
-          },
-          "circuit": {
-            "tu": 1,
-            "battery": 0
-          },
+          }
+        },
+        "exit": {
           "extract": {
             "tu": 2,
             "battery": 2
+          }
+        },
+        "entities": {
+          "s-01": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-02": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-03": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            },
+            "use_item": {
+              "tu": 2,
+              "battery": 2
+            }
+          },
+          "c-01": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-04": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            },
+            "use_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "sw-01": {
+            "circuit_on": {
+              "tu": 1,
+              "battery": 0
+            },
+            "circuit_off": {
+              "tu": 1,
+              "battery": 0
+            }
+          },
+          "d-01": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "o-01": {
+            "clear": {
+              "tu": 3,
+              "battery": 4
+            }
+          },
+          "a-01": {
+            "repair": {
+              "tu": 4,
+              "battery": 4,
+              "materials": 1
+            }
           }
         }
       },
@@ -3260,13 +3318,13 @@
     },
     {
       "levelId": "station-02",
-      "levelVersion": 1,
+      "levelVersion": 2,
       "rules": {
         "oxygen": 120,
         "oxygenMax": 180,
         "oxygenRate": 2,
         "repairedOxygenRate": 1,
-        "battery": 120,
+        "battery": 140,
         "batteryMax": 160,
         "batteryRefill": 30,
         "oxygenRefill": 40,
@@ -3290,40 +3348,15 @@
           "scan": {
             "tu": 1,
             "battery": 2
-          },
-          "open": {
-            "tu": 1,
-            "battery": 1
-          },
-          "collect": {
-            "tu": 1,
-            "battery": 1
-          },
-          "drop_item": {
-            "tu": 1,
-            "battery": 1
-          },
-          "use_battery": {
-            "tu": 1,
-            "battery": 1
-          },
-          "use_oxygen": {
-            "tu": 2,
-            "battery": 2
-          },
-          "repair_human": {
+          }
+        }
+      },
+      "interactionCosts": {
+        "human": {
+          "repair": {
             "tu": 6,
             "battery": 4,
             "materials": 1
-          },
-          "repair_airlock": {
-            "tu": 4,
-            "battery": 4,
-            "materials": 1
-          },
-          "clear": {
-            "tu": 3,
-            "battery": 4
           },
           "pickup_human": {
             "tu": 1,
@@ -3332,14 +3365,153 @@
           "drop_human": {
             "tu": 1,
             "battery": 1
-          },
-          "circuit": {
-            "tu": 1,
-            "battery": 0
-          },
+          }
+        },
+        "exit": {
           "extract": {
             "tu": 2,
             "battery": 2
+          }
+        },
+        "entities": {
+          "s-01": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-02": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-03": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            },
+            "use_item": {
+              "tu": 2,
+              "battery": 2
+            }
+          },
+          "c-01": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-04": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            },
+            "use_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "sw-01": {
+            "circuit_on": {
+              "tu": 1,
+              "battery": 0
+            },
+            "circuit_off": {
+              "tu": 1,
+              "battery": 0
+            }
+          },
+          "d-01": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "d-02": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "d-03": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "o-01": {
+            "clear": {
+              "tu": 3,
+              "battery": 4
+            }
+          },
+          "c-02": {
+            "open": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-05": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            },
+            "use_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "s-06": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            },
+            "use_item": {
+              "tu": 2,
+              "battery": 2
+            }
+          },
+          "s-07": {
+            "collect": {
+              "tu": 1,
+              "battery": 1
+            },
+            "drop_item": {
+              "tu": 1,
+              "battery": 1
+            }
+          },
+          "a-01": {
+            "repair": {
+              "tu": 4,
+              "battery": 4,
+              "materials": 1
+            }
           }
         }
       },
@@ -3348,7 +3520,7 @@
           "id": "main",
           "elapsedTU": 52,
           "remainingOxygen": 101,
-          "remainingBattery": 77,
+          "remainingBattery": 97,
           "actions": [
             {
               "sequence": 1,
@@ -3368,7 +3540,7 @@
                 "y": 12
               },
               "oxygen": 118,
-              "battery": 119,
+              "battery": 139,
               "elapsedTU": 1,
               "phase": "awaiting_command",
               "constraints": {
@@ -3400,7 +3572,7 @@
                 "y": 12
               },
               "oxygen": 106,
-              "battery": 115,
+              "battery": 135,
               "elapsedTU": 7,
               "phase": "awaiting_command",
               "constraints": {
@@ -3435,7 +3607,7 @@
                 "y": 11
               },
               "oxygen": 105,
-              "battery": 114,
+              "battery": 134,
               "elapsedTU": 8,
               "phase": "awaiting_command",
               "constraints": {
@@ -3467,7 +3639,7 @@
                 "y": 11
               },
               "oxygen": 104,
-              "battery": 113,
+              "battery": 133,
               "elapsedTU": 9,
               "phase": "awaiting_command",
               "constraints": {
@@ -3502,7 +3674,7 @@
                 "y": 12
               },
               "oxygen": 103,
-              "battery": 112,
+              "battery": 132,
               "elapsedTU": 10,
               "phase": "awaiting_command",
               "constraints": {
@@ -3537,7 +3709,7 @@
                 "y": 12
               },
               "oxygen": 102,
-              "battery": 111,
+              "battery": 131,
               "elapsedTU": 11,
               "phase": "awaiting_command",
               "constraints": {
@@ -3568,7 +3740,7 @@
                 "y": 12
               },
               "oxygen": 101,
-              "battery": 109,
+              "battery": 129,
               "elapsedTU": 12,
               "phase": "awaiting_command",
               "constraints": {
@@ -3603,7 +3775,7 @@
                 "y": 12
               },
               "oxygen": 100,
-              "battery": 107,
+              "battery": 127,
               "elapsedTU": 13,
               "phase": "awaiting_command",
               "constraints": {
@@ -3638,7 +3810,7 @@
                 "y": 11
               },
               "oxygen": 99,
-              "battery": 105,
+              "battery": 125,
               "elapsedTU": 14,
               "phase": "awaiting_command",
               "constraints": {
@@ -3673,7 +3845,7 @@
                 "y": 10
               },
               "oxygen": 98,
-              "battery": 103,
+              "battery": 123,
               "elapsedTU": 15,
               "phase": "awaiting_command",
               "constraints": {
@@ -3705,7 +3877,7 @@
                 "y": 10
               },
               "oxygen": 97,
-              "battery": 102,
+              "battery": 122,
               "elapsedTU": 16,
               "phase": "awaiting_command",
               "constraints": {
@@ -3738,7 +3910,7 @@
                 "y": 10
               },
               "oxygen": 135,
-              "battery": 100,
+              "battery": 120,
               "elapsedTU": 18,
               "phase": "awaiting_command",
               "constraints": {
@@ -3773,7 +3945,7 @@
                 "y": 9
               },
               "oxygen": 134,
-              "battery": 98,
+              "battery": 118,
               "elapsedTU": 19,
               "phase": "awaiting_command",
               "constraints": {
@@ -3808,7 +3980,7 @@
                 "y": 8
               },
               "oxygen": 133,
-              "battery": 96,
+              "battery": 116,
               "elapsedTU": 20,
               "phase": "awaiting_command",
               "constraints": {
@@ -3840,7 +4012,7 @@
                 "y": 8
               },
               "oxygen": 132,
-              "battery": 95,
+              "battery": 115,
               "elapsedTU": 21,
               "phase": "awaiting_command",
               "constraints": {
@@ -3875,7 +4047,7 @@
                 "y": 7
               },
               "oxygen": 131,
-              "battery": 93,
+              "battery": 113,
               "elapsedTU": 22,
               "phase": "awaiting_command",
               "constraints": {
@@ -3910,7 +4082,7 @@
                 "y": 6
               },
               "oxygen": 130,
-              "battery": 91,
+              "battery": 111,
               "elapsedTU": 23,
               "phase": "awaiting_command",
               "constraints": {
@@ -3945,7 +4117,7 @@
                 "y": 5
               },
               "oxygen": 129,
-              "battery": 89,
+              "battery": 109,
               "elapsedTU": 24,
               "phase": "awaiting_command",
               "constraints": {
@@ -3980,7 +4152,7 @@
                 "y": 4
               },
               "oxygen": 128,
-              "battery": 87,
+              "battery": 107,
               "elapsedTU": 25,
               "phase": "awaiting_command",
               "constraints": {
@@ -4015,7 +4187,7 @@
                 "y": 3
               },
               "oxygen": 127,
-              "battery": 85,
+              "battery": 105,
               "elapsedTU": 26,
               "phase": "awaiting_command",
               "constraints": {
@@ -4050,7 +4222,7 @@
                 "y": 3
               },
               "oxygen": 126,
-              "battery": 83,
+              "battery": 103,
               "elapsedTU": 27,
               "phase": "awaiting_command",
               "constraints": {
@@ -4085,7 +4257,7 @@
                 "y": 3
               },
               "oxygen": 125,
-              "battery": 81,
+              "battery": 101,
               "elapsedTU": 28,
               "phase": "awaiting_command",
               "constraints": {
@@ -4120,7 +4292,7 @@
                 "y": 3
               },
               "oxygen": 124,
-              "battery": 79,
+              "battery": 99,
               "elapsedTU": 29,
               "phase": "awaiting_command",
               "constraints": {
@@ -4153,7 +4325,7 @@
                 "y": 3
               },
               "oxygen": 123,
-              "battery": 79,
+              "battery": 99,
               "elapsedTU": 30,
               "phase": "awaiting_command",
               "constraints": {
@@ -4192,7 +4364,7 @@
                 "y": 3
               },
               "oxygen": 122,
-              "battery": 77,
+              "battery": 97,
               "elapsedTU": 31,
               "phase": "awaiting_command",
               "constraints": {
@@ -4224,7 +4396,7 @@
                 "y": 3
               },
               "oxygen": 121,
-              "battery": 76,
+              "battery": 96,
               "elapsedTU": 32,
               "phase": "awaiting_command",
               "constraints": {
@@ -4256,7 +4428,7 @@
                 "y": 3
               },
               "oxygen": 120,
-              "battery": 75,
+              "battery": 95,
               "elapsedTU": 33,
               "phase": "awaiting_command",
               "constraints": {
@@ -4289,7 +4461,7 @@
                 "y": 3
               },
               "oxygen": 119,
-              "battery": 104,
+              "battery": 124,
               "elapsedTU": 34,
               "phase": "awaiting_command",
               "constraints": {
@@ -4324,7 +4496,7 @@
                 "y": 3
               },
               "oxygen": 118,
-              "battery": 102,
+              "battery": 122,
               "elapsedTU": 35,
               "phase": "awaiting_command",
               "constraints": {
@@ -4356,7 +4528,7 @@
                 "y": 3
               },
               "oxygen": 117,
-              "battery": 101,
+              "battery": 121,
               "elapsedTU": 36,
               "phase": "awaiting_command",
               "constraints": {
@@ -4389,7 +4561,7 @@
                 "y": 3
               },
               "oxygen": 116,
-              "battery": 101,
+              "battery": 121,
               "elapsedTU": 37,
               "phase": "awaiting_command",
               "constraints": {
@@ -4428,7 +4600,7 @@
                 "y": 3
               },
               "oxygen": 115,
-              "battery": 99,
+              "battery": 119,
               "elapsedTU": 38,
               "phase": "awaiting_command",
               "constraints": {
@@ -4463,7 +4635,7 @@
                 "y": 3
               },
               "oxygen": 114,
-              "battery": 97,
+              "battery": 117,
               "elapsedTU": 39,
               "phase": "awaiting_command",
               "constraints": {
@@ -4498,7 +4670,7 @@
                 "y": 3
               },
               "oxygen": 113,
-              "battery": 95,
+              "battery": 115,
               "elapsedTU": 40,
               "phase": "awaiting_command",
               "constraints": {
@@ -4533,7 +4705,7 @@
                 "y": 3
               },
               "oxygen": 112,
-              "battery": 93,
+              "battery": 113,
               "elapsedTU": 41,
               "phase": "awaiting_command",
               "constraints": {
@@ -4568,7 +4740,7 @@
                 "y": 3
               },
               "oxygen": 111,
-              "battery": 91,
+              "battery": 111,
               "elapsedTU": 42,
               "phase": "awaiting_command",
               "constraints": {
@@ -4600,7 +4772,7 @@
                 "y": 3
               },
               "oxygen": 107,
-              "battery": 87,
+              "battery": 107,
               "elapsedTU": 46,
               "phase": "awaiting_command",
               "constraints": {
@@ -4635,7 +4807,7 @@
                 "y": 2
               },
               "oxygen": 106,
-              "battery": 85,
+              "battery": 105,
               "elapsedTU": 47,
               "phase": "awaiting_command",
               "constraints": {
@@ -4670,7 +4842,7 @@
                 "y": 2
               },
               "oxygen": 105,
-              "battery": 83,
+              "battery": 103,
               "elapsedTU": 48,
               "phase": "awaiting_command",
               "constraints": {
@@ -4705,7 +4877,7 @@
                 "y": 2
               },
               "oxygen": 104,
-              "battery": 81,
+              "battery": 101,
               "elapsedTU": 49,
               "phase": "awaiting_command",
               "constraints": {
@@ -4740,7 +4912,7 @@
                 "y": 1
               },
               "oxygen": 103,
-              "battery": 79,
+              "battery": 99,
               "elapsedTU": 50,
               "phase": "awaiting_command",
               "constraints": {
@@ -4771,7 +4943,7 @@
                 "y": 1
               },
               "oxygen": 101,
-              "battery": 77,
+              "battery": 97,
               "elapsedTU": 52,
               "phase": "success",
               "constraints": {
@@ -4791,7 +4963,7 @@
           "id": "lower",
           "elapsedTU": 44,
           "remainingOxygen": 69,
-          "remainingBattery": 54,
+          "remainingBattery": 74,
           "actions": [
             {
               "sequence": 1,
@@ -4811,7 +4983,7 @@
                 "y": 12
               },
               "oxygen": 118,
-              "battery": 119,
+              "battery": 139,
               "elapsedTU": 1,
               "phase": "awaiting_command",
               "constraints": {
@@ -4843,7 +5015,7 @@
                 "y": 12
               },
               "oxygen": 106,
-              "battery": 115,
+              "battery": 135,
               "elapsedTU": 7,
               "phase": "awaiting_command",
               "constraints": {
@@ -4878,7 +5050,7 @@
                 "y": 11
               },
               "oxygen": 105,
-              "battery": 114,
+              "battery": 134,
               "elapsedTU": 8,
               "phase": "awaiting_command",
               "constraints": {
@@ -4910,7 +5082,7 @@
                 "y": 11
               },
               "oxygen": 104,
-              "battery": 113,
+              "battery": 133,
               "elapsedTU": 9,
               "phase": "awaiting_command",
               "constraints": {
@@ -4945,7 +5117,7 @@
                 "y": 12
               },
               "oxygen": 103,
-              "battery": 112,
+              "battery": 132,
               "elapsedTU": 10,
               "phase": "awaiting_command",
               "constraints": {
@@ -4980,7 +5152,7 @@
                 "y": 12
               },
               "oxygen": 102,
-              "battery": 111,
+              "battery": 131,
               "elapsedTU": 11,
               "phase": "awaiting_command",
               "constraints": {
@@ -5011,7 +5183,7 @@
                 "y": 12
               },
               "oxygen": 101,
-              "battery": 109,
+              "battery": 129,
               "elapsedTU": 12,
               "phase": "awaiting_command",
               "constraints": {
@@ -5046,7 +5218,7 @@
                 "y": 12
               },
               "oxygen": 100,
-              "battery": 107,
+              "battery": 127,
               "elapsedTU": 13,
               "phase": "awaiting_command",
               "constraints": {
@@ -5081,7 +5253,7 @@
                 "y": 11
               },
               "oxygen": 99,
-              "battery": 105,
+              "battery": 125,
               "elapsedTU": 14,
               "phase": "awaiting_command",
               "constraints": {
@@ -5116,7 +5288,7 @@
                 "y": 11
               },
               "oxygen": 98,
-              "battery": 103,
+              "battery": 123,
               "elapsedTU": 15,
               "phase": "awaiting_command",
               "constraints": {
@@ -5151,7 +5323,7 @@
                 "y": 11
               },
               "oxygen": 97,
-              "battery": 101,
+              "battery": 121,
               "elapsedTU": 16,
               "phase": "awaiting_command",
               "constraints": {
@@ -5186,7 +5358,7 @@
                 "y": 11
               },
               "oxygen": 96,
-              "battery": 99,
+              "battery": 119,
               "elapsedTU": 17,
               "phase": "awaiting_command",
               "constraints": {
@@ -5218,7 +5390,7 @@
                 "y": 11
               },
               "oxygen": 93,
-              "battery": 95,
+              "battery": 115,
               "elapsedTU": 20,
               "phase": "awaiting_command",
               "constraints": {
@@ -5253,7 +5425,7 @@
                 "y": 11
               },
               "oxygen": 92,
-              "battery": 93,
+              "battery": 113,
               "elapsedTU": 21,
               "phase": "awaiting_command",
               "constraints": {
@@ -5288,7 +5460,7 @@
                 "y": 11
               },
               "oxygen": 91,
-              "battery": 91,
+              "battery": 111,
               "elapsedTU": 22,
               "phase": "awaiting_command",
               "constraints": {
@@ -5323,7 +5495,7 @@
                 "y": 11
               },
               "oxygen": 90,
-              "battery": 89,
+              "battery": 109,
               "elapsedTU": 23,
               "phase": "awaiting_command",
               "constraints": {
@@ -5358,7 +5530,7 @@
                 "y": 11
               },
               "oxygen": 89,
-              "battery": 87,
+              "battery": 107,
               "elapsedTU": 24,
               "phase": "awaiting_command",
               "constraints": {
@@ -5393,7 +5565,7 @@
                 "y": 11
               },
               "oxygen": 88,
-              "battery": 85,
+              "battery": 105,
               "elapsedTU": 25,
               "phase": "awaiting_command",
               "constraints": {
@@ -5428,7 +5600,7 @@
                 "y": 10
               },
               "oxygen": 87,
-              "battery": 83,
+              "battery": 103,
               "elapsedTU": 26,
               "phase": "awaiting_command",
               "constraints": {
@@ -5463,7 +5635,7 @@
                 "y": 9
               },
               "oxygen": 86,
-              "battery": 81,
+              "battery": 101,
               "elapsedTU": 27,
               "phase": "awaiting_command",
               "constraints": {
@@ -5498,7 +5670,7 @@
                 "y": 8
               },
               "oxygen": 85,
-              "battery": 79,
+              "battery": 99,
               "elapsedTU": 28,
               "phase": "awaiting_command",
               "constraints": {
@@ -5530,7 +5702,7 @@
                 "y": 8
               },
               "oxygen": 84,
-              "battery": 78,
+              "battery": 98,
               "elapsedTU": 29,
               "phase": "awaiting_command",
               "constraints": {
@@ -5565,7 +5737,7 @@
                 "y": 7
               },
               "oxygen": 83,
-              "battery": 76,
+              "battery": 96,
               "elapsedTU": 30,
               "phase": "awaiting_command",
               "constraints": {
@@ -5600,7 +5772,7 @@
                 "y": 6
               },
               "oxygen": 82,
-              "battery": 74,
+              "battery": 94,
               "elapsedTU": 31,
               "phase": "awaiting_command",
               "constraints": {
@@ -5635,7 +5807,7 @@
                 "y": 5
               },
               "oxygen": 81,
-              "battery": 72,
+              "battery": 92,
               "elapsedTU": 32,
               "phase": "awaiting_command",
               "constraints": {
@@ -5670,7 +5842,7 @@
                 "y": 4
               },
               "oxygen": 80,
-              "battery": 70,
+              "battery": 90,
               "elapsedTU": 33,
               "phase": "awaiting_command",
               "constraints": {
@@ -5705,7 +5877,7 @@
                 "y": 3
               },
               "oxygen": 79,
-              "battery": 68,
+              "battery": 88,
               "elapsedTU": 34,
               "phase": "awaiting_command",
               "constraints": {
@@ -5737,7 +5909,7 @@
                 "y": 3
               },
               "oxygen": 75,
-              "battery": 64,
+              "battery": 84,
               "elapsedTU": 38,
               "phase": "awaiting_command",
               "constraints": {
@@ -5772,7 +5944,7 @@
                 "y": 2
               },
               "oxygen": 74,
-              "battery": 62,
+              "battery": 82,
               "elapsedTU": 39,
               "phase": "awaiting_command",
               "constraints": {
@@ -5807,7 +5979,7 @@
                 "y": 2
               },
               "oxygen": 73,
-              "battery": 60,
+              "battery": 80,
               "elapsedTU": 40,
               "phase": "awaiting_command",
               "constraints": {
@@ -5842,7 +6014,7 @@
                 "y": 2
               },
               "oxygen": 72,
-              "battery": 58,
+              "battery": 78,
               "elapsedTU": 41,
               "phase": "awaiting_command",
               "constraints": {
@@ -5877,7 +6049,7 @@
                 "y": 1
               },
               "oxygen": 71,
-              "battery": 56,
+              "battery": 76,
               "elapsedTU": 42,
               "phase": "awaiting_command",
               "constraints": {
@@ -5908,7 +6080,7 @@
                 "y": 1
               },
               "oxygen": 69,
-              "battery": 54,
+              "battery": 74,
               "elapsedTU": 44,
               "phase": "success",
               "constraints": {

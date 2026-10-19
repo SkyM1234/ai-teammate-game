@@ -13,7 +13,8 @@ const reports = levels.map(level => {
       return { id, elapsedTU: engine.state.elapsedTU, remainingOxygen: engine.state.human.oxygen, remainingBattery: engine.state.robot.battery, actions: engine.state.ledger };
     } catch (error) { throw new Error(`${level.id}/${id}：${error instanceof Error ? error.message : String(error)}`); }
   });
-  return { levelId: level.id, levelVersion: level.version, rules: level.rules, routes };
+  const interactionCosts = { human: level.human.actionCosts, exit: level.exit.actionCosts, entities: Object.fromEntries(level.entities.filter(entity => entity.actionCosts).map(entity => [entity.id, entity.actionCosts])) };
+  return { levelId: level.id, levelVersion: level.version, rules: level.rules, interactionCosts, routes };
 });
 await mkdir(new URL('../docs/maps/', import.meta.url), { recursive: true });
 await writeFile(new URL('../docs/maps/route-ledgers.json', import.meta.url), JSON.stringify({ levels: reports }, null, 2) + '\n');

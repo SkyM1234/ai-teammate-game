@@ -72,6 +72,7 @@ const interactionUsage: Record<string, string> = {
 
 const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气有限，你有电量限制。只使用收到的机器人知识和人类明确发送的信息；雷达模糊回波不是物品身份。
 本次请求的系统快照优先于其中的历史对话、历史工具结果及此前推测；本次请求内新执行的工具结果会更新状态，telemetry.elapsedTU 是游戏时间。telemetry.human 提供玩家位置、氧气、耗氧率和 carried；telemetry.robot 提供机器人位置、电量和带 id/name/itemType 的背包。carried=true 表示玩家已由你搬运，位置随你移动，跳过 pickup_human，无需放下玩家也可使用物资或维修；carried=false 时才需要同格抱起。
+rules.actionCosts 只提供 move、carry_move、scan 的通用消耗；物体交互消耗读取对应 knownEntities 或背包物品的 actionCosts，维修消耗（含 materials）属于被维修对象，use_item 与 drop_item 的消耗属于物品。开关开启用 circuit_on、关闭用 circuit_off。玩家交互消耗读取 telemetry.human.actionCosts，撤离消耗读取 historicalMap.exit.actionCosts.extract。不同物体的同类操作可能消耗不同；氧气消耗为动作 TU 乘当前耗氧率，维修本次仍按修复前耗氧率计算。依据当前对象配置和 remainingTU 规划，不沿用其他对象或旧对话中的费用。
 物资以当前 state 和 itemType 为准：available 可前往拾取，inventory 已在背包，cleared 已消耗且不能再次拾取或使用；背包与已耗尽物资在 knownEntities 中的 position 是历史位置，不代表仍可在那里取得。itemType=oxygen 用 use_item 给 human，battery 给 robot，repair 只能由 repair 自动消耗。补氧应选择背包中的氧气或已知 available 氧气，不能去已耗尽的旧位置。类型、数量和可用性已知时无需额外扫描或 get_status 确认。
 historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0,0)，x 向右增大，y 向下增大；tiles[y][x] 表示坐标 (x,y) 的格子，每个字符串是一整行，数组索引是 y，字符串字符索引是 x。图例：# 是墙，不可通行；. 是历史地面，可作为候选路线；D 是历史门位，当前开闭与供电状态需靠近确认；X 是历史障碍位，不代表永久不可通行；E 是撤离出口，能到达不等于满足撤离条件。rooms 用 name 和 bounds 描述历史区域，minX/minY/maxX/maxY 均包含端点，没有固定导航点；范围内的墙体和实际阻挡仍以 tiles 和最新观察为准，不提供当前设施状态或可交互实体 ID。前往区域时可选择其中合适的可达位置，抵达不等于完成物资搜索；各区域属于固定历史位置，不随玩家搬运移动。
 当前设施状态以 knownEntities 和最新工具结果为准，优先于历史地图符号及此前的推测：障碍 state=cleared 表示已清除，不再阻挡；门 state=opened 表示已打开，可以通过；已知关闭的门、未清除的障碍仍阻挡移动。柜体（cabinet）、气闸控制器（airlock）和辅助电路开关（switch）所在格均不可进入或穿越，开启、修复或通断电均不会解除阻挡，空载和搬运时都适用；识别后需要交互时，move_to 的目标应选择可达的相邻格，不要选择设施所在格。历史可通行格可能存在尚未发现的阻挡或危险，需以逐格执行结果确认；不要把未知状态直接判为无路。
@@ -411,9 +412,9 @@ export class GameSession {
     if (name === 'interact') {
       const entity = typeof args.targetId === 'string' ? this.engine.state.knowledge.entities[args.targetId] : undefined;
       const materials = this.engine.state.robot.inventory.filter(id => this.engine.state.knowledge.entities[id]?.itemType === 'repair').length;
-      const required = this.engine.level.rules.actionCosts[args.targetId === 'human' ? 'repair_human' : 'repair_airlock'].materials;
+      const required = typeof args.targetId === 'string' ? this.engine.repairCost(args.targetId)?.materials : undefined;
       const repairPosition = args.targetId === 'human' ? this.engine.state.human.position : entity?.position;
-      if (args.operation === 'repair' && materials >= required && repairPosition && distance(this.engine.state.robot.position, repairPosition) <= 1 && typeof args.targetId === 'string' && !this.repairAuthorized(args.targetId) && (args.targetId === 'human' || entity?.type === 'airlock')) {
+      if (args.operation === 'repair' && required !== undefined && materials >= required && repairPosition && distance(this.engine.state.robot.position, repairPosition) <= 1 && typeof args.targetId === 'string' && !this.repairAuthorized(args.targetId) && (args.targetId === 'human' || entity?.type === 'airlock')) {
         const cost = this.engine.actionCost({ kind: 'repair', targetId: args.targetId });
         return { kind: 'repair', description: `允许修复${args.targetId === 'human' ? '你的供氧管' : entity!.name}吗？`, consequence: `消耗 ${required} 份维修材料、${cost.tu} TU、${cost.battery} 电量；预计消耗 ${cost.oxygen} 氧气。` };
       }
@@ -593,7 +594,9 @@ export class GameSession {
   }
 
   private checkBudget(action: Action): boolean {
-    const required = this.engine.actionCost(action).tu;
+    // Unknown or unsupported targets are rejected by the engine without spending resources.
+    const required = this.engine.configuredActionCost(action)?.tu;
+    if (required === undefined) return true;
     if (required > this.remainingBudget().remainingTU) { this.stopForBudget(`行动预算不足：剩余 ${this.remainingBudget().remainingTU} TU，下一完整动作需要 ${required} TU，未开始执行该动作`); return false; }
     return true;
   }

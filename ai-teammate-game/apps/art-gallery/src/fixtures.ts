@@ -19,10 +19,10 @@ export function galleryView(layout: 'square' | 'long' | 'walls', alternateState:
   const tiles = Array.from({ length: height }, (_, y) => y === 0 || y === height - 1 ? '#'.repeat(width) : `#${'.'.repeat(width - 2)}#`);
   const sensorCells = tiles.flatMap((row, y) => [...row].flatMap((tile, x) => tile === '#' ? [] : [{ x, y }]));
   return {
-    level: { id: `art-gallery-${layout}`, name: '美术资源展示', width, height, tiles, rooms: [], exit: { x: width - 2, y: height - 2 } },
+    level: { id: `art-gallery-${layout}`, name: '美术资源展示', width, height, tiles, rooms: [], exit: { x: width - 2, y: height - 2, actionCosts: { extract: { tu: 1, battery: 1 } } } },
     exitStatus: alternateState ? 'safe' : 'leaking', phase: 'paused', stateRevision: 0, elapsedTU: 0, circuitOn: alternateState,
     robot: { position: { x: 2, y: 1 }, battery: 90, inventory: [] },
-    human: { position: { x: alternateState ? 2 : 4, y: 1 }, oxygen: 120, oxygenRate: 2, carried: alternateState },
+    human: { position: { x: alternateState ? 2 : 4, y: 1 }, oxygen: 120, oxygenRate: 2, carried: alternateState, actionCosts: { repair: { tu: 1, battery: 1, materials: 1 }, pickup_human: { tu: 1, battery: 1 }, drop_human: { tu: 1, battery: 1 } } },
     rules: {
       oxygen: 120, oxygenMax: 180, oxygenRate: 2, repairedOxygenRate: 1,
       battery: 90, batteryMax: 100, batteryRefill: 30, oxygenRefill: 40,
@@ -30,10 +30,6 @@ export function galleryView(layout: 'square' | 'long' | 'walls', alternateState:
       moveLimit: 12, toolLimit: 6, requestLimit: 8, actionTULimit: 12,
       actionCosts: {
         move: { tu: 1, battery: 1 }, carry_move: { tu: 1, battery: 2 }, scan: { tu: 1, battery: 1 },
-        open: { tu: 1, battery: 1 }, collect: { tu: 1, battery: 1 }, drop_item: { tu: 1, battery: 1 },
-        use_battery: { tu: 1, battery: 1 }, use_oxygen: { tu: 1, battery: 1 }, repair_human: { tu: 1, battery: 1, materials: 1 },
-        repair_airlock: { tu: 1, battery: 1, materials: 1 }, clear: { tu: 1, battery: 1 },
-        pickup_human: { tu: 1, battery: 1 }, drop_human: { tu: 1, battery: 1 }, circuit: { tu: 1, battery: 1 }, extract: { tu: 1, battery: 1 },
       },
     },
     observed, radar: [], markers: [], sensorCells, ledger: [], failureReason: null,
