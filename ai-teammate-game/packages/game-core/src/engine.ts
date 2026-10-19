@@ -51,6 +51,25 @@ export class GameEngine {
     return distance(this.state.robot.position, p) <= 1 && this.level.tiles[p.y]?.[p.x] !== '#';
   }
 
+  private interactionInfo(entity: ObservedEntity) {
+    const currentDistance = distance(this.state.robot.position, entity.position);
+    const unavailable = entity.state === 'inventory' || entity.state === 'cleared';
+    const inSensorRange = !unavailable && canObserve(this.level, this.state.knowledge, this.state.robot.position, entity.position);
+    const reason = unavailable ? (entity.state === 'inventory' ? '对象已在背包，位置是历史记录，无需再次扫描。' : '对象已消耗或清除，无法再次扫描。')
+      : !this.reachable(entity.position) ? '需上下左右相邻或同格，曼哈顿距离≤1；斜对角不算相邻。'
+      : !inSensorRange ? '目标不在当前感知范围或视线受阻。' : null;
+    return { distance: currentDistance, inSensorRange, canScan: reason === null, reason };
+  }
+
+  private approachPositions(entity: ObservedEntity) {
+    if (entity.state === 'inventory' || entity.state === 'cleared') return [];
+    const { x, y } = entity.position;
+    return [{ x, y }, { x, y: y - 1 }, { x: x + 1, y }, { x, y: y + 1 }, { x: x - 1, y }].flatMap(position => {
+      const path = this.knownPath(position);
+      return path && canObserve(this.level, this.state.knowledge, position, entity.position) ? [{ position, steps: path.length }] : [];
+    }).sort((a, b) => a.steps - b.steps);
+  }
+
   private visible(entity: Entity): boolean {
     if (entity.taken || entity.removed) return false;
     if (entity.containerId && !this.getEntity(entity.containerId)?.opened) return false;
@@ -203,7 +222,12 @@ export class GameEngine {
       if (!entity || !this.state.knowledge.entities[action.targetId]) return reject('UNKNOWN_TARGET', '目标尚未识别。');
       if (entity.type === 'supply' && this.state.knowledge.entities[entity.id].state === 'cleared') return reject('ITEM_CONSUMED', '该物资已消耗，不能再次扫描、拾取或使用；请选择其他可用物资。');
       if (action.kind === 'collect' && this.state.robot.inventory.includes(entity.id)) return reject('ITEM_IN_INVENTORY', '该物资已在背包中，无需再次拾取；请按物品类型使用或维修。');
-      if (!this.reachable(entity.position) || !this.visible(entity)) return reject('OUT_OF_RANGE', '需要先靠近已知目标，且保持视线。');
+      if (!this.reachable(entity.position) || !this.visible(entity)) {
+        const known = this.state.knowledge.entities[entity.id];
+        const interaction = this.interactionInfo(known);
+        const position = this.state.robot.position;
+        return reject('OUT_OF_RANGE', `${known.name}的已知位置 (${known.position.x},${known.position.y})，机器人位于 (${position.x},${position.y})，当前距离 ${interaction.distance}，要求曼哈顿距离≤1（上下左右相邻或同格，斜对角不算）。${interaction.reason ?? '目标当前不可见，需靠近并保持视线。'}`);
+      }
     }
     switch (action.kind) {
       case 'move': {
@@ -372,13 +396,21 @@ export class GameEngine {
   }
 
   robotContext(): object {
+    const knownEntities = Object.values(this.state.knowledge.entities);
+    const identifiedRadar = this.state.radarHistory.map(echo => ({
+      echoId: echo.id, knownEntityIds: knownEntities.filter(entity => samePosition(entity.position, echo.position)).map(entity => entity.id),
+    })).filter(echo => echo.knownEntityIds.length > 0);
+    const identifiedEchoIds = new Set(identifiedRadar.map(echo => echo.echoId));
     return structuredClone({
       historicalMap: { width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       exitStatus: this.exitStatus,
       rules: this.level.rules,
       telemetry: this.robotTelemetry(),
-      knownEntities: Object.values(this.state.knowledge.entities).map(entity => entity.type === 'supply' && entity.state === 'cleared' ? { ...entity, details: consumedSupplyDetails } : entity), sharedMarkers: this.state.knowledge.markers,
+      interactionRules: { distanceMetric: 'manhattan', maxDistance: 1, diagonalAdjacent: false },
+      knownEntities: knownEntities.map(entity => ({ ...entity, ...(entity.type === 'supply' && entity.state === 'cleared' ? { details: consumedSupplyDetails } : {}), interaction: { ...this.interactionInfo(entity), approachPositions: this.approachPositions(entity) } })), sharedMarkers: this.state.knowledge.markers,
       radar: this.state.radarHistory,
+      identifiedRadar,
+      unidentifiedRadar: this.state.radarHistory.filter(echo => !identifiedEchoIds.has(echo.id)),
     });
   }
 

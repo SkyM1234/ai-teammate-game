@@ -43,7 +43,11 @@ export interface SessionView extends PlayerView {
   pendingAuthorization: PendingAuthorization | null;
   pendingRouteSelection: PendingRouteSelection | null;
 }
-export interface SessionSave { version: 1; id: string; level?: Level; engine: GameState; task: Task | null; messages: ChatMessage[]; metrics: Metrics; eventId: number; modelConfig?: ModelConfig }
+interface TaskMemory {
+  startSequence: number; initialKnownEntityIds: string[];
+  recentFailures: { tool: string; arguments: Record<string, unknown>; position: Position; elapsedTU: number; code: string; message: string }[];
+}
+export interface SessionSave { version: 1; id: string; level?: Level; engine: GameState; task: Task | null; taskMemory?: TaskMemory; messages: ChatMessage[]; metrics: Metrics; eventId: number; modelConfig?: ModelConfig }
 interface ToolOutcome {
   accepted: boolean; code: string; message: string; delta: ObservationDelta;
   executedSteps?: number; targetReached?: boolean; costTU: number;
@@ -71,12 +75,16 @@ const prompt = `你是救援机器人 R-07。人类受伤不能移动，氧气�
 物资以当前 state 和 itemType 为准：available 可前往拾取，inventory 已在背包，cleared 已消耗且不能再次拾取或使用；背包与已耗尽物资在 knownEntities 中的 position 是历史位置，不代表仍可在那里取得。itemType=oxygen 用 use_item 给 human，battery 给 robot，repair 只能由 repair 自动消耗。补氧应选择背包中的氧气或已知 available 氧气，不能去已耗尽的旧位置。类型、数量和可用性已知时无需额外扫描或 get_status 确认。
 historicalMap 是事故前的历史布局。坐标从 0 开始，左上角为 (0,0)，x 向右增大，y 向下增大；tiles[y][x] 表示坐标 (x,y) 的格子，每个字符串是一整行，数组索引是 y，字符串字符索引是 x。图例：# 是墙，不可通行；. 是历史地面，可作为候选路线；D 是历史门位，当前开闭与供电状态需靠近确认；X 是历史障碍位，不代表永久不可通行；E 是撤离出口，能到达不等于满足撤离条件。rooms 用 name 和 bounds 描述历史区域，minX/minY/maxX/maxY 均包含端点，没有固定导航点；范围内的墙体和实际阻挡仍以 tiles 和最新观察为准，不提供当前设施状态或可交互实体 ID。前往区域时可选择其中合适的可达位置，抵达不等于完成物资搜索；各区域属于固定历史位置，不随玩家搬运移动。
 当前设施状态以 knownEntities 和最新工具结果为准，优先于历史地图符号及此前的推测：障碍 state=cleared 表示已清除，不再阻挡；门 state=opened 表示已打开，可以通过；已知关闭的门、未清除的障碍仍阻挡移动。柜体（cabinet）、气闸控制器（airlock）和辅助电路开关（switch）所在格均不可进入或穿越，开启、修复或通断电均不会解除阻挡，空载和搬运时都适用；识别后需要交互时，move_to 的目标应选择可达的相邻格，不要选择设施所在格。历史可通行格可能存在尚未发现的阻挡或危险，需以逐格执行结果确认；不要把未知状态直接判为无路。
+移动只能走上下左右，交互通常要求上下左右相邻或同格：曼哈顿距离 |dx|+|dy|≤1，斜对角不算相邻。抱起玩家必须同格。knownEntities[].interaction 提供与已知位置的 distance、inSensorRange、canScan 和不可检查原因 reason；canScan 只说明当前是否满足检查条件，不代表已满足开柜供电、维修材料或授权等其他动作条件。背包和已消耗对象的距离仍基于历史位置，不应据此前往。超距失败后应根据坐标、距离和原因纠正，不要在另一斜对角重复尝试。
+interaction.approachPositions 列出按当前已知地图可到达、可观察该对象且满足交互距离的位置，每项含 position 和预计移动步数 steps，按步数升序排列；靠近已知对象时优先从中选择 move_to 目标，steps=0 表示已在该位置。候选排除墙、已知阻挡、喷气出口和需要危险授权的路线，不保证未知情况不会中断移动，也不表示供电、材料或其他动作条件已满足。空列表表示当前已知条件下没有此类候选；背包和已消耗、已清除对象不提供候选，不要据此认定永远无法接近。
 exitStatus 是玩家与机器人共享的出口实时状态：leaking 表示出口正在漏气喷射，出口这一格禁止进入或穿越，搬运与危险授权均不能绕过；safe 表示修复气闸后漏气已停止，出口恢复通行。出口位置仍以 historicalMap.exit 为准，气闸控制器的位置与 ID 必须靠近识别，不能由出口位置推断。需先寻找气闸控制器、取得维修材料并修复，再把人类搬到出口并 interact extract；前往出口附近可选择可达的安全相邻格，不要将出口漏气误判为整个附近区域不可达。
 move_to 会根据历史布局和已知阻挡自动寻路，可以直接传最终目标坐标，无需手算路线或拆成沿途中间坐标；只有玩家指定途经点或确有必要时才分段。单次 move_to 没有格数上限，但逐格检查关键发现、资源和本次自动运行的剩余 TU 预算，可能中途停止；预算由本次自动运行内的多轮模型请求共同累计，并非每轮模型调用重置。移动结果以 targetReached 和 telemetry.robot.position 为准；精确坐标目标 targetReached=false 时尚未抵达，不得当作完成。TARGET_WALL 表示目标本身是墙，更换起点或中间点不能解决；TARGET_BLOCKED 应按原因开门、清障或选择设施相邻格，关闭的门可以打开后通过，不等同于柜体等固定阻挡。
 move_to 发现多条候选路线时，程序会在前端地图显示路径和预计消耗，等待玩家选定；只有一条路线时直接采用。选择期间不消耗游戏资源或新增模型请求，随后在原工具调用中检查危险授权并沿选定路径执行。预计消耗仅依据历史布局、已知设施和当前搬运状态，未知阻挡或危险仍可能改变实际情况。模型只传目标，不选择路线，也不要用 ask_player 代替地图选路或危险授权；玩家停止运行或拒绝危险穿越后，立即取消委托，不能继续旧任务，必须重新下达指令。任何普通移动或选定路线的移动，途中首次发现剩余选定路径上未清除的障碍、关闭的门或未经授权的带电危险时才停止运行并取消委托，不再请求模型重新决策、换路或申请后续授权，必须重新下达指令。路旁、已经走过的位置、目标之外的物体，以及不影响通行的已清除障碍、已打开门或无须新授权的线路不会因此中断移动；仍记录这些新发现。NEW_OBSTACLE、NEW_DOOR、NEW_HAZARD、NEW_DISCOVERY 表示发现新情况而中断，NO_KNOWN_PATH 表示当前条件下无路，BUDGET 表示剩余 TU 不足以执行下一步；均不代表已经抵达。
 radar 是你与玩家共享的雷达回波：position 是信号位置，strength 是强弱，shape 是稳定或闪烁，observedAt 是观测时的游戏时间，historical=true 表示已离开雷达范围的旧记录，不保证信号仍存在。回波不能确认对象名称、类型、物资种类或用途，强弱和闪烁也不能据此断言身份或危险。可根据回波坐标用 move_to 靠近调查，目标可能不可通行，优先选择可达的相邻格；靠近后以 knownEntities 和 newDiscoveries 中的实际识别为准，再用 scan 检查详情。回波 id 不是实体 ID，不得作为 scan、interact 或 set_circuit 的 targetId。
+unidentifiedRadar 是尚未与已知对象位置对应的回波，探索未知信号时优先使用此列表；identifiedRadar 通过 echoId 和 knownEntityIds 关联已知位置，仅依据已有观察，不保证该位置没有其他未知对象。已关联的旧位置也可能来自背包或已消耗对象的历史记录。已知对象不算本次新发现，不要无故把探索委托转为开启已知柜子或给它供电。
 sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准；本轮 get_status 可查询更新后的列表，历史对话和历史工具结果不得覆盖当前列表。玩家可以添加或移除标记；旧对话或工具结果中出现、但已不在当前列表中的标记已撤销，不要继续当作有效线索。标记只是玩家提供的提示，不代表已扫描确认的事实，标记 ID 不是实体 ID。移除标记不等于取消玩家明确下达的任务或抹去实际观察；私有标记不会提供给你。
 真实模式直接理解 task.text 中的本条玩家原始指令，task.selected 是玩家当时选中的位置；程序不会用关键词生成任务目标或自动授权。直接使用现有行动工具即可，无需先提交计划或任务理解。遵守否定、先后顺序、条件和资源要求，不得把“不要开启电路”当成开启委托，也不得只执行复合指令的第一部分就结束。敏感行动由程序请求按钮授权，模型不能自行授予权限。有歧义才 ask_player 澄清。
+taskProgress 是程序根据本次委托开始时的知识和实际执行结果生成的记录：newDiscoveries 仅列本次委托新增识别的对象，并使用当前已知状态；recentActions 是最近的非移动动作，recentMoves 是最近逐格移动，recentFailures 记录失败时的工具参数、位置、时间与原因。该记录用于保留进展和失败，不代表整项委托已经完成；仍以当前 task.text、约束和最新状态决定下一步，失败记录是历史事实，条件变化后可重新评估。
 任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到新指令时先核对整项委托与最新状态，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
 保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动行动累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的行动模型请求次数。预算以本次快照和最新工具结果中的数值为准，不能沿用历史中“预算耗尽”的说法；batchControl=redecide 或行动受阻不代表预算耗尽。预算来自当前地图，每条新指令启动新的运行预算。预算耗尽或不足以执行下一完整动作时，程序停止行动并跳过当前批次剩余调用，只额外提供一次收尾请求；收尾只能调用 report、finish_task 或直接回复文字，不能行动、查询、询问或恢复任务。仅当实际结果支持整项委托完成时调用 finish_task；否则说明已经完成及尚未完成的部分，本轮后结束运行，后续行动需要玩家重新下达指令。不要为预算问题调用 ask_player 或要求玩家点击继续。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
 不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至可达的相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回开关的可达相邻格，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
@@ -114,6 +122,7 @@ export class GameSession {
   private allowedCalls = new Set<string>();
   private knowledgeBefore: Knowledge;
   private transcript: AgentMessage[] = [];
+  private taskMemory: TaskMemory | null = null;
   private currentPromise: Promise<void> | null = null;
   private operationSerial: Promise<unknown> = Promise.resolve();
   pendingAuthorization: PendingAuthorization | null = null;
@@ -142,18 +151,21 @@ export class GameSession {
         this.control = 'continue';
         this.engine.state.phase = 'agent_thinking';
         const base = context.messages[0];
-        const recent = context.messages.slice(1).filter(message => message.role !== 'system');
+        const history = context.messages.filter(message => message.role !== 'system');
+        const instructionIndex = history.findLastIndex(message => message.role === 'user' && (typeof message.content === 'string' ? message.content : message.content.filter(block => block.type === 'text').map(block => block.text).join('')) === this.task?.text);
+        const instruction: AgentMessage = instructionIndex >= 0 ? history[instructionIndex] : { role: 'user', content: this.task?.text ?? '', timestamp: Date.now() };
+        const recent = history.slice(instructionIndex + 1);
         const groups: AgentMessage[][] = [];
         for (const message of recent) {
           if (message.role !== 'toolResult') groups.push([message]);
           else if (groups.length) groups[groups.length - 1].push(message);
         }
         // Aborted responses may have unfinished calls. Keep only complete message groups.
-        this.transcript = groups.filter(group => {
+        this.transcript = [instruction, ...groups.filter(group => {
           const first = group[0];
           if (first.role !== 'assistant') return true;
           return first.content.filter(block => block.type === 'toolCall').every(call => group.some(message => message.role === 'toolResult' && message.toolCallId === call.id));
-        }).slice(-5).flat();
+        }).slice(-5).flat()];
         const tools = this.closingTurn ? (context.tools ?? []).filter(tool => tool.name === 'report' || tool.name === 'finish_task') : context.tools;
         const closingPrompt = this.closingTurn ? `\n本轮是预算停止后的唯一收尾请求：${this.budgetStopReason}。行动已经停止，只能报告实际结果；整项原始委托确已完成才调用 finish_task，否则说明未完成部分。不得请求继续、查询状态或执行任何行动，本轮回复后无论结果如何都结束。` : '';
         const messages: AgentMessage[] = [
@@ -211,11 +223,15 @@ export class GameSession {
         this.engine.state.phase = 'executing';
         return undefined;
       },
-      afterToolCall: async ({ toolCall, result, isError }) => {
+      afterToolCall: async ({ toolCall, args, result, isError }) => {
         this.metrics.executedTools++;
-        if (isError) { this.control = 'redecide'; return undefined; }
+        if (isError) {
+          this.rememberFailure(toolCall.name, args, 'TOOL_ERROR', result.content.filter(block => block.type === 'text').map(block => block.text).join('\n'));
+          this.control = 'redecide'; return undefined;
+        }
         const outcome = result.details as ToolOutcome;
         if (!outcome || !outcome.delta) return undefined;
+        if (!outcome.accepted) this.rememberFailure(toolCall.name, args, outcome.code, outcome.message);
         const delta = diffKnowledge(this.knowledgeBefore, this.engine.state.knowledge);
         this.toolHazards = [];
         delta.knownRefs = delta.knownRefs.slice(0, 8);
@@ -604,7 +620,27 @@ export class GameSession {
     return { remainingTU: Math.max(0, this.engine.level.rules.actionTULimit - this.runTU), remainingRequests: Math.max(0, this.engine.level.rules.requestLimit - this.requestCount) };
   }
 
-  private modelContext() { return { ...this.engine.robotContext(), task: this.task, ...this.remainingBudget(), ...(this.closingTurn ? { closingTurn: true, budgetStopReason: this.budgetStopReason } : {}) }; }
+  private newTaskMemory(): TaskMemory {
+    return { startSequence: this.engine.state.ledger.length, initialKnownEntityIds: Object.keys(this.engine.state.knowledge.entities), recentFailures: [] };
+  }
+
+  private rememberFailure(tool: string, args: unknown, code: string, message: string): void {
+    if (!this.taskMemory) return;
+    this.taskMemory.recentFailures.push({ tool, arguments: structuredClone(args as Record<string, unknown>), position: { ...this.engine.state.robot.position }, elapsedTU: this.engine.state.elapsedTU, code, message });
+    this.taskMemory.recentFailures = this.taskMemory.recentFailures.slice(-5);
+  }
+
+  private modelContext() {
+    const memory = this.taskMemory;
+    const actions = this.engine.state.ledger.filter(entry => entry.sequence > (memory?.startSequence ?? this.engine.state.ledger.length));
+    const taskProgress = memory ? {
+      newDiscoveries: Object.values(this.engine.state.knowledge.entities).filter(entity => !memory.initialKnownEntityIds.includes(entity.id)),
+      recentActions: actions.filter(entry => entry.action.kind !== 'move').slice(-5).map(({ sequence, action, message, position, elapsedTU }) => ({ sequence, action, message, position, elapsedTU })),
+      recentMoves: actions.filter(entry => entry.action.kind === 'move').slice(-5).map(({ sequence, position, elapsedTU }) => ({ sequence, position, elapsedTU })),
+      recentFailures: memory.recentFailures,
+    } : null;
+    return { ...this.engine.robotContext(), task: this.task, taskProgress, ...this.remainingBudget(), ...(this.closingTurn ? { closingTurn: true, budgetStopReason: this.budgetStopReason } : {}) };
+  }
 
   private tools(): AgentTool[] {
     const position = Type.Object({ x: Type.Integer({ minimum: 0, maximum: this.engine.level.width - 1 }), y: Type.Integer({ minimum: 0, maximum: this.engine.level.height - 1 }) }, { additionalProperties: false });
@@ -668,7 +704,7 @@ export class GameSession {
         },
       },
       {
-        name: 'scan', label: '扫描', description: '精确检查附近已知对象，不会扫描未识别目标。', executionMode: 'sequential',
+        name: 'scan', label: '扫描', description: '精确检查当前可见的已知对象，要求曼哈顿距离≤1（上下左右相邻或同格，斜对角不算）；参考 knownEntities[].interaction.canScan 和 reason，不会扫描未识别目标。', executionMode: 'sequential',
         parameters: Type.Object({ targetId: Type.String() }, { additionalProperties: false }),
         execute: async (id, raw) => {
           const input = raw as { targetId: string };
@@ -836,6 +872,7 @@ export class GameSession {
       if (this.engine.terminal) throw new Error('本局已经结束，请创建新局。');
       this.commandRevision++;
       this.task = { id: crypto.randomUUID(), text, ...(selected ? { selected: { ...selected } } : {}), interpretation: this.adapter.mode === 'live' ? 'model' : 'demo', status: 'active', question: null, constraints: defaultConstraints() };
+      this.taskMemory = this.newTaskMemory();
       this.interpretTask();
       this.deniedCalls.clear();
       this.say('human', text);
@@ -921,10 +958,11 @@ export class GameSession {
   }
 
   view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, demoRescueAvailable: !!this.engine.level.verification?.actions.length, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization), pendingRouteSelection: structuredClone(this.pendingRouteSelection) }; }
-  save(): SessionSave { return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
+  save(): SessionSave { return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), ...(this.taskMemory ? { taskMemory: structuredClone(this.taskMemory) } : {}), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
   async restore(save: SessionSave, apiKey?: string): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');
     this.engine.restore(save.engine); this.task = structuredClone(save.task); this.messages = save.messages; this.metrics = save.metrics; this.eventId = save.eventId;
+    this.taskMemory = this.task ? structuredClone(save.taskMemory ?? this.newTaskMemory()) : null;
     if (save.modelConfig) {
       const config = validateModelConfig(save.modelConfig);
       this.adapter = config.mode === 'live' ? await liveModel(config, apiKey) : this.demoAdapter(config);
