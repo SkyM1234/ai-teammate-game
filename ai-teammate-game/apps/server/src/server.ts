@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { readFile, writeFile, mkdir, rename, readdir, stat } from 'node:fs/promises';
+import { readFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, join } from 'node:path';
 import { GameSession, interactionAction, RevisionConflictError } from './session.ts';
@@ -45,72 +45,57 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
   const savesDir = options.savesDir ?? join(root, '.saves');
   const modelPreferences = new ModelPreferences(savesDir, options.adapter);
   const sessions = new Map<string, GameSession>();
-  const pendingWrites = new Map<string, Promise<void>>();
-  const saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const loads = new Map<string, Promise<GameSession>>();
   const requests = new Map<string, Promise<unknown>>();
   const eventClients = new Map<ServerResponse, GameSession>();
   let latestId: string | null = null;
-  function persist(session: GameSession): Promise<void> {
-    const save = session.save();
-    const snapshot = JSON.stringify(save, null, 2) + '\n';
-    const previous = pendingWrites.get(session.id) ?? Promise.resolve();
-    const promise = previous.catch(() => undefined).then(async () => {
-      await session.journal?.flush();
-      const directory = join(savesDir, session.id);
-      await mkdir(directory, { recursive: true });
-      const path = join(directory, 'game.json');
-      const temporary = `${path}.tmp`;
-      await writeFile(temporary, snapshot, 'utf8'); await rename(temporary, path);
-    });
-    pendingWrites.set(session.id, promise); return promise;
+  async function persist(session: GameSession): Promise<void> {
+    if (sessions.get(session.id) !== session) return;
+    session.journal?.capture(session.save());
+    await session.journal?.flush();
   }
-  function register(session: GameSession) {
-    session.journal = new SessionJournal(join(savesDir, session.id));
-    void session.journal.record('创建或恢复对局', { sessionId: session.id, phase: session.engine.state.phase, elapsedTU: session.engine.state.elapsedTU, messages: session.messages }).catch(() => undefined);
+  function register(session: GameSession, journal?: SessionJournal) {
+    session.journal = journal ?? new SessionJournal(join(savesDir, session.id), session.save());
     sessions.set(session.id, session); latestId = session.id;
-    let savedRevision = session.engine.state.stateRevision;
-    session.listeners.add(() => {
-      clearTimeout(saveTimers.get(session.id));
-      if (session.engine.state.stateRevision !== savedRevision) {
-        savedRevision = session.engine.state.stateRevision;
-        saveTimers.delete(session.id);
-        void persist(session).catch(error => console.error('自动保存失败：', error.message));
-        return;
-      }
-      saveTimers.set(session.id, setTimeout(() => { saveTimers.delete(session.id); void persist(session).catch(error => console.error('自动保存失败：', error.message)); }, 150));
-    });
+    session.listeners.add(() => { void session.journal!.flush().catch(error => console.error('自动保存失败：', error.message)); });
+    if (!journal) session.checkpoint('初始状态');
     return session;
   }
   async function listSaves() {
     await mkdir(savesDir, { recursive: true });
     const entries = await readdir(savesDir, { withFileTypes: true });
-    const files = new Map<string, { id: string; modified: number }>();
-    for (const entry of entries.filter(entry => entry.isFile() && entry.name.endsWith('.json') && uuidPattern.test(entry.name.slice(0, -5)))) {
-      const id = entry.name.slice(0, -5); files.set(id, { id, modified: (await stat(join(savesDir, entry.name))).mtimeMs });
-    }
+    const files: { id: string; modified: number }[] = [];
     for (const entry of entries.filter(entry => entry.isDirectory() && uuidPattern.test(entry.name))) {
-      try { files.set(entry.name, { id: entry.name, modified: (await stat(join(savesDir, entry.name, 'game.json'))).mtimeMs }); }
+      try {
+        const modified = (await stat(join(savesDir, entry.name, 'session.jsonl'))).mtimeMs;
+        files.push({ id: entry.name, modified });
+      }
       catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     }
-    return [...files.values()].sort((a, b) => b.modified - a.modified);
+    return files.sort((a, b) => b.modified - a.modified);
   }
-  async function load(id: string) {
+  function load(id: string): Promise<GameSession> {
     if (!uuidPattern.test(id)) throw new HttpError(400, '会话 ID 不合法');
+    const current = loads.get(id);
+    if (current) return current;
+    const pending = loadSession(id);
+    loads.set(id, pending);
+    void pending.finally(() => loads.delete(id)).catch(() => undefined);
+    return pending;
+  }
+  async function loadSession(id: string) {
+    const previous = sessions.get(id);
+    if (previous) { await previous.suspend(); await previous.journal?.flush(); }
     let save: SessionSave;
+    let journal: SessionJournal;
     try {
-      await pendingWrites.get(id);
-      let contents: string;
-      try { contents = await readFile(join(savesDir, id, 'game.json'), 'utf8'); }
-      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; contents = await readFile(join(savesDir, `${id}.json`), 'utf8'); }
-      save = JSON.parse(contents);
+      journal = await SessionJournal.open(join(savesDir, id)); save = journal.restoreAt();
     }
-    catch { throw new HttpError(404, '没有找到有效存档'); }
-    const level = save.level ? validateLevel(save.level) : levelsById.get(save.engine.levelId);
+    catch (error) { throw new HttpError((error as NodeJS.ErrnoException).code === 'ENOENT' ? 404 : 400, '没有找到有效存档，或对局历史已损坏'); }
+    const level = validateLevel(save.level);
     if (!level || level.id !== save.engine.levelId || level.version !== save.engine.levelVersion) throw new HttpError(400, '存档对应的地图版本不可用');
-    const previous = sessions.get(id); if (previous) { await previous.stop(); await previous.journal?.flush(); }
-    clearTimeout(saveTimers.get(id)); saveTimers.delete(id);
     const session = new GameSession(level, { ...options, id });
-    await session.restore(save); register(session);
+    await session.restore(save); register(session, journal);
     for (const [client, subscribed] of eventClients) if (subscribed === previous) client.end();
     await persist(session); return session;
   }
@@ -157,16 +142,15 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
         const heartbeat = setInterval(() => res.write(': alive\n\n'), 15000);
         res.on('close', () => { clearInterval(heartbeat); session.listeners.delete(send); eventClients.delete(res); }); return;
       }
-      if (req.method === 'GET' && operation === 'replay') {
-        const value = url.searchParams.get('step') ?? '0';
-        if (!/^\d+$/.test(value)) throw new HttpError(400, '回溯步数必须是非负整数');
-        const step = Number(value);
-        if (!Number.isSafeInteger(step) || step > session.engine.state.ledger.length) throw new HttpError(400, '回溯步数超出行动账本范围');
-        json(res, session.engine.replayAt(step)); return;
+      if (req.method === 'GET' && operation === 'history') {
+        const nodeId = url.searchParams.get('node');
+        json(res, nodeId === null ? session.view().history : session.preview(nodeId)); return;
       }
       if (req.method !== 'POST') throw new HttpError(405, '请求方法不支持');
       const input = await body(req);
+      if (loads.has(id) || sessions.get(id) !== session) throw new HttpError(409, '对局正在加载或已恢复，请使用最新状态重试');
       if (typeof input.requestId !== 'string' || !uuidPattern.test(input.requestId)) throw new HttpError(400, '缺少有效请求 ID');
+      if (input.expectedInstanceId !== undefined && input.expectedInstanceId !== session.instanceId) throw new HttpError(409, '对局已恢复或回溯，请使用最新状态重试');
       const key = `${session.instanceId}:${input.requestId}`;
       let promise = requests.get(key);
       if (!promise) {
@@ -176,8 +160,15 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
             if (typeof input.text !== 'string' || !input.text.trim() || input.text.length > 2000) throw new HttpError(400, '指令长度应为 1–2000 字符');
             await session.command(input.text.trim(), input.selected ? position(input.selected, session.engine.level) : undefined, input.expectedRevision as number);
           } else if (operation === 'action') await session.manual(actionFrom(input.action, session.engine.level), input.requestId as string, input.allowHazard === true, input.expectedRevision as number);
+          else if (operation === 'rewind') {
+            if (typeof input.nodeId !== 'string' || !uuidPattern.test(input.nodeId) || typeof input.expectedInstanceId !== 'string') throw new HttpError(400, '缺少有效历史节点或会话实例');
+            await session.rewind(input.nodeId, input.expectedRevision as number, input.expectedInstanceId);
+          }
           else if (operation === 'stop') await session.stop();
-          else if (operation === 'model') await modelPreferences.save(input.config, input.apiKey, (config, apiKey) => session.configureModel(config, apiKey));
+          else if (operation === 'model') await modelPreferences.save(input.config, input.apiKey, (config, apiKey) => {
+            if (loads.has(id) || sessions.get(id) !== session || input.expectedInstanceId !== undefined && input.expectedInstanceId !== session.instanceId) throw new HttpError(409, '对局正在加载或已恢复，请使用最新状态重试');
+            return session.configureModel(config, apiKey);
+          });
           else if (operation === 'authorize') {
             if (typeof input.authorizationId !== 'string' || !uuidPattern.test(input.authorizationId) || typeof input.approve !== 'boolean') throw new HttpError(400, '授权参数不合法');
             await session.authorize(input.authorizationId, input.approve);
@@ -194,7 +185,7 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
             session.removeMarker(input.markerId);
           } else if (operation === 'save') await persist(session);
           else throw new HttpError(404, '操作不存在');
-          return session.view();
+          await persist(session); return session.view();
         })();
         requests.set(key, promise);
         if (requests.size > 1000) requests.delete(requests.keys().next().value!);
@@ -206,9 +197,7 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
     }
   });
   return { server, sessions, async shutdown() {
-    for (const timer of saveTimers.values()) clearTimeout(timer); saveTimers.clear();
-    for (const session of sessions.values()) { await session.stop(); await persist(session); }
-    for (const timer of saveTimers.values()) clearTimeout(timer); saveTimers.clear();
+    for (const session of sessions.values()) { await session.suspend(); await persist(session); }
     for (const client of eventClients.keys()) client.end();
     await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
   } };

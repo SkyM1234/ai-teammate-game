@@ -153,7 +153,7 @@ export class GameEngine {
       case 'extract': return this.level.exit.actionCosts.extract;
       case 'repair': return this.repairCost(action.targetId);
       case 'use_item': case 'drop_item': return this.level.entities.find(entity => entity.id === action.itemId)?.actionCosts?.[action.kind];
-      case 'circuit': return this.level.entities.find(entity => action.targetId ? entity.id === action.targetId : entity.type === 'switch')?.actionCosts?.[action.on ? 'circuit_on' : 'circuit_off'];
+      case 'circuit': return this.level.entities.find(entity => entity.id === action.targetId)?.actionCosts?.[action.on ? 'circuit_on' : 'circuit_off'];
       default: return this.level.entities.find(entity => entity.id === action.targetId)?.actionCosts?.[action.kind];
     }
   }
@@ -165,30 +165,15 @@ export class GameEngine {
     return { tu: base.tu, battery: base.battery + (hazard ? this.level.rules.leakCost : 0), oxygen: this.state.human.oxygenRate * base.tu };
   }
 
-  // Only trusted historical ledgers can replay the former remote circuit action.
-  // New player/model actions always use the physical switch rules.
-  static forReplay(level: Level, entries: GameState['ledger']): GameEngine {
-    const historicalLevel = structuredClone(level);
-    for (const entity of historicalLevel.entities.filter(e => e.type === 'switch')) {
-      const entry = entries.find(e => e.action.kind === 'circuit' && e.action.targetId === entity.id && e.targetPosition);
-      if (entry?.targetPosition) entity.position = { ...entry.targetPosition };
-    }
-    return new GameEngine(historicalLevel);
-  }
-
   replayEntry(entry: GameState['ledger'][number]): ActionOutcome {
-    if (entry.action.kind === 'circuit' && entry.targetPosition) {
-      const entity = this.getEntity(entry.action.targetId);
-      if (entity?.type === 'switch' && !samePosition(entity.position, entry.targetPosition)) this.relocateSwitch(entity, entry.targetPosition);
-    }
-    return this.performAction(entry.action, entry.actionId, entry.constraints ?? defaultConstraints(), entry.action.kind === 'circuit' && !('targetId' in entry.action));
+    return this.performAction(entry.action, entry.actionId, entry.constraints);
   }
 
   replayAt(step: number): ReplayView {
     const entries = this.state.ledger;
     if (!Number.isSafeInteger(step) || step < 0 || step > entries.length) throw new Error('回溯步数超出行动账本范围');
-    const replay = GameEngine.forReplay(this.level, entries);
-    const history = this.state.markerHistory ?? [];
+    const replay = new GameEngine(this.level);
+    const history = this.state.markerHistory;
     let markerIndex = 0;
     for (let index = 0; index <= step; index++) {
       if (index > 0) {
@@ -211,16 +196,7 @@ export class GameEngine {
     return { step, total: entries.length, entries: structuredClone(entries), state: replay.playerView() };
   }
 
-  private relocateSwitch(entity: Entity, position: Position): void {
-    const oldPosition = entity.position;
-    entity.position = { ...position };
-    delete this.state.knowledge.entities[entity.id];
-    this.state.knowledge.scannedIds = this.state.knowledge.scannedIds.filter(id => id !== entity.id);
-    this.state.radarHistory = this.state.radarHistory.filter(e => !samePosition(e.position, oldPosition));
-    this.observe(); this.updateRadar();
-  }
-
-  private performAction(action: Action, actionId: string, constraints: Constraints, legacyCircuit = false): ActionOutcome {
+  private performAction(action: Action, actionId: string, constraints: Constraints): ActionOutcome {
     const cached = this.state.processedActions[actionId];
     if (cached) return structuredClone(cached);
     const before = structuredClone(this.state.knowledge);
@@ -320,7 +296,7 @@ export class GameEngine {
         message = '放下玩家'; effect = () => { this.state.human.carried = false; };
         break;
       case 'circuit':
-        if (!legacyCircuit && entity?.type !== 'switch') return reject('UNKNOWN_TARGET', '必须指定已识别且可触及的实体电路开关。');
+        if (entity?.type !== 'switch') return reject('UNKNOWN_TARGET', '必须指定已识别且可触及的实体电路开关。');
         if (typeof action.on !== 'boolean' || action.on === this.state.circuitOn) return reject('PRECONDITION_FAILED', '电路已经处于该状态。');
         message = `${action.on ? '开启' : '关闭'}辅助电路`; effect = () => { this.state.circuitOn = action.on; };
         break;
@@ -333,7 +309,7 @@ export class GameEngine {
     }
     const cost = this.actionCost(action);
     if (this.state.robot.battery < cost.battery) return reject('BATTERY_REQUIRED', '电量不足以完成该动作。');
-    if (constraints.reserveReturnBattery && !legacyCircuit) {
+    if (constraints.reserveReturnBattery) {
       const start = action.kind === 'move' ? action.target : this.state.robot.position;
       const destination = this.state.human.carried ? this.level.exit : this.state.human.position;
       const path = findKnownPath(this.level, this.state.knowledge, start, destination, action.kind === 'circuit' ? action.on : this.state.circuitOn, constraints.authorizedHazardIds);
@@ -351,7 +327,7 @@ export class GameEngine {
     }
     this.observe(); this.updateRadar(); this.state.stateRevision++;
     const delta = diffKnowledge(before, this.state.knowledge);
-    this.state.ledger.push({ sequence: this.state.ledger.length + 1, actionId, action: structuredClone(action), cost: { ...cost }, message, position: { ...this.state.robot.position }, oxygen: this.state.human.oxygen, battery: this.state.robot.battery, elapsedTU: this.state.elapsedTU, phase: this.state.phase, constraints: structuredClone(constraints), ...(action.kind === 'circuit' && entity ? { targetPosition: { ...entity.position } } : {}) });
+    this.state.ledger.push({ sequence: this.state.ledger.length + 1, actionId, action: structuredClone(action), cost: { ...cost }, message, position: { ...this.state.robot.position }, oxygen: this.state.human.oxygen, battery: this.state.robot.battery, elapsedTU: this.state.elapsedTU, phase: this.state.phase, constraints: structuredClone(constraints) });
     const result: ActionOutcome = { accepted: true, code: this.state.phase === 'failure' ? 'GAME_FAILED' : 'OK', message, cost, delta, actionId, stateRevision: this.state.stateRevision };
     this.state.processedActions[actionId] = structuredClone(result);
     return result;
@@ -367,7 +343,7 @@ export class GameEngine {
     if (!Number.isInteger(position.x) || !Number.isInteger(position.y) || position.x < 0 || position.x >= this.level.width || position.y < 0 || position.y >= this.level.height) throw new Error('标记坐标非法');
     const marker = { id: crypto.randomUUID(), position: { ...position }, note: note.slice(0, 240), shared, createdAt: this.state.elapsedTU };
     this.state.markers.push(marker);
-    (this.state.markerHistory ??= []).push({ afterSequence: this.state.ledger.length, marker: structuredClone(marker), removed: false });
+    this.state.markerHistory.push({ afterSequence: this.state.ledger.length, marker: structuredClone(marker), removed: false });
     if (shared) this.state.knowledge.markers.push(structuredClone(marker));
     this.state.stateRevision++;
     return marker;
@@ -376,7 +352,7 @@ export class GameEngine {
   removeMarker(id: string): MarkerResult {
     const marker = this.state.markers.find(marker => marker.id === id);
     if (!marker) throw new Error('标记不存在或已移除');
-    (this.state.markerHistory ??= []).push({ afterSequence: this.state.ledger.length, marker: structuredClone(marker), removed: true });
+    this.state.markerHistory.push({ afterSequence: this.state.ledger.length, marker: structuredClone(marker), removed: true });
     this.state.markers = this.state.markers.filter(marker => marker.id !== id);
     this.state.knowledge.markers = this.state.knowledge.markers.filter(marker => marker.id !== id);
     this.state.stateRevision++;
@@ -434,23 +410,9 @@ export class GameEngine {
   snapshot(): GameState { return structuredClone(this.state); }
 
   restore(snapshot: GameState): void {
-    if (snapshot.schemaVersion !== 1 || ![1, 2, 3].includes(snapshot.rulesVersion) || snapshot.levelId !== this.level.id || snapshot.levelVersion !== this.level.version) throw new Error('存档版本不兼容');
-    if (!snapshot.robot || !snapshot.human || !Array.isArray(snapshot.entities) || !Array.isArray(snapshot.ledger) || !snapshot.knowledge) throw new Error('存档不完整');
+    if (snapshot.schemaVersion !== 1 || snapshot.rulesVersion !== 3 || snapshot.levelId !== this.level.id || snapshot.levelVersion !== this.level.version) throw new Error('存档版本不兼容');
+    if (!snapshot.robot || !snapshot.human || !Array.isArray(snapshot.entities) || !Array.isArray(snapshot.ledger) || !Array.isArray(snapshot.markerHistory) || !snapshot.knowledge) throw new Error('存档不完整');
     this.state = structuredClone(snapshot);
-    if (snapshot.rulesVersion < 3) {
-      for (const definition of this.level.entities.filter(e => e.type === 'switch')) {
-        const entity = this.getEntity(definition.id);
-        if (!entity) this.state.entities.push({ ...structuredClone(definition), opened: false, repaired: false, removed: false, taken: false });
-        else {
-          for (const entry of this.state.ledger) {
-            if (entry.action.kind === 'circuit' && entry.action.targetId === entity.id && !entry.targetPosition) entry.targetPosition = { ...entity.position };
-          }
-          if (!samePosition(entity.position, definition.position)) this.relocateSwitch(entity, definition.position);
-        }
-      }
-      this.state.rulesVersion = 3;
-      this.observe(); this.updateRadar();
-    }
     if (!this.terminal) this.state.phase = 'paused';
   }
 }

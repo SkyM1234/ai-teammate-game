@@ -11,6 +11,7 @@ import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveMod
 import type { CredentialSource } from './credentials.ts';
 import type { ModelAdapter, ModelConfig, ToolIntent } from './model.ts';
 import { SessionJournal } from './journal.ts';
+import type { HistoryView } from './journal.ts';
 import { demoHelp, parseDemoCommand } from './demo-task.ts';
 import type { DemoGoal } from './demo-task.ts';
 
@@ -42,12 +43,14 @@ export interface SessionView extends PlayerView {
   modelConfig: ModelConfig; modelReady: boolean; modelError: string | null; modelCredentialSource: CredentialSource;
   pendingAuthorization: PendingAuthorization | null;
   pendingRouteSelection: PendingRouteSelection | null;
+  history: HistoryView;
 }
+export interface HistoryPreview { nodeId: string; state: SessionView }
 interface TaskMemory {
   startSequence: number; initialKnownEntityIds: string[];
   recentFailures: { tool: string; arguments: Record<string, unknown>; position: Position; elapsedTU: number; code: string; message: string }[];
 }
-export interface SessionSave { version: 1; id: string; level?: Level; engine: GameState; task: Task | null; taskMemory?: TaskMemory; messages: ChatMessage[]; metrics: Metrics; eventId: number; modelConfig?: ModelConfig }
+export interface SessionSave { version: 1; id: string; level: Level; engine: GameState; task: Task | null; taskMemory?: TaskMemory; messages: ChatMessage[]; agentMessages: AgentMessage[]; metrics: Metrics; eventId: number; modelConfig: ModelConfig }
 interface ToolOutcome {
   accepted: boolean; code: string; message: string; delta: ObservationDelta;
   executedSteps?: number; targetReached?: boolean; costTU: number;
@@ -96,7 +99,7 @@ taskProgress 是程序根据本次委托开始时的知识和实际执行结果�
 
 export class GameSession {
   readonly id: string;
-  readonly instanceId = crypto.randomUUID();
+  instanceId = crypto.randomUUID();
   readonly engine: GameEngine;
   readonly agent: Agent;
   adapter: ModelAdapter;
@@ -126,6 +129,7 @@ export class GameSession {
   private taskMemory: TaskMemory | null = null;
   private currentPromise: Promise<void> | null = null;
   private operationSerial: Promise<unknown> = Promise.resolve();
+  private rewinding = false;
   pendingAuthorization: PendingAuthorization | null = null;
   pendingRouteSelection: PendingRouteSelection | null = null;
   journal?: SessionJournal;
@@ -358,7 +362,7 @@ export class GameSession {
       if (this.task && previousMode !== this.adapter.mode) this.interpretTask();
       this.modelError = null;
       this.pause(`已切换为 ${this.adapter.label}。当前游戏进度保留，请重新下达指令。`);
-      this.emit();
+      this.checkpoint('切换模型');
     });
   }
 
@@ -493,6 +497,7 @@ export class GameSession {
       this.pendingAuthorization = request;
       if (this.task) { this.task.status = 'waiting'; this.task.waitReason = 'authorization'; this.task.question = request.description; }
       this.engine.state.phase = 'awaiting_player';
+      this.record('等待授权', request, true);
       this.say('robot', request.description);
     });
     try { return await decision; } finally { signal?.removeEventListener('abort', abort); }
@@ -566,9 +571,21 @@ export class GameSession {
     this.emit();
   }
 
-  private emit(): void { this.eventId++; const view = this.view(); for (const listener of this.listeners) listener(view); }
+  private emit(boundary?: string): void {
+    this.eventId++; this.journal?.capture(this.save());
+    if (boundary) this.journal?.boundary(boundary);
+    const view = this.view(); for (const listener of this.listeners) listener(view);
+  }
 
-  private record(title: string, data: unknown, includeRequest = false): void { void this.journal?.record(title, data, includeRequest).catch(() => undefined); }
+  checkpoint(label: string): void {
+    if (this.running) throw new Error('运行中不能创建可回溯节点');
+    this.emit(label);
+  }
+
+  private record(title: string, data: unknown, includeRequest = false): void {
+    this.journal?.capture(this.save());
+    void this.journal?.record(title, data, includeRequest).catch(() => undefined);
+  }
 
   private waitForPlayer(question: string, reason: Task['waitReason'] = 'decision'): void {
     this.control = 'wait_player';
@@ -885,7 +902,7 @@ export class GameSession {
 
   private async startRun(text: string): Promise<void> {
     await this.adapter.checkReady?.();
-    if (this.adapter.ready === false) { this.modelError = '未找到可用的模型凭据，请检查 pi 登录、API Key 或模型设置。'; this.pause(this.modelError); this.emit(); return; }
+    if (this.adapter.ready === false) { this.modelError = '未找到可用的模型凭据，请检查 pi 登录、API Key 或模型设置。'; this.pause(this.modelError); this.checkpoint(text); return; }
     this.modelError = null;
     this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.budgetStopReason = null; this.closingTurn = false; this.control = 'continue'; this.running = true;
     this.record('自动运行开始', { text, task: this.task, stateRevision: this.engine.state.stateRevision });
@@ -898,7 +915,7 @@ export class GameSession {
       if (this.closingTurn && this.task && this.control !== 'task_done') this.cancelTask('预算收尾结束，尚未确认整项委托完成，委托已取消；后续行动请重新下达指令。');
       if (!this.engine.terminal && this.control === 'task_done') this.engine.state.phase = 'awaiting_command';
       else if (!this.engine.terminal && this.engine.state.phase === 'executing') this.engine.state.phase = 'paused';
-      this.emit();
+      this.checkpoint(text);
     });
     this.emit();
   }
@@ -913,12 +930,17 @@ export class GameSession {
   }
 
   private async serial<T>(operation: () => Promise<T>): Promise<T> {
-    const promise = this.operationSerial.then(operation);
+    const instanceId = this.instanceId;
+    const promise = this.operationSerial.then(() => {
+      if (instanceId !== this.instanceId) throw new RevisionConflictError('对局已回溯，旧操作已取消');
+      return operation();
+    });
     this.operationSerial = promise.catch(() => undefined);
     return promise;
   }
 
-  async stop(): Promise<void> { await this.serial(async () => { await this.cancelRunning(); this.cancelTask('已停止，委托已取消，请重新下达指令。未执行动作不消耗资源。'); this.emit(); }); }
+  async stop(): Promise<void> { await this.serial(async () => { await this.cancelRunning(); this.cancelTask('已停止，委托已取消，请重新下达指令。未执行动作不消耗资源。'); this.checkpoint('停止运行'); }); }
+  async suspend(): Promise<void> { await this.serial(async () => { await this.cancelRunning(); }); }
 
   async manual(action: Action, requestId: string, allowHazard = false, expectedRevision?: number): Promise<ActionOutcome> {
     return this.serial(async () => {
@@ -931,11 +953,12 @@ export class GameSession {
       if (!this.engine.terminal) this.engine.state.phase = 'paused';
       if (this.task && this.task.status === 'active') this.task.status = 'paused';
       this.say(outcome.accepted ? 'robot' : 'system', outcome.message);
-      this.emit(); return outcome;
+      this.checkpoint(outcome.message); return outcome;
     });
   }
 
   marker(position: Position, note: string, shared: boolean): void {
+    if (this.rewinding) throw new RevisionConflictError('正在恢复历史，请稍后重试');
     this.engine.addMarker(position, note, shared);
     this.record('玩家添加标记', { position, note, shared, elapsedTU: this.engine.state.elapsedTU });
     if (shared) {
@@ -945,10 +968,11 @@ export class GameSession {
       this.engine.state.knowledge.markers = this.engine.state.markers.filter(marker => marker.shared);
       this.say('human', `标记 (${position.x}, ${position.y})：${note || '请检查此处'}。回波的具体对象尚未确认。`);
     }
-    this.emit();
+    if (this.running) this.emit(); else this.checkpoint('添加标记');
   }
 
   removeMarker(id: string): void {
+    if (this.rewinding) throw new RevisionConflictError('正在恢复历史，请稍后重试');
     const marker = this.engine.removeMarker(id);
     this.record('玩家移除标记', { ...marker, elapsedTU: this.engine.state.elapsedTU });
     if (marker.shared) {
@@ -957,28 +981,63 @@ export class GameSession {
       this.resolveAuthorization('stale');
       this.say('human', `已移除共享标记 (${marker.position.x}, ${marker.position.y})：${marker.note || '未填写说明'}。请以当前共享标记列表为准。`);
     }
-    this.emit();
+    if (this.running) this.emit(); else this.checkpoint('移除标记');
   }
 
-  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, demoRescueAvailable: !!this.engine.level.verification?.actions.length, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization), pendingRouteSelection: structuredClone(this.pendingRouteSelection) }; }
-  save(): SessionSave { return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), ...(this.taskMemory ? { taskMemory: structuredClone(this.taskMemory) } : {}), messages: structuredClone(this.messages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } }; }
-  async restore(save: SessionSave, apiKey?: string): Promise<void> {
+  view(): SessionView { return { ...this.engine.playerView(), sessionId: this.id, sessionInstanceId: this.instanceId, eventId: this.eventId, task: structuredClone(this.task), messages: structuredClone(this.messages), metrics: { ...this.metrics }, demoRescueAvailable: !!this.engine.level.verification?.actions.length, agentMode: this.adapter.mode, agentLabel: this.adapter.label, running: this.running, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) }, modelReady: this.adapter.ready !== false, modelError: this.modelError, modelCredentialSource: this.adapter.credentialSource ?? 'none', pendingAuthorization: structuredClone(this.pendingAuthorization), pendingRouteSelection: structuredClone(this.pendingRouteSelection), history: this.journal?.history() ?? { headId: null, nodes: [] } }; }
+  save(): SessionSave {
+    const agentMessages = this.agent.state.messages.map(message => message.role === 'assistant' && message.errorMessage ? { ...message, errorMessage: modelErrorMessage(message.errorMessage) } : message);
+    return { version: 1, id: this.id, level: structuredClone(this.engine.level), engine: this.engine.snapshot(), task: structuredClone(this.task), ...(this.taskMemory ? { taskMemory: structuredClone(this.taskMemory) } : {}), messages: structuredClone(this.messages), agentMessages: structuredClone(agentMessages), metrics: { ...this.metrics }, eventId: this.eventId, modelConfig: { ...(this.adapter.config ?? defaultModelConfig) } };
+  }
+  async restore(save: SessionSave, apiKey?: string, keepAdapter = false): Promise<void> {
     if (save.version !== 1 || save.id !== this.id) throw new Error('存档版本或会话不匹配');
-    this.engine.restore(save.engine); this.task = structuredClone(save.task); this.messages = save.messages; this.metrics = save.metrics; this.eventId = save.eventId;
-    this.taskMemory = this.task ? structuredClone(save.taskMemory ?? this.newTaskMemory()) : null;
-    if (save.modelConfig) {
+    if (!save.level || !save.modelConfig || !Array.isArray(save.agentMessages) || save.task && (!save.taskMemory || !['model', 'demo'].includes(save.task.interpretation))) throw new Error('存档不完整');
+    this.agent.reset(); this.transcript = []; this.allowedCalls.clear(); this.deniedCalls.clear(); this.toolRoute = null; this.toolHazards = [];
+    this.pendingAuthorization = null; this.pendingRouteSelection = null; this.modelError = null;
+    this.engine.restore(save.engine);
+    if (!['agent_thinking', 'executing'].includes(save.engine.phase)) this.engine.state.phase = save.engine.phase;
+    this.task = structuredClone(save.task); this.messages = structuredClone(save.messages); this.metrics = { ...save.metrics }; this.eventId = save.eventId;
+    for (const message of this.messages) if (message.tool && ['queued', 'running', 'waiting'].includes(message.tool.status)) message.tool.status = 'cancelled';
+    this.agent.state.messages = structuredClone(save.agentMessages);
+    this.knowledgeBefore = structuredClone(this.engine.state.knowledge);
+    this.taskMemory = this.task ? structuredClone(save.taskMemory!) : null;
+    if (!keepAdapter) {
       const config = validateModelConfig(save.modelConfig);
       this.adapter = config.mode === 'live' ? await liveModel(config, apiKey) : this.demoAdapter(config);
       this.modelKey = config.mode === 'live' ? apiKey ?? '' : '';
       this.agent.state.model = this.adapter.model; this.agent.streamFunction = this.adapter.streamFn;
       if (this.adapter.ready === false) this.modelError = '存档的真实模型未找到可用凭据，请检查 pi 登录、API Key 或模型设置。';
     }
-    if (this.task) {
-      const legacyLiveTask = this.adapter.mode === 'live' && this.task.interpretation !== 'model';
-      this.interpretTask();
-      if (legacyLiveTask) this.task.status = 'paused';
+    if (this.task && (this.task.status === 'active' || this.task.waitReason === 'authorization' || this.task.waitReason === 'power' || this.task.waitReason === 'route')) {
+      this.task.status = 'paused'; this.task.question = null; this.task.waitReason = undefined;
+      if (!this.engine.terminal) this.engine.state.phase = 'paused';
     }
-    if (this.task && (this.task.status === 'active' || this.task.waitReason === 'authorization' || this.task.waitReason === 'power' || this.task.waitReason === 'route')) { this.task.status = 'paused'; this.task.question = null; this.task.waitReason = undefined; }
+  }
+
+  preview(nodeId: string): HistoryPreview {
+    if (!this.journal) throw new Error('对局历史不可用');
+    const save = this.journal.boundarySave(nodeId);
+    const engine = new GameEngine(save.level); engine.restore(save.engine); engine.state.phase = save.engine.phase;
+    return { nodeId, state: { ...this.view(), ...engine.playerView(), task: structuredClone(save.task), messages: structuredClone(save.messages), metrics: { ...save.metrics }, modelConfig: { ...save.modelConfig }, running: false, pendingAuthorization: null, pendingRouteSelection: null } };
+  }
+
+  async rewind(nodeId: string, expectedRevision: number, expectedInstanceId: string): Promise<void> {
+    await this.serial(async () => {
+      if (this.running) throw new RevisionConflictError('请先停止当前运行，再从历史节点继续');
+      if (expectedRevision !== this.engine.state.stateRevision || expectedInstanceId !== this.instanceId) throw new RevisionConflictError('对局状态已更新，请刷新历史后重试');
+      if (!this.journal) throw new Error('对局历史不可用');
+      const save = this.journal.boundarySave(nodeId);
+      const revision = this.engine.state.stateRevision, metrics = { ...this.metrics }, eventId = this.eventId;
+      this.rewinding = true;
+      try {
+        await this.cancelRunning();
+        await this.restore(save, undefined, isDeepStrictEqual(save.modelConfig, this.adapter.config ?? defaultModelConfig));
+        await this.journal.select(nodeId);
+        this.engine.state.stateRevision = Math.max(revision, save.engine.stateRevision) + 1;
+        this.metrics = metrics; this.eventId = eventId; this.instanceId = crypto.randomUUID();
+        this.emit(); await this.journal.flush();
+      } finally { this.rewinding = false; }
+    });
   }
   async settled(): Promise<void> { await this.currentPromise; await this.journal?.flush(); }
 }

@@ -195,20 +195,16 @@ test('本次新发现与原来已知对象分开，get_status 同步进展，新
   assert.equal(latest.messages.length, 2); assert.equal(userText(latest.messages[1]), '留在这里，不要通电');
 });
 
-test('执行记录随原有存档保存恢复，旧存档从恢复状态建立基线', async () => {
+test('执行记录与完整 AI 消息随当前存档准确保存恢复', async () => {
   const { session } = scripted([[move(4, 2)], [scan], [move(4, 3)], [move(6, 2)], [finish]]);
   await session.command('探索未知回波'); await session.settled();
   const save = session.save();
   assert.ok(save.taskMemory); assert.equal(save.taskMemory.recentFailures.length, 1);
   assert.ok(!save.taskMemory.initialKnownEntityIds.includes('sw-01'));
-  const restored = scripted([], session.id).session; delete save.modelConfig;
-  await restored.restore(save);
+  const restored = scripted([], session.id).session;
+  await restored.restore(save, undefined, true);
   assert.deepEqual(restored.save().taskMemory, save.taskMemory);
-  const oldSave = structuredClone(save); delete oldSave.taskMemory;
-  await restored.restore(oldSave);
-  const baseline = restored.save().taskMemory!;
-  assert.equal(baseline.startSequence, restored.engine.state.ledger.length);
-  assert.ok(baseline.initialKnownEntityIds.includes('sw-01')); assert.deepEqual(baseline.recentFailures, []);
+  assert.deepEqual(restored.agent.state.messages, save.agentMessages);
 });
 
 test('失败执行记录只保留最近五项，长期上下文有界', async () => {

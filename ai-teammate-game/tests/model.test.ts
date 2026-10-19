@@ -74,8 +74,8 @@ test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把�
   for (const request of requests) { const body = JSON.stringify(request.body); assert.ok(!body.includes('s-04')); assert.ok(!body.includes('a-01')); assert.ok(!body.includes(secret)); }
   assert.ok(JSON.stringify(requests[0].body.messages).includes('均使用简体中文'));
   assert.ok(!JSON.stringify(session.view()).includes(secret)); assert.ok(!JSON.stringify(session.save()).includes(secret));
-  assert.deepEqual(await readdir(directory), ['events.jsonl']);
-  const events = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  assert.deepEqual(await readdir(directory), ['session.jsonl']);
+  const events = await readFile(join(directory, 'session.jsonl'), 'utf8');
   const entries = events.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
   const contexts = entries.filter(entry => entry.type === 'model_request');
   const responses = entries.filter(entry => entry.type === 'model_response');
@@ -162,13 +162,13 @@ test('上游鉴权错误和超时暂停任务，不泄露上游错误内容或�
     assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.engine.state.human.oxygen, 120);
     assert.ok(session.modelError); assert.ok(!JSON.stringify(session.view()).includes(secret));
     assert.match(session.modelError, failure === 'auth' ? /鉴权/ : /超时/);
-    const log = await readFile(join(directory, 'events.jsonl'), 'utf8');
+    const log = await readFile(join(directory, 'session.jsonl'), 'utf8');
     const entries = log.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
     assert.equal(entries.filter(entry => entry.type === 'model_request').length, 1);
     assert.ok(entries.some(entry => entry.type === 'model_response')); assert.ok(log.includes('自动运行结束')); assert.ok(!log.includes(secret));
     if (failure === 'auth') {
       await session.command('检查附近'); await session.settled();
-      const after = await readFile(join(directory, 'events.jsonl'), 'utf8');
+      const after = await readFile(join(directory, 'session.jsonl'), 'utf8');
       const entries = after.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
       assert.equal(entries.filter(entry => entry.type === 'model_request').length, 2);
       assert.ok(after.startsWith(log)); assert.ok(!after.includes(secret));
@@ -205,7 +205,7 @@ test('切换模型取消正在等待的网络请求，保留进度和委托；�
   assert.equal(session.running, false); assert.equal(session.adapter.mode, 'demo');
   assert.equal(session.task?.text, '检查附近通道'); assert.equal(session.task.status, 'paused');
   assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.agent.state.model.id, 'local-demo');
-  const cancelled = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  const cancelled = await readFile(join(directory, 'session.jsonl'), 'utf8');
   const entries = cancelled.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
   assert.equal(entries.filter(entry => entry.type === 'model_request').length, 1);
   assert.ok(cancelled.includes('取消当前运行')); assert.ok(cancelled.includes('自动运行结束')); assert.ok(!cancelled.includes(secret));
@@ -242,7 +242,7 @@ test('配置 API、SSE 和落盘存档只包含非敏感模型设置', async t =
   const reader = response.body!.getReader(); const chunk = await reader.read(); assert.ok(!new TextDecoder().decode(chunk.value).includes(secret));
   controller.abort(); await reader.cancel().catch(() => undefined);
   await post(`${path}/save`, { requestId: crypto.randomUUID() });
-  const save = await readFile(join(savesDir, id, 'game.json'), 'utf8'); assert.ok(!save.includes(secret)); assert.ok(save.includes('mock-robot'));
+  const save = await readFile(join(savesDir, id, 'session.jsonl'), 'utf8'); assert.ok(!save.includes(secret)); assert.ok(save.includes('mock-robot'));
   const catalog = await fetch(base + '/api/models').then(r => r.json()); assert.ok(catalog.some((p: { id: string }) => p.id === 'openai')); assert.ok(catalog.some((p: { id: string }) => p.id === 'google')); assert.ok(!JSON.stringify(catalog).includes(secret));
 });
 

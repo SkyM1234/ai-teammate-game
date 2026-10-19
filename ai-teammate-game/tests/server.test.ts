@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
-import { readFile, mkdtemp, readdir, writeFile, rm } from 'node:fs/promises';
+import { readFile, mkdtemp, mkdir, readdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import test from 'node:test';
 import type { TestContext } from 'node:test';
 import { createAppServer } from '../apps/server/src/server.ts';
-import type { SessionView } from '../apps/server/src/session.ts';
-import type { ReplayView } from '../packages/game-core/src/types.ts';
-import type { JournalEntry } from '../apps/server/src/journal.ts';
+import type { HistoryPreview, SessionView } from '../apps/server/src/session.ts';
+import { SessionJournal } from '../apps/server/src/journal.ts';
+import type { HistoryView, JournalEntry } from '../apps/server/src/journal.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
@@ -41,47 +41,44 @@ test('仅提供选定的三首 WAV 音乐，并使用正确的音频类型', asy
   assert.equal((await fetch(`${base}/audio/README.md`)).status, 404);
 });
 
-test('每局仅保存游戏快照和统一日志，恢复后继续追加并保留旧日志', async t => {
+test('每局仅保存单个树形 JSONL，恢复完整状态与 AI 消息后继续追加', async t => {
   const { call, sessions, savesDir, initial } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`;
   await call(`${path}/command`, { requestId: crypto.randomUUID(), expectedRevision: 0, text: '前往 (3,9)' });
   await sessions.get(initial.sessionId)!.settled();
   await call(`${path}/save`, { requestId: crypto.randomUUID() });
   const directory = join(savesDir, initial.sessionId);
-  assert.deepEqual((await readdir(directory)).sort(), ['events.jsonl', 'game.json']);
-  const game = await readFile(join(directory, 'game.json'), 'utf8');
-  assert.ok(game.includes('\n  "version"')); assert.equal(JSON.parse(game).engine.elapsedTU, 1);
-  const eventsBefore = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  assert.deepEqual(await readdir(directory), ['session.jsonl']);
+  const saved = sessions.get(initial.sessionId)!.save();
+  assert.deepEqual((await SessionJournal.open(directory)).restoreAt(), JSON.parse(JSON.stringify(saved)));
+  const eventsBefore = await readFile(join(directory, 'session.jsonl'), 'utf8');
   const before = eventsBefore.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
   const firstRequest = before.find(entry => entry.type === 'model_request');
   assert.ok(firstRequest && firstRequest.type === 'model_request');
   assert.ok(JSON.stringify(firstRequest).includes('local-demo'));
-  // Existing Markdown files remain intact when an old game is resumed.
-  await writeFile(join(directory, 'events.md'), '旧日志\n', 'utf8');
   const loaded = await call(`${path}/load`, {}); assert.equal(loaded.status, 200);
+  assert.deepEqual(sessions.get(initial.sessionId)!.agent.state.messages, JSON.parse(JSON.stringify(saved.agentMessages)));
   await call(`${path}/command`, { requestId: crypto.randomUUID(), expectedRevision: loaded.data.stateRevision, text: '前往 (3,8)' });
   await sessions.get(initial.sessionId)!.settled();
   await call(`${path}/save`, { requestId: crypto.randomUUID() });
-  const eventsAfter = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  const eventsAfter = await readFile(join(directory, 'session.jsonl'), 'utf8');
   assert.ok(eventsAfter.startsWith(eventsBefore)); assert.ok(eventsAfter.includes('前往 (3,8)'));
   const requests = eventsAfter.trim().split('\n').map(line => JSON.parse(line) as JournalEntry).filter(entry => entry.type === 'model_request');
   assert.equal(requests.length, 2); assert.equal(new Set(requests.map(entry => entry.requestId)).size, 2);
-  assert.equal(await readFile(join(directory, 'events.md'), 'utf8'), '旧日志\n');
-  assert.deepEqual((await readdir(directory)).sort(), ['events.jsonl', 'events.md', 'game.json']);
+  assert.deepEqual(await readdir(directory), ['session.jsonl']);
 });
 
-test('旧平铺存档仍可列出和恢复，恢复后写入对局目录且不改写旧文件', async t => {
+test('仅列出和恢复树形 JSONL，忽略并拒绝旧 JSON 存档', async t => {
   const { call, sessions, savesDir, initial } = await fixture(t);
-  const id = crypto.randomUUID();
-  const legacy = JSON.stringify({ ...sessions.get(initial.sessionId)!.save(), id });
-  await writeFile(join(savesDir, `${id}.json`), legacy, 'utf8');
+  const flatId = crypto.randomUUID(), directoryId = crypto.randomUUID();
+  const save = sessions.get(initial.sessionId)!.save();
+  await writeFile(join(savesDir, `${flatId}.json`), JSON.stringify({ ...save, id: flatId }), 'utf8');
+  await mkdir(join(savesDir, directoryId));
+  await writeFile(join(savesDir, directoryId, 'game.json'), JSON.stringify({ ...save, id: directoryId }), 'utf8');
   const listed = await call<{ id: string; modified: number }[]>('/api/saves');
-  assert.ok(listed.data.some(save => save.id === id));
-  assert.equal((await call(`/api/sessions/${id}/load`, {})).status, 200);
-  assert.equal(JSON.parse(await readFile(join(savesDir, id, 'game.json'), 'utf8')).id, id);
-  assert.equal(await readFile(join(savesDir, `${id}.json`), 'utf8'), legacy);
-  const deduplicated = await call<{ id: string; modified: number }[]>('/api/saves');
-  assert.equal(deduplicated.data.filter(save => save.id === id).length, 1);
+  assert.deepEqual(listed.data.map(save => save.id), [initial.sessionId]);
+  for (const id of [flatId, directoryId]) assert.equal((await call(`/api/sessions/${id}/load`, {})).status, 404);
+  assert.deepEqual(await readdir(join(savesDir, directoryId)), ['game.json']);
 });
 
 test('HTTP 动作去重、版本冲突、并发提交及非法参数都不重复扣资源', async t => {
@@ -238,7 +235,7 @@ test('HTTP 请求去重按会话实例隔离，恢复后不会返回旧实例缓
   assert.deepEqual((await call(`${path}/marker`, input)).data, marked.data);
 });
 
-test('通过 HTTP 完整救援后存档恢复、账本回放与原局的资源和结局一致', async t => {
+test('通过 HTTP 完整救援后从 JSONL 恢复资源、物品、知识和结局', async t => {
   const { call, initial } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`;
   const route = runRescueRoute(level, 'upper'); let view = initial;
@@ -250,27 +247,31 @@ test('通过 HTTP 完整救援后存档恢复、账本回放与原局的资源�
   assert.equal(view.phase, 'success');
   await call(`${path}/save`, { requestId: crypto.randomUUID(), expectedRevision: view.stateRevision });
   const loaded = await call(`${path}/load`, {}); assert.equal(loaded.data.phase, 'success'); assert.deepEqual(loaded.data.robot, view.robot);
-  const replay = await call<ReplayView>(`${path}/replay`); assert.equal(replay.status, 200);
+  const history = (await call<HistoryView>(`${path}/history`)).data;
+  const replay = await call<HistoryPreview>(`${path}/history?node=${history.nodes[0].id}`); assert.equal(replay.status, 200);
   assert.equal(replay.data.state.elapsedTU, 0); assert.ok(!JSON.stringify(replay.data.state).includes('s-04'));
-  assert.equal(replay.data.total, route.state.ledger.length);
-  const end = (await call<ReplayView>(`${path}/replay?step=${replay.data.total}`)).data.state;
+  assert.equal(history.nodes.length, route.state.ledger.length + 1);
+  const end = (await call<HistoryPreview>(`${path}/history?node=${history.headId}`)).data.state;
   assert.equal(end.phase, 'success'); assert.equal(end.elapsedTU, view.elapsedTU); assert.equal(end.human.oxygen, view.human.oxygen);
 });
 
-test('HTTP 回溯按指定步数返回当时知识和资源，校验范围且不改变实时对局', async t => {
+test('HTTP 按完成节点查看历史状态与对话，拒绝逐格回放且不改变实时对局', async t => {
   const { call, sessions, initial } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`;
-  assert.equal((await call<ReplayView>(`${path}/replay`)).data.total, 0);
+  assert.equal((await call<HistoryView>(`${path}/history`)).data.nodes.length, 1);
   for (const [index, target] of [{ x: 3, y: 9 }, { x: 3, y: 8 }].entries()) {
     assert.equal((await call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: index, action: { kind: 'move', target } })).status, 200);
   }
   const session = sessions.get(initial.sessionId)!; const before = session.save();
-  const middle = await call<ReplayView>(`${path}/replay?step=1`);
-  assert.equal(middle.status, 200); assert.equal(middle.data.step, 1); assert.equal(middle.data.total, 2);
+  const history = (await call<HistoryView>(`${path}/history`)).data;
+  const middle = await call<HistoryPreview>(`${path}/history?node=${history.nodes[1].id}`);
+  assert.equal(middle.status, 200); assert.equal(middle.data.nodeId, history.nodes[1].id);
   assert.deepEqual(middle.data.state.robot.position, { x: 3, y: 9 });
   assert.equal(middle.data.state.human.oxygen, 118); assert.equal(middle.data.state.ledger.length, 1);
-  assert.equal(middle.data.entries.length, 2); assert.ok(!JSON.stringify(middle.data.state).includes('s-04'));
-  for (const step of ['-1', '3', '1.5', 'abc', '', 'Infinity', '9007199254740992']) assert.equal((await call(`${path}/replay?step=${step}`)).status, 400, step);
+  assert.deepEqual(middle.data.state.messages, before.messages.slice(0, -1));
+  assert.ok(!JSON.stringify(middle.data.state).includes('s-04'));
+  for (const node of ['-1', 'abc', '', crypto.randomUUID()]) assert.equal((await call(`${path}/history?node=${node}`)).status, 400, node);
+  assert.equal((await call(`${path}/replay?step=1`)).status, 405);
   assert.deepEqual(session.save(), before);
 });
 

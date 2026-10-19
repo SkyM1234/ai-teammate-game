@@ -142,22 +142,18 @@ test('重新委托真实任务使用新指令和选中位置，不产生关键�
   }
 });
 
-test('旧真实模式存档丢弃关键词目标与自动授权，恢复后暂停', async () => {
+test('恢复拒绝缺少当前格式字段和任务解释的存档', async () => {
   const source = liveSession([[finish]]).session;
   await source.command('不要维修气闸，先回来'); await source.settled();
-  const save = source.save(); delete save.modelConfig;
-  const legacyTask = save.task! as unknown as Record<string, unknown>;
-  delete legacyTask.interpretation;
-  legacyTask.goal = { kind: 'repair', targetId: 'airlock' };
-  save.task!.constraints.allowedRepairs = ['airlock'];
-  save.task!.constraints.authorizedHazardIds = ['h-01'];
   const restored = liveSession([], level, source.id).session;
-  await restored.restore(save);
-  assert.equal(restored.task?.interpretation, 'model'); assert.equal(restored.task.goal, undefined);
-  assert.deepEqual(restored.task.constraints.allowedRepairs, []);
-  assert.deepEqual(restored.task.constraints.authorizedHazardIds, []);
-  assert.equal(restored.task.status, 'paused'); assert.equal(restored.engine.state.phase, 'paused');
-  assert.deepEqual(save.task!.constraints.allowedRepairs, ['airlock']);
+  for (const field of ['level', 'modelConfig', 'agentMessages', 'taskMemory']) {
+    const save = source.save();
+    delete (save as unknown as Record<string, unknown>)[field];
+    await assert.rejects(restored.restore(save), /存档不完整/);
+  }
+  const save = source.save();
+  delete (save.task as unknown as Record<string, unknown>).interpretation;
+  await assert.rejects(restored.restore(save), /存档不完整/);
 });
 
 test('切换到真实模式清除演示目标和授权，切回演示重新校验原文', async () => {

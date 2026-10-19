@@ -85,8 +85,7 @@ export interface ActionOutcome {
 }
 export interface LedgerEntry {
   sequence: number; actionId: string; action: Action; cost: Cost; message: string;
-  position: Position; oxygen: number; battery: number; elapsedTU: number; phase: Phase; constraints?: Constraints;
-  targetPosition?: Position;
+  position: Position; oxygen: number; battery: number; elapsedTU: number; phase: Phase; constraints: Constraints;
 }
 export interface GameState {
   schemaVersion: number; levelId: string; levelVersion: number; rulesVersion: number;
@@ -94,7 +93,7 @@ export interface GameState {
   human: { position: Position; oxygen: number; oxygenRate: number; carried: boolean };
   robot: { position: Position; battery: number; inventory: string[] };
   entities: Entity[]; knowledge: Knowledge; radarHistory: RadarEcho[]; markers: Marker[];
-  markerHistory?: { afterSequence: number; marker: Marker; removed: boolean }[];
+  markerHistory: { afterSequence: number; marker: Marker; removed: boolean }[];
   ledger: LedgerEntry[]; processedActions: Record<string, ActionOutcome>; failureReason: string | null;
 }
 export interface PlayerView {

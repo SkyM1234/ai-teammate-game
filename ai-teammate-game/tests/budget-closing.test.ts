@@ -64,7 +64,7 @@ test('维修恰好耗尽 TU 和请求预算后，沿原对话只用报告与完�
   assert.ok(contexts[1].messages.some(message => message.role === 'user' && JSON.stringify(message.content).includes(command)));
   assert.ok(contexts[1].messages.some(message => message.role === 'toolResult' && message.toolName === 'interact' && JSON.stringify(message.content).includes('oxygenRate')));
   assert.ok(!JSON.stringify(contexts[1]).includes('s-04'));
-  const logs = (await readFile(join(directory, 'events.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+  const logs = (await readFile(join(directory, 'session.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
   const closingLog = logs.find(entry => entry.type === 'model_request' && entry.sequence === 2);
   assert.ok(closingLog && closingLog.type === 'model_request');
   const metadata = closingLog.metadata as { closingTurn: boolean };
@@ -135,7 +135,7 @@ test('停止、手动接管、切换模型或新指令可以取消收尾请求�
     } });
     await session.command('旧委托'); await arrival;
     const restored = new GameSession(custom, { adapter: session.adapter, id: session.id, delayMs: 0 });
-    await restored.restore({ ...session.save(), modelConfig: undefined });
+    await restored.restore(session.save(), undefined, true);
     assert.equal(restored.running, false); assert.equal(restored.task?.status, 'paused');
     assert.equal(requests, 2);
     if (interruption === 'stop') await session.stop();

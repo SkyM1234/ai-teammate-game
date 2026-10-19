@@ -1,8 +1,8 @@
-import type { SessionView } from '../../server/src/session.ts';
+import type { HistoryPreview, SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { LevelSummary } from '../../server/src/levels.ts';
-import type { Action, Position, ReplayView } from '../../../packages/game-core/src/types.ts';
+import type { Action, Position } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { StationRenderer } from './station-renderer.ts';
 import type { RouteOverlay } from './station-renderer.ts';
@@ -28,7 +28,7 @@ catch {
 let view: SessionView | null = null;
 let selected: Position | null = null;
 let stream: EventSource | null = null;
-let replay: ReplayView | null = null;
+let replay: HistoryPreview | null = null;
 let replayLoading = false;
 let replayRequest = 0;
 let toastTimer: ReturnType<typeof setTimeout>;
@@ -88,7 +88,7 @@ async function post(operation: string, payload: Record<string, unknown> = {}) {
   if (replayLoading && operation !== 'stop') return false;
   const session = view; const source = stream;
   try {
-    const next = await api<SessionView>(`/api/sessions/${session.sessionId}/${operation}`, { requestId: crypto.randomUUID(), expectedRevision: session.stateRevision, ...payload });
+    const next = await api<SessionView>(`/api/sessions/${session.sessionId}/${operation}`, { requestId: crypto.randomUUID(), expectedRevision: session.stateRevision, expectedInstanceId: session.sessionInstanceId, ...payload });
     if (!isCurrent(source, session)) return false;
     accept(next); return true;
   }
@@ -224,12 +224,12 @@ function render() {
   if (!$('nearby').childElementCount) { const hint = document.createElement('p'); hint.className = 'subtle'; hint.textContent = '附近没有已确认的可操作对象。'; $('nearby').append(hint); }
   $('nearby-count').textContent = `${$('nearby').querySelectorAll('button').length} 项操作`;
   document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.disabled = terminal || !!replay; });
-  const task = replay ? null : view.task;
+  const task = p.task;
   $('task').replaceChildren();
   const taskStatus = task?.status === 'completed' && task.interpretation === 'model' ? '已结束' : task ? { active: '执行中', paused: '暂停', waiting: '待决定', completed: '已完成' }[task.status] : '待命';
   $('comms-state').textContent = !replay && view.pendingRouteSelection ? '等待选路' : !replay && view.pendingAuthorization ? '等待授权' : replay ? '历史回溯' : taskStatus;
   const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${taskStatus}`;
-  const taskText = document.createElement('p'); taskText.textContent = replay ? '正在查看历史游戏状态，返回实时后可继续指挥。' : task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
+  const taskText = document.createElement('p'); taskText.textContent = task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
   if (task?.question) { const question = document.createElement('p'); question.className = 'question'; question.textContent = task.question; $('task').append(question); }
   $<HTMLButtonElement>('stop').disabled = !!replay || terminal || !view.running;
   $<HTMLButtonElement>('send').disabled = !!replay || terminal || sending;
@@ -240,35 +240,35 @@ function render() {
   $<HTMLButtonElement>('demo-rescue').disabled = !!replay || terminal || sending || view.running;
   renderMessages();
   renderRoutePicker();
-  const m = view.metrics; $('metrics').textContent = `模型请求 ${m.requests} / 工具 ${m.executedTools} / 跳过 ${m.skippedTools} / 中断 ${m.interrupts}\nTokens ${m.inputTokens} in · ${m.outputTokens} out / 结果 ${(m.resultBytes / 1024).toFixed(1)} KB`;
+  const m = p.metrics; $('metrics').textContent = `模型请求 ${m.requests} / 工具 ${m.executedTools} / 跳过 ${m.skippedTools} / 中断 ${m.interrupts}\nTokens ${m.inputTokens} in · ${m.outputTokens} out / 结果 ${(m.resultBytes / 1024).toFixed(1)} KB`;
   $('ledger').replaceChildren();
   $('ledger-mode').textContent = replay ? '历史回溯' : '实时';
   $('ledger-mode').dataset.replay = String(!!replay);
-  for (const entry of [...(replay?.entries ?? p.ledger)].reverse()) {
+  const history = view.history;
+  const nodeNumbers = new Map(history.nodes.map((node, index) => [node.id, index + 1]));
+  for (const entry of [...history.nodes].reverse()) {
     const row = document.createElement('div'); row.className = 'ledger-entry';
     const time = document.createElement('span'); time.className = 'tu'; time.textContent = `${entry.elapsedTU} TU`;
-    const title = document.createElement('button'); title.type = 'button'; title.className = 'ledger-jump'; title.textContent = entry.message;
-    title.setAttribute('aria-label', `回溯至行动 ${entry.sequence}：${entry.message}`);
-    title.disabled = replayLoading;
-    title.onclick = () => void seekReplay(entry.sequence);
-    if (replay?.step === entry.sequence) { row.dataset.selected = 'true'; title.setAttribute('aria-current', 'step'); }
-    const glyph = document.createElement('span'); glyph.className = 'ledger-glyph'; glyph.setAttribute('aria-hidden', 'true'); glyph.textContent = entry.action.kind === 'move' ? '↗' : entry.action.kind === 'repair' ? '+' : entry.action.kind === 'scan' ? '◎' : '•';
-    const cost = document.createElement('span'); cost.className = 'cost'; cost.textContent = `O₂ −${entry.cost.oxygen} / B −${entry.cost.battery}`;
+    const title = document.createElement('button'); title.type = 'button'; title.className = 'ledger-jump'; title.textContent = `${nodeNumbers.get(entry.id)} · ${entry.label}`;
+    title.setAttribute('aria-label', `查看历史：${entry.label}`);
+    title.disabled = replayLoading || view.running;
+    title.onclick = () => void seekReplay(entry.id);
+    if ((replay?.nodeId ?? history.headId) === entry.id) { row.dataset.selected = 'true'; title.setAttribute('aria-current', 'step'); }
+    const glyph = document.createElement('span'); glyph.className = 'ledger-glyph'; glyph.setAttribute('aria-hidden', 'true'); glyph.textContent = '⑂';
+    const cost = document.createElement('span'); cost.className = 'cost'; cost.textContent = `${phaseNames[entry.phase]} · ${entry.parentId ? `接续节点 ${nodeNumbers.get(entry.parentId)}` : '起点'}${history.headId === entry.id ? ' · 当前分支' : ''}`;
     row.append(time, glyph, title, cost); $('ledger').append(row);
   }
-  if (!(replay?.entries ?? p.ledger).length) $('ledger').textContent = '尚无行动，可查看初始状态。';
+  if (!history.nodes.length) $('ledger').textContent = '尚无历史节点。';
   $('end-state').hidden = !terminal;
   $('end-state').classList.toggle('failed', p.phase === 'failure');
   $('end-state').textContent = p.phase === 'success' ? `救援成功。你们用 ${p.elapsedTU} TU 离开了空间站。` : `救援失败：${p.failureReason ?? '资源耗尽'}。可以回溯本局，或开始新的尝试。`;
   $('replay-controls').hidden = !replay; $('exit-replay').hidden = !replay; $('replay').hidden = !!replay;
-  $<HTMLButtonElement>('replay').disabled = replayLoading;
-  const replayStep = replay?.step ?? 0;
-  $('replay-index').textContent = `${replayStep} / ${replay?.total ?? 0}`;
-  const slider = $<HTMLInputElement>('replay-slider');
-  slider.max = String(replay?.total ?? 0); slider.value = String(replayStep); slider.disabled = replayLoading;
-  for (const id of ['replay-first', 'replay-prev']) $<HTMLButtonElement>(id).disabled = replayLoading || replayStep === 0;
-  for (const id of ['replay-next', 'replay-last']) $<HTMLButtonElement>(id).disabled = replayLoading || replayStep === replay?.total;
-  $('replay-detail').textContent = replayLoading ? '正在重建历史状态…' : replay ? replayStep === 0 ? '初始状态 · 尚未执行行动' : `行动 ${replayStep} · ${replay.entries[replayStep - 1].message} · ${p.elapsedTU} TU` : '点击行动查看当时状态；查看历史前会暂停机器人。';
+  $<HTMLButtonElement>('replay').disabled = replayLoading || view.running || !history.nodes.length;
+  const select = $<HTMLSelectElement>('history-select'); select.replaceChildren();
+  for (const node of history.nodes) { const option = document.createElement('option'); option.value = node.id; option.textContent = `${nodeNumbers.get(node.id)} · ${node.label} · ${node.elapsedTU} TU`; select.append(option); }
+  select.value = replay?.nodeId ?? history.headId ?? ''; select.disabled = replayLoading;
+  $<HTMLButtonElement>('resume-history').disabled = replayLoading || !replay || view.running;
+  $('replay-detail').textContent = replayLoading ? '正在恢复历史状态…' : view.running ? '运行结束后可查看历史并从所选节点继续。' : replay ? '正在查看当时的状态与对话。从这里继续会保留原历史并创建新分支。' : '点击节点查看历史；支持从运行结束或手动操作完成的位置继续。';
   renderSelection(); drawMap();
 }
 function renderSelection() {
@@ -667,27 +667,33 @@ document.addEventListener('keydown', event => {
   const directions: Record<string, [number, number]> = { w: [0, -1], ArrowUp: [0, -1], a: [-1, 0], ArrowLeft: [-1, 0], s: [0, 1], ArrowDown: [0, 1], d: [1, 0], ArrowRight: [1, 0] };
   const direction = directions[event.key]; if (direction) { event.preventDefault(); if (!event.repeat) step(...direction); }
 });
-async function seekReplay(step: number) {
-  if (!view) return;
+async function seekReplay(nodeId: string) {
+  if (!view || view.running) return;
   const session = view; const source = stream;
   const request = ++replayRequest;
   replayLoading = true; render();
   try {
-    if (session.running && !await post('stop')) return;
     if (!isCurrent(source, session) || request !== replayRequest) return;
-    const next = await api<ReplayView>(`/api/sessions/${session.sessionId}/replay?step=${step}`);
+    const next = await api<HistoryPreview>(`/api/sessions/${session.sessionId}/history?node=${encodeURIComponent(nodeId)}`);
     if (!isCurrent(source, session) || request !== replayRequest) return;
     replay = next;
   } catch (error) { if (isCurrent(source, session) && request === replayRequest) toast(error instanceof Error ? error.message : String(error)); }
   finally { if (isCurrent(source, session) && request === replayRequest) { replayLoading = false; render(); } }
 }
-$('replay').onclick = () => void seekReplay(0);
+$('replay').onclick = () => { const node = view?.history.nodes[0]; if (node) void seekReplay(node.id); };
 $('exit-replay').onclick = () => { replayRequest++; replayLoading = false; replay = null; render(); };
-$('replay-slider').oninput = () => void seekReplay(Number($<HTMLInputElement>('replay-slider').value));
-$('replay-first').onclick = () => void seekReplay(0);
-$('replay-prev').onclick = () => { if (replay) void seekReplay(replay.step - 1); };
-$('replay-next').onclick = () => { if (replay) void seekReplay(replay.step + 1); };
-$('replay-last').onclick = () => { if (replay) void seekReplay(replay.total); };
+$('history-select').onchange = () => void seekReplay($<HTMLSelectElement>('history-select').value);
+$('resume-history').onclick = async () => {
+  if (!view || !replay || replayLoading || view.running) return;
+  const session = view, source = stream, nodeId = replay.nodeId;
+  replayLoading = true; render();
+  try {
+    const next = await api<SessionView>(`/api/sessions/${session.sessionId}/rewind`, { requestId: crypto.randomUUID(), expectedRevision: session.stateRevision, expectedInstanceId: session.sessionInstanceId, nodeId });
+    if (source !== stream || view.sessionId !== session.sessionId || ![session.sessionInstanceId, next.sessionInstanceId].includes(view.sessionInstanceId)) return;
+    attach(next); toast('已回到所选节点，请下达新指令。原来的历史已保留。');
+  } catch (error) { if (isCurrent(source, session)) toast(error instanceof Error ? error.message : String(error)); }
+  finally { if (source === stream) { replayLoading = false; render(); } }
+};
 async function start() {
   try {
     const latest = await api<SessionView | null>('/api/latest');
@@ -760,6 +766,7 @@ $('model-form').onsubmit = async event => {
 
 function renderMessages() {
   if (!view) return;
+  const messages = current()!.messages;
   const pending = replay ? null : view?.pendingAuthorization;
   const routePending = !replay && view.pendingRouteSelection;
   $('comms-notice').hidden = !pending && !routePending;
@@ -768,18 +775,14 @@ function renderMessages() {
     button.classList.toggle('needs-authorization', !!pending || !!routePending);
     button.setAttribute('aria-label', routePending ? '机器人通信 · 待选路' : pending ? '机器人通信 · 待授权' : '机器人通信');
   });
-  const messageKey = JSON.stringify([view.messages, pending?.id, !!replay, answeringAuthorization]);
+  const messageKey = JSON.stringify([messages, pending?.id, !!replay, answeringAuthorization]);
   if (messageKey === lastMessages) return;
   const area = $('messages');
-  if (replay) {
-    area.textContent = '回溯显示行动后的地图、资源和已知信息。对话与模型运行记录不随行动步数回退。';
-    lastMessages = messageKey; return;
-  }
   const pinned = area.scrollHeight - area.scrollTop - area.clientHeight < 70;
   const scrollTop = area.scrollTop;
   const oldAuthorization = area.querySelector<HTMLElement>('[data-authorization-id]')?.dataset.authorizationId;
   const expandedTools = new Set(lastMessages ? [...area.querySelectorAll<HTMLDetailsElement>('.tool-details[open]')].map(el => el.dataset.messageId) : []);
-  const authorizationMessage = pending ? view.messages.findLast(message => message.role === 'robot' && message.text === pending.description) : undefined;
+  const authorizationMessage = pending ? messages.findLast(message => message.role === 'robot' && message.text === pending.description) : undefined;
   area.replaceChildren();
   const addAuthorization = (el: HTMLElement) => {
     if (!pending) return;
@@ -794,7 +797,7 @@ function renderMessages() {
     }
     el.append(consequence, hint, actions);
   };
-  for (const message of view.messages) {
+  for (const message of messages) {
     const el = document.createElement('div'); el.className = `message ${message.role}${message.kind ? ` ${message.kind}` : ''}`;
     const label = document.createElement('small'); label.textContent = `${message.role === 'human' ? '你' : message.role === 'robot' ? 'R-07' : '系统'}${message.kind === 'tool' ? ' · 工具调用' : ''} / ${message.at} TU`;
     let content: HTMLElement = el;

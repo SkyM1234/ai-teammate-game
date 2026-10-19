@@ -77,7 +77,7 @@ test('应用模型将密钥保存到 pi 凭据，跨局和重启后自动复用�
   assert.ok(!(await readFile(join(savesDir, 'model-settings.json'), 'utf8')).includes(secret));
   const saves = (await app.call<{ id: string }[]>('/api/saves')).data; assert.equal(saves.length, 2);
   await app.close();
-  for (const id of [initial.sessionId, next.sessionId]) assert.ok(!(await readFile(join(savesDir, id, 'game.json'), 'utf8')).includes(secret));
+  for (const id of [initial.sessionId, next.sessionId]) assert.ok(!(await readFile(join(savesDir, id, 'session.jsonl'), 'utf8')).includes(secret));
   const restarted = await start();
   const remembered = (await restarted.call('/api/sessions', {})).data;
   assert.deepEqual(remembered.modelConfig, config); assert.equal(remembered.modelReady, true); assert.equal(remembered.modelCredentialSource, 'pi');
@@ -88,7 +88,7 @@ test('应用模型将密钥保存到 pi 凭据，跨局和重启后自动复用�
   assert.equal(restored.modelReady, true); assert.equal(restored.modelCredentialSource, 'pi');
 });
 
-test('更改默认保留其他对局配置，旧存档复用对应接口密钥，错误设置不覆盖默认', async t => {
+test('更改默认保留其他对局配置，恢复存档复用对应接口密钥，错误设置不覆盖默认', async t => {
   const { start } = await fixture(t); const { config, requests } = await endpoint(t);
   const app = await start(); const first = (await app.call('/api/sessions', {})).data;
   const path = `/api/sessions/${first.sessionId}`;

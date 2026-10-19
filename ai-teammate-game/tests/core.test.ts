@@ -11,7 +11,7 @@ const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/statio
 test('逐步回溯重建救援资源、物品和知识，任意跳转不改变原局', () => {
   const original = runRescueRoute(level, 'upper');
   const before = original.snapshot();
-  const expected = GameEngine.forReplay(level, before.ledger);
+  const expected = new GameEngine(level);
   const states = [expected.playerView()];
   for (const entry of before.ledger) {
     assert.equal(expected.replayEntry(entry).accepted, true);
@@ -54,9 +54,6 @@ test('回溯按行动边界恢复共享和私有标记，保存恢复后仍能�
   assert.deepEqual(restored.replayAt(1).state.markers, [early, later]);
   assert.deepEqual(restored.replayAt(2).state.markers, [later]);
   assert.deepEqual(restored.state.knowledge.markers, []);
-  const legacy = engine.snapshot(); delete legacy.markerHistory;
-  restored.restore(legacy);
-  assert.deepEqual(restored.replayAt(0).state.markers, []);
 });
 
 test('回溯发现账本资源与重建结果不符时明确拒绝', () => {
@@ -106,9 +103,9 @@ test('已耗尽物资在原地或远处均说明已消耗，不能再次扫描�
     assert.deepEqual(engine.state.robot, before.robot); assert.deepEqual(engine.state.human, before.human);
   }
   assert.equal(engine.perform({ kind: 'collect', targetId: 's-04' }).code, 'UNKNOWN_TARGET');
-  const legacy = engine.snapshot();
-  legacy.knowledge.entities['s-03'].details = '可恢复 40 氧气。';
-  const restored = new GameEngine(custom); restored.restore(legacy);
+  const snapshot = engine.snapshot();
+  snapshot.knowledge.entities['s-03'].details = '可恢复 40 氧气。';
+  const restored = new GameEngine(custom); restored.restore(snapshot);
   const context = restored.robotContext() as { knownEntities: ObservedEntity[] };
   assert.match(context.knownEntities.find(entity => entity.id === 's-03')!.details!, /已消耗/);
   assert.equal(restored.state.knowledge.entities['s-03'].details, '可恢复 40 氧气。');
@@ -219,7 +216,7 @@ test('维修材料不足不扣资源，零材料维修及配置后的存档回�
   assert.equal(free.perform({ kind: 'repair', targetId: 'human' }).accepted, true);
   assert.equal(free.perform({ kind: 'move', target: { x: 3, y: 9 } }).cost.oxygen, 1);
   const restored = new GameEngine(custom); restored.restore(free.snapshot());
-  const replay = GameEngine.forReplay(custom, restored.state.ledger);
+  const replay = new GameEngine(custom);
   for (const entry of restored.state.ledger) assert.equal(replay.replayEntry(entry).accepted, true);
   assert.deepEqual(replay.state.robot, free.state.robot); assert.deepEqual(replay.state.human, free.state.human);
   assert.equal(replay.state.elapsedTU, free.state.elapsedTU);
@@ -303,58 +300,12 @@ test('机器人在相邻格切换开关，更新观察且请求只结算一次',
   assert.equal(engine.state.knowledge.entities['d-01'].state, 'opened');
 });
 
-test('旧存档保留资源、账本与电路状态，补入开关；旧远程动作仅可历史回放', () => {
-  const original = new GameEngine(level);
-  const legacyAction = { kind: 'circuit', on: true } as Action;
-  const old = original.snapshot(); old.rulesVersion = 1;
-  old.entities = old.entities.filter(e => e.type !== 'switch');
-  old.circuitOn = true; old.elapsedTU = 1; old.human.oxygen -= 2; old.stateRevision = 1;
-  old.ledger.push({ sequence: 1, actionId: 'legacy-power', action: legacyAction, cost: { tu: 1, battery: 0, oxygen: 2 }, message: '开启辅助电路', position: { ...old.robot.position }, oxygen: old.human.oxygen, battery: old.robot.battery, elapsedTU: 1, phase: old.phase });
-  const restored = new GameEngine(level); restored.restore(old);
-  assert.equal(restored.state.rulesVersion, 3);
-  assert.equal(restored.state.circuitOn, true);
-  assert.equal(restored.state.human.oxygen, old.human.oxygen);
-  assert.deepEqual(restored.state.ledger, old.ledger);
-  assert.ok(restored.state.entities.some(e => e.id === 'sw-01'));
-  assert.ok(!restored.state.knowledge.entities['sw-01']);
-  const replay = new GameEngine(level);
-  assert.equal(replay.replayEntry(old.ledger[0]).accepted, true);
-  assert.equal(replay.state.circuitOn, true);
-  assert.equal(replay.state.human.oxygen, old.human.oxygen);
-  assert.equal(new GameEngine(level).perform(legacyAction).accepted, false);
-});
-
-test('旧实体开关存档迁移到新位置，历史与新位置操作混合回放保持一致', () => {
-  const oldLevel = structuredClone(level);
-  oldLevel.entities.find(e => e.id === 'sw-01')!.position = { x: 6, y: 3 };
-  const original = new GameEngine(oldLevel);
-  const walk = (x: number, y: number) => {
-    while (original.state.robot.position.x !== x) assert.equal(original.perform({ kind: 'move', target: { x: original.state.robot.position.x + Math.sign(x - original.state.robot.position.x), y: original.state.robot.position.y } }).accepted, true);
-    while (original.state.robot.position.y !== y) assert.equal(original.perform({ kind: 'move', target: { x, y: original.state.robot.position.y + Math.sign(y - original.state.robot.position.y) } }).accepted, true);
-  };
-  walk(4, 9); walk(4, 4); walk(6, 4);
-  original.perform({ kind: 'scan', targetId: 'sw-01' });
-  original.perform({ kind: 'circuit', targetId: 'sw-01', on: true });
-  original.perform({ kind: 'circuit', targetId: 'sw-01', on: false });
-  const old = original.snapshot(); old.rulesVersion = 2;
-  for (const entry of old.ledger) delete entry.targetPosition;
-  const restored = new GameEngine(level); restored.restore(old);
-  assert.equal(restored.state.rulesVersion, 3);
-  assert.deepEqual(restored.state.entities.find(e => e.id === 'sw-01')!.position, { x: 6, y: 1 });
-  assert.ok(!restored.state.knowledge.entities['sw-01']);
-  assert.ok(!restored.state.knowledge.scannedIds.includes('sw-01'));
-  assert.ok(!restored.state.radarHistory.some(e => e.position.x === 6 && e.position.y === 3));
-  assert.deepEqual(restored.state.robot, old.robot);
-  assert.deepEqual(restored.state.human, old.human);
-  for (const target of [{ x: 5, y: 4 }, { x: 4, y: 4 }, { x: 4, y: 3 }, { x: 4, y: 2 }, { x: 5, y: 2 }, { x: 6, y: 2 }]) {
-    assert.equal(restored.perform({ kind: 'move', target }).accepted, true);
-  }
-  assert.equal(restored.perform({ kind: 'circuit', targetId: 'sw-01', on: true }).accepted, true);
-  const replay = GameEngine.forReplay(level, restored.state.ledger);
-  for (const entry of restored.state.ledger) assert.equal(replay.replayEntry(entry).accepted, true);
-  assert.deepEqual(replay.state.robot, restored.state.robot);
-  assert.deepEqual(replay.state.human, restored.state.human);
-  assert.equal(replay.state.circuitOn, restored.state.circuitOn);
+test('恢复拒绝旧规则版本和缺失标记历史的存档', () => {
+  const engine = new GameEngine(level);
+  for (const rulesVersion of [1, 2]) assert.throws(() => engine.restore({ ...engine.snapshot(), rulesVersion }), /版本不兼容/);
+  const incomplete = engine.snapshot() as unknown as Record<string, unknown>;
+  delete incomplete.markerHistory;
+  assert.throws(() => engine.restore(incomplete as unknown as ReturnType<GameEngine['snapshot']>), /存档不完整/);
 });
 
 test('两条固定救援路线均成功且有资源余量', () => {

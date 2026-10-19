@@ -11,11 +11,11 @@ import { createAppServer } from '../apps/server/src/server.ts';
 import { GameSession } from '../apps/server/src/session.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
 import type { ToolIntent } from '../apps/server/src/model.ts';
-import type { SessionSave, SessionView } from '../apps/server/src/session.ts';
+import type { HistoryPreview, SessionView } from '../apps/server/src/session.ts';
 import { parseDemoCommand } from '../apps/server/src/demo-task.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { GameEngine } from '../packages/game-core/src/engine.ts';
-import type { Action, Level, ReplayView } from '../packages/game-core/src/types.ts';
+import type { Action, Level } from '../packages/game-core/src/types.ts';
 import { levelRoutes, verifyLevelRoute } from '../packages/game-core/src/verify-level.ts';
 
 const source = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
@@ -54,15 +54,13 @@ async function serve(levels: Level[], savesDir: string) {
   return { ...app, call, close };
 }
 
-test('门朝向配置校验，按已知实体提供显示信息并兼容旧存档', () => {
+test('门朝向配置校验，按已知实体提供显示信息并在恢复后保持一致', () => {
   for (const orientation of ['horizontal', 'vertical', undefined] as const) {
     const level = map('doors', 8, 6);
     level.entities = [{ id: 'door', type: 'door', name: '门', position: { x: 3, y: 1 }, reflection: 2, orientation, actionCosts: { open: { tu: 1, battery: 1 } } }];
     const engine = new GameEngine(validateLevel(level));
     assert.equal(engine.playerView().observed.find(e => e.id === 'door')?.orientation, orientation);
-    const old = engine.snapshot();
-    delete old.entities[0].orientation;
-    engine.restore(old);
+    engine.restore(engine.snapshot());
     assert.equal(engine.playerView().observed.find(e => e.id === 'door')?.orientation, orientation);
     engine.state.robot.position = { x: 6, y: 4 };
     engine.state.knowledge.entities = {};
@@ -114,7 +112,7 @@ test('地图列表只返回公开简介，各局的 HTTP 与 AI 工具按自己�
   assert.equal(tallParameters.properties.target.properties.x.maximum, 5); assert.equal(tallParameters.properties.target.properties.y.maximum, 15);
 });
 
-test('移除地图文件后仍按存档地图恢复和回放，旧存档按 ID 匹配而非默认地图', async t => {
+test('移除地图文件后仍按 JSONL 中的完整地图恢复历史', async t => {
   const savesDir = await directory(t);
   const original = map('saved-map', 16, 6); original.robotStart = { x: 12, y: 1 };
   const first = await serve([original], savesDir);
@@ -126,20 +124,9 @@ test('移除地图文件后仍按存档地图恢复和回放，旧存档按 ID �
   const restored = await next.call(`${path}/load`, {});
   assert.equal(restored.status, 200); assert.equal(restored.data.level.id, original.id); assert.equal(restored.data.level.width, 16);
   assert.deepEqual(restored.data.robot.position, moved.robot.position);
-  const replay = await next.call<ReplayView>(`${path}/replay?step=1`);
+  const replay = await next.call<HistoryPreview>(`${path}/history?node=${restored.data.history.headId}`);
   assert.equal(replay.status, 200); assert.equal(replay.data.state.level.width, 16); assert.deepEqual(replay.data.state.robot.position, moved.robot.position);
   await next.close();
-  const file = join(savesDir, created.sessionId, 'game.json');
-  const legacy: SessionSave = JSON.parse(await readFile(file, 'utf8')); delete legacy.level;
-  await writeFile(file, JSON.stringify(legacy));
-  const compatible = await serve([map('other-map', 6, 16), original], savesDir);
-  assert.equal((await compatible.call(`${path}/load`, {})).data.level.id, original.id);
-  await compatible.close();
-  const incompatible = structuredClone(original); incompatible.version++;
-  // Recreate a legacy save to exercise missing historical versions.
-  await writeFile(file, JSON.stringify(legacy));
-  const mismatch = await serve([incompatible], savesDir);
-  assert.equal((await mismatch.call(`${path}/load`, {})).status, 400);
 });
 
 test('演示模式使用任意房间名、三位坐标及已知信息搜索，不需要地图专用脚本', async () => {
