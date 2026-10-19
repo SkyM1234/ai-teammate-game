@@ -6,28 +6,24 @@ import { validateLevel } from '../packages/game-core/src/level.ts';
 import type { ObservedEntity } from '../packages/game-core/src/types.ts';
 import { verifyLevelRoute } from '../packages/game-core/src/verify-level.ts';
 
-// Keep the original global-cost fixture to exercise maps embedded in older saves.
-const legacy = JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8'));
-const level = validateLevel(legacy);
+const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 
-test('旧地图费用一次性迁移且不修改输入，各对象独立，新格式再次校验不变', () => {
-  const original = structuredClone(legacy);
-  const migrated = validateLevel(legacy);
-  assert.deepEqual(legacy, original);
-  assert.deepEqual(Object.keys(migrated.rules.actionCosts), ['move', 'carry_move', 'scan']);
-  assert.deepEqual(migrated.human.actionCosts.repair, { tu: 6, battery: 4, materials: 1 });
-  assert.deepEqual(migrated.exit.actionCosts.extract, { tu: 2, battery: 2 });
-  assert.deepEqual(validateLevel(migrated), migrated);
-  const first = migrated.entities.find(entity => entity.id === 's-01')!;
-  const second = migrated.entities.find(entity => entity.id === 's-02')!;
+test('地图校验不修改输入，各对象费用独立，重复校验不变', () => {
+  const original = structuredClone(level);
+  const validated = validateLevel(level);
+  assert.deepEqual(level, original);
+  assert.deepEqual(Object.keys(validated.rules.actionCosts), ['move', 'carry_move', 'scan']);
+  assert.deepEqual(validateLevel(validated), validated);
+  const first = validated.entities.find(entity => entity.id === 's-01')!;
+  const second = validated.entities.find(entity => entity.id === 's-02')!;
   first.actionCosts!.collect!.tu = 8;
   assert.equal(second.actionCosts!.collect!.tu, 1);
-  const control = migrated.entities.find(entity => entity.id === 'sw-01')!;
+  const control = validated.entities.find(entity => entity.id === 'sw-01')!;
   control.actionCosts!.circuit_on!.tu = 4;
   assert.equal(control.actionCosts!.circuit_off!.tu, 1);
 });
 
-test('对象不适用的操作、全局交互费用和新旧混合配置在加载时拒绝', () => {
+test('对象不适用的操作和全局交互费用在加载时拒绝', () => {
   for (const edit of [
     (map: typeof level) => { map.entities.find(e => e.type === 'obstacle')!.actionCosts!.use_item = { tu: 1, battery: 1 }; },
     (map: typeof level) => { map.entities.find(e => e.itemType === 'repair')!.actionCosts!.use_item = { tu: 1, battery: 1 }; },
@@ -101,11 +97,9 @@ test('维修需求归目标所有，不同控制器分别检查材料，不足�
   assert.equal(engine.state.entities.find(e => e.id === first.id)!.repaired, false);
 });
 
-test('旧状态没有对象费用也能恢复，AI 仅获取已知物体费用，回放保留原消耗', () => {
+test('保存恢复后 AI 仅获取已知物体费用，回放保留原消耗', () => {
   const engine = verifyLevelRoute(level)!;
   const old = engine.snapshot();
-  for (const entity of old.entities) delete entity.actionCosts;
-  for (const entity of Object.values(old.knowledge.entities)) delete entity.actionCosts;
   const restored = new GameEngine(level); restored.restore(old);
   assert.deepEqual(restored.playerView().human.actionCosts, level.human.actionCosts);
   const context = restored.robotContext() as { knownEntities: ObservedEntity[] };

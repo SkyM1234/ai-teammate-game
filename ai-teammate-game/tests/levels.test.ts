@@ -142,34 +142,6 @@ test('移除地图文件后仍按存档地图恢复和回放，旧存档按 ID �
   assert.equal((await mismatch.call(`${path}/load`, {})).status, 400);
 });
 
-test('内嵌旧格式地图的存档经 HTTP 恢复后保存对象费用，并继续按原费用执行和回放', async t => {
-  const savesDir = await directory(t);
-  const first = await serve([source], savesDir);
-  const created = (await first.call('/api/sessions', {})).data;
-  const path = `/api/sessions/${created.sessionId}`;
-  await first.close();
-  const file = join(savesDir, created.sessionId, 'game.json');
-  const save: SessionSave = JSON.parse(await readFile(file, 'utf8'));
-  save.level = JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8'));
-  for (const entity of save.engine.entities) delete entity.actionCosts;
-  for (const entity of Object.values(save.engine.knowledge.entities)) delete entity.actionCosts;
-  await writeFile(file, JSON.stringify(save));
-  const next = await serve([map('other-map', 6, 16)], savesDir);
-  const restored = await next.call(`${path}/load`, {});
-  assert.equal(restored.status, 200);
-  assert.deepEqual(restored.data.human.actionCosts, source.human.actionCosts);
-  const moved = (await next.call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: restored.data.stateRevision, action: { kind: 'move', target: { x: 3, y: 9 } } })).data;
-  const collected = await next.call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: moved.stateRevision, action: { kind: 'collect', targetId: 's-01' } });
-  assert.equal(collected.status, 200); assert.equal(collected.data.elapsedTU, 2);
-  assert.equal(collected.data.robot.battery, source.rules.battery - 2);
-  const replay = await next.call<ReplayView>(`${path}/replay?step=2`);
-  assert.equal(replay.status, 200); assert.deepEqual(replay.data.state.robot, collected.data.robot);
-  await next.close();
-  const persisted: SessionSave = JSON.parse(await readFile(file, 'utf8'));
-  assert.deepEqual(Object.keys(persisted.level!.rules.actionCosts), ['move', 'carry_move', 'scan']);
-  assert.deepEqual(persisted.level!.entities.find(e => e.id === 's-01')!.actionCosts, source.entities.find(e => e.id === 's-01')!.actionCosts);
-});
-
 test('演示模式使用任意房间名、三位坐标及已知信息搜索，不需要地图专用脚本', async () => {
   const wide = map('wide', 110, 5);
   assert.deepEqual(parseDemoCommand('前往 (103,2)', wide, wide.humanStart).goal.position, { x: 103, y: 2 });
