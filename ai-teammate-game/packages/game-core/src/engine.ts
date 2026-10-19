@@ -1,6 +1,6 @@
 import { canObserve, findKnownPath, sensorCells } from './navigation.ts';
 import { distance, emptyDelta, positionKey, samePosition } from './types.ts';
-import type { Action, ActionOutcome, Constraints, Cost, Entity, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position, RadarEcho } from './types.ts';
+import type { Action, ActionOutcome, Constraints, Cost, Entity, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position, RadarEcho, ReplayView } from './types.ts';
 
 export const defaultConstraints = (): Constraints => ({ reserveReturnBattery: false, reserveMargin: 5, authorizedHazardIds: [], stopOnHazard: false, allowedRepairs: [] });
 const consumedSupplyDetails = '该物资已消耗，不能再次拾取或使用。';
@@ -35,7 +35,7 @@ export class GameEngine {
       human: { position: { ...level.humanStart }, oxygen: level.rules.oxygen, oxygenRate: level.rules.oxygenRate, carried: false },
       robot: { position: { ...level.robotStart }, battery: level.rules.battery, inventory: [] },
       entities: level.entities.map(e => ({ ...structuredClone(e), opened: false, repaired: false, removed: false, taken: false })),
-      knowledge: { entities: {}, scannedIds: [], markers: [] }, radarHistory: [], markers: [], ledger: [], processedActions: {}, failureReason: null,
+      knowledge: { entities: {}, scannedIds: [], markers: [] }, radarHistory: [], markers: [], markerHistory: [], ledger: [], processedActions: {}, failureReason: null,
     };
     this.observe();
     this.updateRadar();
@@ -147,6 +147,33 @@ export class GameEngine {
       if (entity?.type === 'switch' && !samePosition(entity.position, entry.targetPosition)) this.relocateSwitch(entity, entry.targetPosition);
     }
     return this.performAction(entry.action, entry.actionId, entry.constraints ?? defaultConstraints(), entry.action.kind === 'circuit' && !('targetId' in entry.action));
+  }
+
+  replayAt(step: number): ReplayView {
+    const entries = this.state.ledger;
+    if (!Number.isSafeInteger(step) || step < 0 || step > entries.length) throw new Error('回溯步数超出行动账本范围');
+    const replay = GameEngine.forReplay(this.level, entries);
+    const history = this.state.markerHistory ?? [];
+    let markerIndex = 0;
+    for (let index = 0; index <= step; index++) {
+      if (index > 0) {
+        const entry = entries[index - 1];
+        const outcome = replay.replayEntry(entry);
+        if (!outcome.accepted || replay.state.elapsedTU !== entry.elapsedTU || replay.state.human.oxygen !== entry.oxygen || replay.state.robot.battery !== entry.battery || !samePosition(replay.state.robot.position, entry.position)) throw new Error(`行动 ${entry.sequence} 无法按当前规则重现`);
+        replay.state.phase = entry.phase;
+      }
+      while (markerIndex < history.length && history[markerIndex].afterSequence <= index) {
+        const event = history[markerIndex++];
+        replay.state.markers = replay.state.markers.filter(marker => marker.id !== event.marker.id);
+        replay.state.knowledge.markers = replay.state.knowledge.markers.filter(marker => marker.id !== event.marker.id);
+        if (!event.removed) {
+          replay.state.markers.push(structuredClone(event.marker));
+          if (event.marker.shared) replay.state.knowledge.markers.push(structuredClone(event.marker));
+        }
+        replay.state.stateRevision++;
+      }
+    }
+    return { step, total: entries.length, entries: structuredClone(entries), state: replay.playerView() };
   }
 
   private relocateSwitch(entity: Entity, position: Position): void {
@@ -300,6 +327,7 @@ export class GameEngine {
     if (!Number.isInteger(position.x) || !Number.isInteger(position.y) || position.x < 0 || position.x >= this.level.width || position.y < 0 || position.y >= this.level.height) throw new Error('标记坐标非法');
     const marker = { id: crypto.randomUUID(), position: { ...position }, note: note.slice(0, 240), shared, createdAt: this.state.elapsedTU };
     this.state.markers.push(marker);
+    (this.state.markerHistory ??= []).push({ afterSequence: this.state.ledger.length, marker: structuredClone(marker), removed: false });
     if (shared) this.state.knowledge.markers.push(structuredClone(marker));
     this.state.stateRevision++;
     return marker;
@@ -308,6 +336,7 @@ export class GameEngine {
   removeMarker(id: string): MarkerResult {
     const marker = this.state.markers.find(marker => marker.id === id);
     if (!marker) throw new Error('标记不存在或已移除');
+    (this.state.markerHistory ??= []).push({ afterSequence: this.state.ledger.length, marker: structuredClone(marker), removed: true });
     this.state.markers = this.state.markers.filter(marker => marker.id !== id);
     this.state.knowledge.markers = this.state.knowledge.markers.filter(marker => marker.id !== id);
     this.state.stateRevision++;

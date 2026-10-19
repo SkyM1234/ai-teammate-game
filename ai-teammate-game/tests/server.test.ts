@@ -7,7 +7,8 @@ import test from 'node:test';
 import type { TestContext } from 'node:test';
 import { createAppServer } from '../apps/server/src/server.ts';
 import type { SessionView } from '../apps/server/src/session.ts';
-import type { PlayerView } from '../packages/game-core/src/types.ts';
+import type { ReplayView } from '../packages/game-core/src/types.ts';
+import type { JournalEntry } from '../apps/server/src/journal.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { runRescueRoute } from '../scripts/routes.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
@@ -40,32 +41,33 @@ test('仅提供选定的三首 WAV 音乐，并使用正确的音频类型', asy
   assert.equal((await fetch(`${base}/audio/README.md`)).status, 404);
 });
 
-test('每局单独目录保存可读对局和完整模型日志，恢复后追加而不覆盖', async t => {
+test('每局仅保存游戏快照和统一日志，恢复后继续追加并保留旧日志', async t => {
   const { call, sessions, savesDir, initial } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`;
   await call(`${path}/command`, { requestId: crypto.randomUUID(), expectedRevision: 0, text: '前往 (3,9)' });
   await sessions.get(initial.sessionId)!.settled();
   await call(`${path}/save`, { requestId: crypto.randomUUID() });
   const directory = join(savesDir, initial.sessionId);
-  assert.ok((await readdir(directory)).includes('game.json'));
+  assert.deepEqual((await readdir(directory)).sort(), ['events.jsonl', 'game.json']);
   const game = await readFile(join(directory, 'game.json'), 'utf8');
   assert.ok(game.includes('\n  "version"')); assert.equal(JSON.parse(game).engine.elapsedTU, 1);
-  const summary = await readFile(join(directory, 'game.md'), 'utf8');
-  assert.ok(summary.includes('完整行动账本')); assert.ok(summary.includes('前往 (3,9)'));
-  const files = await readdir(join(directory, 'models'));
-  const firstLog = files.find(name => name.endsWith('.md'))!;
-  const firstContents = await readFile(join(directory, 'models', firstLog), 'utf8');
-  assert.ok(firstContents.includes('本地规则') || firstContents.includes('local-demo'));
-  const eventsBefore = await readFile(join(directory, 'events.md'), 'utf8');
+  const eventsBefore = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  const before = eventsBefore.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+  const firstRequest = before.find(entry => entry.type === 'model_request');
+  assert.ok(firstRequest && firstRequest.type === 'model_request');
+  assert.ok(JSON.stringify(firstRequest).includes('local-demo'));
+  // Existing Markdown files remain intact when an old game is resumed.
+  await writeFile(join(directory, 'events.md'), '旧日志\n', 'utf8');
   const loaded = await call(`${path}/load`, {}); assert.equal(loaded.status, 200);
   await call(`${path}/command`, { requestId: crypto.randomUUID(), expectedRevision: loaded.data.stateRevision, text: '前往 (3,8)' });
   await sessions.get(initial.sessionId)!.settled();
   await call(`${path}/save`, { requestId: crypto.randomUUID() });
-  const after = await readdir(join(directory, 'models'));
-  assert.equal(after.filter(name => name.endsWith('.md')).length, 2);
-  assert.equal(await readFile(join(directory, 'models', firstLog), 'utf8'), firstContents);
-  const eventsAfter = await readFile(join(directory, 'events.md'), 'utf8');
+  const eventsAfter = await readFile(join(directory, 'events.jsonl'), 'utf8');
   assert.ok(eventsAfter.startsWith(eventsBefore)); assert.ok(eventsAfter.includes('前往 (3,8)'));
+  const requests = eventsAfter.trim().split('\n').map(line => JSON.parse(line) as JournalEntry).filter(entry => entry.type === 'model_request');
+  assert.equal(requests.length, 2); assert.equal(new Set(requests.map(entry => entry.requestId)).size, 2);
+  assert.equal(await readFile(join(directory, 'events.md'), 'utf8'), '旧日志\n');
+  assert.deepEqual((await readdir(directory)).sort(), ['events.jsonl', 'events.md', 'game.json']);
 });
 
 test('旧平铺存档仍可列出和恢复，恢复后写入对局目录且不改写旧文件', async t => {
@@ -248,9 +250,28 @@ test('通过 HTTP 完整救援后存档恢复、账本回放与原局的资源�
   assert.equal(view.phase, 'success');
   await call(`${path}/save`, { requestId: crypto.randomUUID(), expectedRevision: view.stateRevision });
   const loaded = await call(`${path}/load`, {}); assert.equal(loaded.data.phase, 'success'); assert.deepEqual(loaded.data.robot, view.robot);
-  const replay = await call<PlayerView[]>(`${path}/replay`); assert.equal(replay.status, 200);
-  assert.equal(replay.data[0].elapsedTU, 0); assert.ok(!JSON.stringify(replay.data[0]).includes('s-04'));
-  const end = replay.data.at(-1)!; assert.equal(end.phase, 'success'); assert.equal(end.elapsedTU, view.elapsedTU); assert.equal(end.human.oxygen, view.human.oxygen);
+  const replay = await call<ReplayView>(`${path}/replay`); assert.equal(replay.status, 200);
+  assert.equal(replay.data.state.elapsedTU, 0); assert.ok(!JSON.stringify(replay.data.state).includes('s-04'));
+  assert.equal(replay.data.total, route.state.ledger.length);
+  const end = (await call<ReplayView>(`${path}/replay?step=${replay.data.total}`)).data.state;
+  assert.equal(end.phase, 'success'); assert.equal(end.elapsedTU, view.elapsedTU); assert.equal(end.human.oxygen, view.human.oxygen);
+});
+
+test('HTTP 回溯按指定步数返回当时知识和资源，校验范围且不改变实时对局', async t => {
+  const { call, sessions, initial } = await fixture(t);
+  const path = `/api/sessions/${initial.sessionId}`;
+  assert.equal((await call<ReplayView>(`${path}/replay`)).data.total, 0);
+  for (const [index, target] of [{ x: 3, y: 9 }, { x: 3, y: 8 }].entries()) {
+    assert.equal((await call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: index, action: { kind: 'move', target } })).status, 200);
+  }
+  const session = sessions.get(initial.sessionId)!; const before = session.save();
+  const middle = await call<ReplayView>(`${path}/replay?step=1`);
+  assert.equal(middle.status, 200); assert.equal(middle.data.step, 1); assert.equal(middle.data.total, 2);
+  assert.deepEqual(middle.data.state.robot.position, { x: 3, y: 9 });
+  assert.equal(middle.data.state.human.oxygen, 118); assert.equal(middle.data.state.ledger.length, 1);
+  assert.equal(middle.data.entries.length, 2); assert.ok(!JSON.stringify(middle.data.state).includes('s-04'));
+  for (const step of ['-1', '3', '1.5', 'abc', '', 'Infinity', '9007199254740992']) assert.equal((await call(`${path}/replay?step=${step}`)).status, 400, step);
+  assert.deepEqual(session.save(), before);
 });
 
 test('HTTP 前端可切换已知邻接开关，拒绝远程和非法参数且请求去重', async t => {

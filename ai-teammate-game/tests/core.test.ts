@@ -8,6 +8,64 @@ import type { Action, ActionCosts, ObservedEntity, RadarEcho } from '../packages
 
 const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
 
+test('逐步回溯重建救援资源、物品和知识，任意跳转不改变原局', () => {
+  const original = runRescueRoute(level, 'upper');
+  const before = original.snapshot();
+  const expected = GameEngine.forReplay(level, before.ledger);
+  const states = [expected.playerView()];
+  for (const entry of before.ledger) {
+    assert.equal(expected.replayEntry(entry).accepted, true);
+    expected.state.phase = entry.phase;
+    states.push(expected.playerView());
+  }
+  for (const step of [states.length - 1, 0, 1, Math.floor(states.length / 2)]) {
+    const replay = original.replayAt(step);
+    assert.equal(replay.step, step); assert.equal(replay.total, before.ledger.length);
+    assert.deepEqual(replay.state, states[step]);
+    replay.state.robot.position.x = -1; replay.entries.length = 0;
+    assert.deepEqual(original.snapshot(), before);
+  }
+  for (const step of [-1, 0.5, NaN, Infinity, states.length]) assert.throws(() => original.replayAt(step), /步数/);
+});
+
+test('长对局保留全部回溯节点，资源耗尽的终局也能重建', () => {
+  const custom = structuredClone(level); custom.entities = [];
+  custom.rules.oxygen = 1000; custom.rules.oxygenMax = 1000; custom.rules.battery = 1000; custom.rules.batteryMax = 1000;
+  const engine = new GameEngine(custom);
+  for (let index = 0; index < 90; index++) assert.equal(engine.perform({ kind: 'move', target: { x: index % 2 ? 2 : 3, y: 9 } }).accepted, true);
+  assert.equal(engine.playerView().ledger.length, 80);
+  const replay = engine.replayAt(1);
+  assert.equal(replay.entries.length, 90); assert.equal(replay.state.elapsedTU, 1);
+  const failure = structuredClone(custom); failure.rules.oxygen = 2;
+  const failed = new GameEngine(failure); failed.perform({ kind: 'move', target: { x: 3, y: 9 } });
+  assert.equal(failed.replayAt(1).state.phase, 'failure');
+  assert.equal(failed.replayAt(1).state.failureReason, '氧气耗尽');
+});
+
+test('回溯按行动边界恢复共享和私有标记，保存恢复后仍能查看已移除标记', () => {
+  const engine = new GameEngine(level);
+  const early = engine.addMarker({ x: 4, y: 7 }, '先前线索', true);
+  engine.perform({ kind: 'move', target: { x: 3, y: 9 } });
+  const later = engine.addMarker({ x: 3, y: 8 }, '后来的私有线索', false);
+  engine.perform({ kind: 'move', target: { x: 3, y: 8 } });
+  engine.removeMarker(early.id);
+  const restored = new GameEngine(level); restored.restore(engine.snapshot());
+  assert.deepEqual(restored.replayAt(0).state.markers, [early]);
+  assert.deepEqual(restored.replayAt(1).state.markers, [early, later]);
+  assert.deepEqual(restored.replayAt(2).state.markers, [later]);
+  assert.deepEqual(restored.state.knowledge.markers, []);
+  const legacy = engine.snapshot(); delete legacy.markerHistory;
+  restored.restore(legacy);
+  assert.deepEqual(restored.replayAt(0).state.markers, []);
+});
+
+test('回溯发现账本资源与重建结果不符时明确拒绝', () => {
+  const engine = new GameEngine(level);
+  engine.perform({ kind: 'move', target: { x: 3, y: 9 } });
+  engine.state.ledger[0].oxygen--;
+  assert.throws(() => engine.replayAt(1), /行动 1 无法.*重现/);
+});
+
 test('重复抱起已在搬运中的玩家返回已满足状态，不误报距离或消耗资源', () => {
   const engine = new GameEngine(level);
   assert.equal(engine.perform({ kind: 'pickup_human' }).code, 'OUT_OF_RANGE');

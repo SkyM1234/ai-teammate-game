@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GameSession } from '../apps/server/src/session.ts';
 import { defaultModelConfig, demoModel, toolStream } from '../apps/server/src/model.ts';
 import type { ModelAdapter, ToolIntent } from '../apps/server/src/model.ts';
 import { SessionJournal } from '../apps/server/src/journal.ts';
+import type { JournalEntry } from '../apps/server/src/journal.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { getCurrentTools } from '../../pi-main/packages/ai/dist/utils/transcript.js';
 import type { TranscriptContext } from '../../pi-main/packages/ai/dist/types.js';
@@ -63,12 +64,12 @@ test('维修恰好耗尽 TU 和请求预算后，沿原对话只用报告与完�
   assert.ok(contexts[1].messages.some(message => message.role === 'user' && JSON.stringify(message.content).includes(command)));
   assert.ok(contexts[1].messages.some(message => message.role === 'toolResult' && message.toolName === 'interact' && JSON.stringify(message.content).includes('oxygenRate')));
   assert.ok(!JSON.stringify(contexts[1]).includes('s-04'));
-  const logs = await readdir(join(directory, 'models'));
-  const file = logs.find(name => name.startsWith('000002') && name.endsWith('.context.json'));
-  assert.ok(file);
-  const closingLog = JSON.parse(await readFile(join(directory, 'models', file), 'utf8'));
-  assert.equal(closingLog.metadata.closingTurn, true);
-  assert.deepEqual(closingLog.context.tools.map((tool: { name: string }) => tool.name), ['report', 'finish_task']);
+  const logs = (await readFile(join(directory, 'events.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+  const closingLog = logs.find(entry => entry.type === 'model_request' && entry.sequence === 2);
+  assert.ok(closingLog && closingLog.type === 'model_request');
+  const metadata = closingLog.metadata as { closingTurn: boolean };
+  assert.equal(metadata.closingTurn, true);
+  assert.deepEqual(closingLog.context.tools?.map(tool => tool.name), ['report', 'finish_task']);
 });
 
 test('请求预算耗尽最多额外一轮，纯报告或无工具收尾后取消委托，新指令恢复完整工具和预算', async () => {

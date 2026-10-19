@@ -86,6 +86,7 @@ export interface GameState {
   human: { position: Position; oxygen: number; oxygenRate: number; carried: boolean };
   robot: { position: Position; battery: number; inventory: string[] };
   entities: Entity[]; knowledge: Knowledge; radarHistory: RadarEcho[]; markers: Marker[];
+  markerHistory?: { afterSequence: number; marker: Marker; removed: boolean }[];
   ledger: LedgerEntry[]; processedActions: Record<string, ActionOutcome>; failureReason: string | null;
 }
 export interface PlayerView {
@@ -95,6 +96,9 @@ export interface PlayerView {
   human: GameState['human']; robot: Omit<GameState['robot'], 'inventory'> & { inventory: ObservedEntity[] };
   rules: Rules; observed: ObservedEntity[]; radar: RadarEcho[]; markers: Marker[];
   sensorCells: Position[]; ledger: LedgerEntry[]; failureReason: string | null;
+}
+export interface ReplayView {
+  step: number; total: number; entries: LedgerEntry[]; state: PlayerView;
 }
 export const distance = (a: Position, b: Position): number => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 export const samePosition = (a: Position, b: Position): boolean => a.x === b.x && a.y === b.y;

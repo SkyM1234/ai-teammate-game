@@ -15,7 +15,7 @@ import type { SessionSave, SessionView } from '../apps/server/src/session.ts';
 import { parseDemoCommand } from '../apps/server/src/demo-task.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { GameEngine } from '../packages/game-core/src/engine.ts';
-import type { Action, Level, PlayerView } from '../packages/game-core/src/types.ts';
+import type { Action, Level, ReplayView } from '../packages/game-core/src/types.ts';
 import { levelRoutes, verifyLevelRoute } from '../packages/game-core/src/verify-level.ts';
 
 const source = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
@@ -126,8 +126,8 @@ test('移除地图文件后仍按存档地图恢复和回放，旧存档按 ID �
   const restored = await next.call(`${path}/load`, {});
   assert.equal(restored.status, 200); assert.equal(restored.data.level.id, original.id); assert.equal(restored.data.level.width, 16);
   assert.deepEqual(restored.data.robot.position, moved.robot.position);
-  const replay = await next.call<PlayerView[]>(`${path}/replay`);
-  assert.equal(replay.status, 200); assert.equal(replay.data[0].level.width, 16); assert.deepEqual(replay.data.at(-1)!.robot.position, moved.robot.position);
+  const replay = await next.call<ReplayView>(`${path}/replay?step=1`);
+  assert.equal(replay.status, 200); assert.equal(replay.data.state.level.width, 16); assert.deepEqual(replay.data.state.robot.position, moved.robot.position);
   await next.close();
   const file = join(savesDir, created.sessionId, 'game.json');
   const legacy: SessionSave = JSON.parse(await readFile(file, 'utf8')); delete legacy.level;

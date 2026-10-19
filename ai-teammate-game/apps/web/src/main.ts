@@ -2,7 +2,7 @@ import type { SessionView } from '../../server/src/session.ts';
 import type { ModelConfig, modelCatalog } from '../../server/src/model.ts';
 import type { ModelPreferencesView } from '../../server/src/model-preferences.ts';
 import type { LevelSummary } from '../../server/src/levels.ts';
-import type { Action, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
+import type { Action, Position, ReplayView } from '../../../packages/game-core/src/types.ts';
 import { roomCenter } from '../../../packages/game-core/src/types.ts';
 import { StationRenderer } from './station-renderer.ts';
 import type { RouteOverlay } from './station-renderer.ts';
@@ -28,8 +28,9 @@ catch {
 let view: SessionView | null = null;
 let selected: Position | null = null;
 let stream: EventSource | null = null;
-let frames: PlayerView[] | null = null;
-let replayIndex = 0;
+let replay: ReplayView | null = null;
+let replayLoading = false;
+let replayRequest = 0;
 let toastTimer: ReturnType<typeof setTimeout>;
 let sending = false;
 let lastMessages = '';
@@ -46,7 +47,7 @@ const phaseNames: Record<string, string> = { awaiting_command: '等待指令', a
 const stateNames: Record<string, string> = { available: '可获取', closed: '关闭', opened: '已打开', active: '带电', inactive: '未通电', on: '已通电', off: '已断电', damaged: '损坏', repaired: '已修复', cleared: '已移除', inventory: '已携带' };
 const dist = (a: Position, b: Position) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const same = (a: Position, b: Position) => a.x === b.x && a.y === b.y;
-const current = () => frames?.[replayIndex] ?? view;
+const current = () => replay?.state ?? view;
 function toast(message: string) { clearTimeout(toastTimer); $('toast').textContent = message; $('toast').hidden = false; toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4500); }
 const music = new GameMusic(enabled => {
   const button = $('music-toggle');
@@ -71,12 +72,12 @@ function accept(next: SessionView, fromStream = false) {
   if (!view || next.sessionId !== view.sessionId) return;
   if (next.sessionInstanceId !== view.sessionInstanceId) {
     if (!fromStream) return;
-    frames = null; selected = null; lastMessages = ''; markerEditorKey = '';
+    replayRequest++; replayLoading = false; replay = null; selected = null; lastMessages = ''; markerEditorKey = '';
   } else if (next.eventId < view.eventId) return;
   view = next; render();
 }
 function attach(next: SessionView) {
-  stream?.close(); frames = null; selected = null; lastMessages = ''; markerEditorKey = ''; view = next; render();
+  stream?.close(); replayRequest++; replayLoading = false; replay = null; selected = null; lastMessages = ''; markerEditorKey = ''; view = next; render();
   const source = new EventSource(`/api/sessions/${next.sessionId}/events`); stream = source;
   source.onopen = () => { if (source !== stream) return; $('connection').textContent = '通信正常'; $('connection').style.color = '#66ddce'; };
   source.onmessage = event => { if (source === stream) accept(JSON.parse(event.data), true); };
@@ -84,6 +85,7 @@ function attach(next: SessionView) {
 }
 async function post(operation: string, payload: Record<string, unknown> = {}) {
   if (!view) return false;
+  if (replayLoading && operation !== 'stop') return false;
   const session = view; const source = stream;
   try {
     const next = await api<SessionView>(`/api/sessions/${session.sessionId}/${operation}`, { requestId: crypto.randomUUID(), expectedRevision: session.stateRevision, ...payload });
@@ -97,10 +99,10 @@ async function post(operation: string, payload: Record<string, unknown> = {}) {
     return false;
   }
 }
-async function manual(action: Action) { if (!frames) await post('action', { action }); }
+async function manual(action: Action) { if (!replay) await post('action', { action }); }
 function button(label: string, action: Action) {
   const el = document.createElement('button'); el.textContent = label;
-  el.disabled = !!frames || !view || ['success', 'failure'].includes(view.phase);
+  el.disabled = !!replay || !view || ['success', 'failure'].includes(view.phase);
   el.onclick = () => void manual(action); return el;
 }
 function itemArt(kind: string) {
@@ -116,21 +118,21 @@ function itemArt(kind: string) {
 }
 function render() {
   if (!view) return;
-  music.update(`${view.sessionId}:${view.sessionInstanceId}`, view.phase, !!frames);
+  music.update(`${view.sessionId}:${view.sessionInstanceId}`, view.phase, !!replay);
   const p = current()!;
   const terminal = ['success', 'failure'].includes(p.phase);
   $('map-sector').textContent = `${p.level.id.toUpperCase()} · 救援区域`;
   $('level-name').textContent = p.level.name;
   $('map-dimensions').textContent = `${p.level.width} × ${p.level.height} / LOCAL`;
   $('level-name').title = p.level.name;
-  $('clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${frames ? ' / 回放' : ''}`;
+  $('clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${replay ? ' / 回溯' : ''}`;
   $('oxygen-value').textContent = String(p.human.oxygen);
   $('battery-value').textContent = String(p.robot.battery);
   document.querySelectorAll<HTMLElement>('[data-stat="oxygen"]').forEach(el => { el.textContent = String(p.human.oxygen); });
   document.querySelectorAll<HTMLElement>('[data-stat="battery"]').forEach(el => { el.textContent = String(p.robot.battery); });
   $('map-oxygen').textContent = String(p.human.oxygen);
   $('map-battery').textContent = String(p.robot.battery);
-  $('map-phase').textContent = frames ? '历史回放' : phaseNames[p.phase];
+  $('map-phase').textContent = replay ? '历史回溯' : phaseNames[p.phase];
   document.querySelector<HTMLElement>('.shell')!.dataset.danger = String(p.human.oxygen < 25);
   const milestones = [p.human.oxygenRate === p.rules.repairedOxygenRate, p.exitStatus === 'safe', p.phase === 'success'];
   $('exit-status').textContent = p.exitStatus === 'leaking' ? '出口漏气喷射中 · 修复气闸控制器后才可进入。' : '出口已密封 · 可将伤员搬运至 EXIT 撤离。';
@@ -162,9 +164,9 @@ function render() {
   $('circuit-lamp').dataset.on = String(p.circuitOn);
   $('control-position').textContent = `(${p.robot.position.x}, ${p.robot.position.y})`;
   $('inventory-count').textContent = `${p.robot.inventory.length} / ${p.rules.inventorySlots}`;
-  $('drawer-clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${frames ? ' / 回放' : ''}`;
+  $('drawer-clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${replay ? ' / 回溯' : ''}`;
   document.querySelector<HTMLElement>('.robot-card')!.dataset.lowBattery = String(p.robot.battery / p.rules.batteryMax < .25);
-  $('robot-summary').textContent = `${frames ? '回放 · ' : ''}${!frames && view.pendingRouteSelection ? '等待你选择路线' : !frames && view.pendingAuthorization ? '等待你的授权' : phaseNames[p.phase]}`;
+  $('robot-summary').textContent = `${replay ? '回溯 · ' : ''}${!replay && view.pendingRouteSelection ? '等待你选择路线' : !replay && view.pendingAuthorization ? '等待你的授权' : phaseNames[p.phase]}`;
   $('robot-location').textContent = `坐标 (${p.robot.position.x}, ${p.robot.position.y}) · ${p.human.carried ? '搬运伤员中' : `物资 ${p.robot.inventory.length} / ${p.rules.inventorySlots}`}`;
   $('human-status').textContent = `${p.human.carried ? '正在由 R-07 搬运' : '受伤 · 无法移动'} / 每 TU 消耗 ${p.human.oxygenRate} 氧气`;
   $('robot-status').textContent = `${phaseNames[p.phase]} / 坐标 (${p.robot.position.x}, ${p.robot.position.y})`;
@@ -221,46 +223,60 @@ function render() {
   if (p.human.carried && same(p.robot.position, p.level.exit)) $('nearby').append(button('启动气闸 · 撤离', { kind: 'extract' }));
   if (!$('nearby').childElementCount) { const hint = document.createElement('p'); hint.className = 'subtle'; hint.textContent = '附近没有已确认的可操作对象。'; $('nearby').append(hint); }
   $('nearby-count').textContent = `${$('nearby').querySelectorAll('button').length} 项操作`;
-  document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.disabled = terminal || !!frames; });
-  const task = view.task;
+  document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.disabled = terminal || !!replay; });
+  const task = replay ? null : view.task;
   $('task').replaceChildren();
   const taskStatus = task?.status === 'completed' && task.interpretation === 'model' ? '已结束' : task ? { active: '执行中', paused: '暂停', waiting: '待决定', completed: '已完成' }[task.status] : '待命';
-  $('comms-state').textContent = !frames && view.pendingRouteSelection ? '等待选路' : !frames && view.pendingAuthorization ? '等待授权' : frames ? '历史回放' : taskStatus;
+  $('comms-state').textContent = !replay && view.pendingRouteSelection ? '等待选路' : !replay && view.pendingAuthorization ? '等待授权' : replay ? '历史回溯' : taskStatus;
   const taskLabel = document.createElement('span'); taskLabel.className = 'tiny'; taskLabel.textContent = `当前委托 / ${taskStatus}`;
-  const taskText = document.createElement('p'); taskText.textContent = task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
+  const taskText = document.createElement('p'); taskText.textContent = replay ? '正在查看历史游戏状态，返回实时后可继续指挥。' : task?.text ?? '等待你的指令。'; $('task').append(taskLabel, taskText);
   if (task?.question) { const question = document.createElement('p'); question.className = 'question'; question.textContent = task.question; $('task').append(question); }
-  $<HTMLButtonElement>('stop').disabled = !!frames || terminal || !view.running;
-  $<HTMLButtonElement>('send').disabled = !!frames || terminal || sending;
+  $<HTMLButtonElement>('stop').disabled = !!replay || terminal || !view.running;
+  $<HTMLButtonElement>('send').disabled = !!replay || terminal || sending;
+  $<HTMLTextAreaElement>('command').disabled = !!replay;
+  $<HTMLButtonElement>('save').disabled = !!replay;
+  $<HTMLButtonElement>('model-settings').disabled = !!replay;
   $('demo-rescue-controls').hidden = view.agentMode !== 'demo' || !view.demoRescueAvailable;
-  $<HTMLButtonElement>('demo-rescue').disabled = !!frames || terminal || sending || view.running;
+  $<HTMLButtonElement>('demo-rescue').disabled = !!replay || terminal || sending || view.running;
   renderMessages();
   renderRoutePicker();
   const m = view.metrics; $('metrics').textContent = `模型请求 ${m.requests} / 工具 ${m.executedTools} / 跳过 ${m.skippedTools} / 中断 ${m.interrupts}\nTokens ${m.inputTokens} in · ${m.outputTokens} out / 结果 ${(m.resultBytes / 1024).toFixed(1)} KB`;
   $('ledger').replaceChildren();
-  $('ledger-mode').textContent = frames ? '历史回放' : '实时';
-  $('ledger-mode').dataset.replay = String(!!frames);
-  for (const entry of [...p.ledger].reverse()) {
+  $('ledger-mode').textContent = replay ? '历史回溯' : '实时';
+  $('ledger-mode').dataset.replay = String(!!replay);
+  for (const entry of [...(replay?.entries ?? p.ledger)].reverse()) {
     const row = document.createElement('div'); row.className = 'ledger-entry';
     const time = document.createElement('span'); time.className = 'tu'; time.textContent = `${entry.elapsedTU} TU`;
-    const title = document.createElement('span'); title.textContent = entry.message;
+    const title = document.createElement('button'); title.type = 'button'; title.className = 'ledger-jump'; title.textContent = entry.message;
+    title.setAttribute('aria-label', `回溯至行动 ${entry.sequence}：${entry.message}`);
+    title.disabled = replayLoading;
+    title.onclick = () => void seekReplay(entry.sequence);
+    if (replay?.step === entry.sequence) { row.dataset.selected = 'true'; title.setAttribute('aria-current', 'step'); }
     const glyph = document.createElement('span'); glyph.className = 'ledger-glyph'; glyph.setAttribute('aria-hidden', 'true'); glyph.textContent = entry.action.kind === 'move' ? '↗' : entry.action.kind === 'repair' ? '+' : entry.action.kind === 'scan' ? '◎' : '•';
     const cost = document.createElement('span'); cost.className = 'cost'; cost.textContent = `O₂ −${entry.cost.oxygen} / B −${entry.cost.battery}`;
     row.append(time, glyph, title, cost); $('ledger').append(row);
   }
-  if (!p.ledger.length) $('ledger').textContent = '等待第一次行动。';
+  if (!(replay?.entries ?? p.ledger).length) $('ledger').textContent = '尚无行动，可查看初始状态。';
   $('end-state').hidden = !terminal;
   $('end-state').classList.toggle('failed', p.phase === 'failure');
-  $('end-state').textContent = p.phase === 'success' ? `救援成功。你们用 ${p.elapsedTU} TU 离开了空间站。` : `救援失败：${p.failureReason ?? '资源耗尽'}。可以回放本局，或开始新的尝试。`;
-  $('replay-controls').hidden = !frames; $('exit-replay').hidden = !frames; $('replay').hidden = !!frames;
-  $('replay-index').textContent = `${replayIndex} / ${(frames?.length ?? 1) - 1}`;
+  $('end-state').textContent = p.phase === 'success' ? `救援成功。你们用 ${p.elapsedTU} TU 离开了空间站。` : `救援失败：${p.failureReason ?? '资源耗尽'}。可以回溯本局，或开始新的尝试。`;
+  $('replay-controls').hidden = !replay; $('exit-replay').hidden = !replay; $('replay').hidden = !!replay;
+  $<HTMLButtonElement>('replay').disabled = replayLoading;
+  const replayStep = replay?.step ?? 0;
+  $('replay-index').textContent = `${replayStep} / ${replay?.total ?? 0}`;
+  const slider = $<HTMLInputElement>('replay-slider');
+  slider.max = String(replay?.total ?? 0); slider.value = String(replayStep); slider.disabled = replayLoading;
+  for (const id of ['replay-first', 'replay-prev']) $<HTMLButtonElement>(id).disabled = replayLoading || replayStep === 0;
+  for (const id of ['replay-next', 'replay-last']) $<HTMLButtonElement>(id).disabled = replayLoading || replayStep === replay?.total;
+  $('replay-detail').textContent = replayLoading ? '正在重建历史状态…' : replay ? replayStep === 0 ? '初始状态 · 尚未执行行动' : `行动 ${replayStep} · ${replay.entries[replayStep - 1].message} · ${p.elapsedTU} TU` : '点击行动查看当时状态；查看历史前会暂停机器人。';
   renderSelection(); drawMap();
 }
 function renderSelection() {
   const p = current(); if (!p) return;
   $('selection-hint').hidden = !!selected;
-  $<HTMLButtonElement>('go-selected').disabled = !selected || !!frames || ['success', 'failure'].includes(p.phase) || same(selected, p.level.exit) && p.exitStatus === 'leaking';
-  $<HTMLButtonElement>('add-marker').disabled = !selected || !!frames;
-  $<HTMLButtonElement>('toggle-marker').disabled = !selected || !!frames;
+  $<HTMLButtonElement>('go-selected').disabled = !selected || !!replay || ['success', 'failure'].includes(p.phase) || same(selected, p.level.exit) && p.exitStatus === 'leaking';
+  $<HTMLButtonElement>('add-marker').disabled = !selected || !!replay;
+  $<HTMLButtonElement>('toggle-marker').disabled = !selected || !!replay;
   const markers = selected ? p.markers.filter(marker => same(marker.position, selected!)) : [];
   $('selection-markers').hidden = markers.length === 0;
   $('selection-markers').replaceChildren();
@@ -271,18 +287,18 @@ function renderSelection() {
     const note = document.createElement('p'); note.textContent = marker.note || '未填写说明';
     const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '移除';
     remove.setAttribute('aria-label', `移除标记：${marker.note || '未填写说明'}`);
-    remove.disabled = !!frames;
+    remove.disabled = !!replay;
     remove.onclick = async () => {
       remove.disabled = true;
       if (await post('remove-marker', { markerId: marker.id })) {
         if (drawer.open && drawer.dataset.panel === 'selection' && selected && same(selected, marker.position)) $('toggle-marker').focus();
         toast(marker.shared ? '已移除标记，并同步给 R-07。' : '已移除私有标记。');
       }
-      else remove.disabled = !!frames;
+      else remove.disabled = !!replay;
     };
     content.append(visibility, note); row.append(content, remove); $('selection-markers').append(row);
   }
-  const editorKey = JSON.stringify([view?.sessionId, selected, !!frames, markers]);
+  const editorKey = JSON.stringify([view?.sessionId, selected, !!replay, markers]);
   // Refresh on a different cell or saved marker, while preserving drafts during telemetry updates.
   if (editorKey !== markerEditorKey) {
     setMarkerEditor(false);
@@ -291,8 +307,8 @@ function renderSelection() {
     $<HTMLInputElement>('marker-shared').checked = latest?.shared ?? true;
     markerEditorKey = editorKey;
   }
-  $<HTMLInputElement>('marker-note').disabled = !selected || !!frames;
-  $<HTMLInputElement>('marker-shared').disabled = !selected || !!frames;
+  $<HTMLInputElement>('marker-note').disabled = !selected || !!replay;
+  $<HTMLInputElement>('marker-shared').disabled = !selected || !!replay;
   if (!selected) { if (drawer.open && drawer.dataset.panel === 'selection') drawer.close(); return; }
   $('selection-position').textContent = `(${selected.x}, ${selected.y})`;
   const object = p.observed.find(e => same(e.position, selected!) && !['cleared', 'inventory'].includes(e.state));
@@ -332,14 +348,14 @@ function drawMap() {
 const routeColor = (choice: string) => choice === 'safe' ? '#66ddce' : '#f2b864';
 const routeLabel = (choice: string) => choice === 'safe' ? 'A' : 'B';
 function routeOverlays(): RouteOverlay[] {
-  if (!view || frames) return [];
+  if (!view || replay) return [];
   const routes = view.pendingRouteSelection?.options ?? (view.pendingAuthorization?.route ? [view.pendingAuthorization.route] : []);
   return routes.map(route => ({ path: [view!.robot.position, ...route.path], color: routeColor(route.choice), label: routeLabel(route.choice) }));
 }
 
 function renderRoutePicker() {
-  const pending = frames ? null : view?.pendingRouteSelection;
-  const authorization = !frames && view?.pendingAuthorization?.kind === 'hazard' ? view.pendingAuthorization : null;
+  const pending = replay ? null : view?.pendingRouteSelection;
+  const authorization = !replay && view?.pendingAuthorization?.kind === 'hazard' ? view.pendingAuthorization : null;
   const decisionId = pending?.id ?? authorization?.id ?? '';
   $('route-picker').hidden = !decisionId;
   document.querySelector<HTMLElement>('.shell')!.dataset.routeDecision = String(!!decisionId);
@@ -516,7 +532,7 @@ function openPanel(panel: string) {
   if (!drawer.open) drawer.show();
   if (panel === 'comms') {
     $('messages').scrollTop = $('messages').scrollHeight;
-    if (view?.pendingAuthorization && !frames) $('authorization-approve').focus();
+    if (view?.pendingAuthorization && !replay) $('authorization-approve').focus();
     else $('command').focus();
   } else $('drawer-close').focus();
 }
@@ -533,7 +549,7 @@ document.addEventListener('keydown', event => {
   }
   event.preventDefault(); drawer.close();
 });
-async function command(text: string) { if (!text.trim() || frames) return; sending = true; render(); await post('command', { text, ...(selected ? { selected } : {}) }); sending = false; render(); }
+async function command(text: string) { if (!text.trim() || replay) return; sending = true; render(); await post('command', { text, ...(selected ? { selected } : {}) }); sending = false; render(); }
 async function stopAndReturnToComms() { if (await post('stop')) openPanel('comms'); }
 $('chat-form').onsubmit = event => { event.preventDefault(); const input = $<HTMLTextAreaElement>('command'); const text = input.value; input.value = ''; void command(text); };
 $('command').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $<HTMLFormElement>('chat-form').requestSubmit(); } };
@@ -544,7 +560,7 @@ $('cancel-marker').onclick = () => { setMarkerEditor(false); $('toggle-marker').
 $('clear-selection').onclick = () => { selected = null; renderSelection(); drawMap(); drawer.close(); canvas.focus(); };
 $('marker-form').onsubmit = async event => {
   event.preventDefault();
-  if (!selected || frames) return;
+  if (!selected || replay) return;
   const shared = $<HTMLInputElement>('marker-shared').checked;
   if (await post('marker', { position: selected, note: $<HTMLInputElement>('marker-note').value, shared })) {
     setMarkerEditor(false); $('toggle-marker').focus(); toast(shared ? '标记已共享给 R-07。' : '已保存仅自己可见的标记。');
@@ -642,7 +658,7 @@ $('load-form').onsubmit = async event => {
     apply.textContent = '恢复所选存档';
   }
 };
-function step(dx: number, dy: number) { if (view && !frames) void manual({ kind: 'move', target: { x: view.robot.position.x + dx, y: view.robot.position.y + dy } }); }
+function step(dx: number, dy: number) { if (view && !replay) void manual({ kind: 'move', target: { x: view.robot.position.x + dx, y: view.robot.position.y + dy } }); }
 document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.onclick = () => step(Number(el.dataset.dx), Number(el.dataset.dy)); });
 document.addEventListener('keydown', event => {
   if (event.defaultPrevented || event.isComposing || document.querySelector('dialog:modal')) return;
@@ -651,20 +667,27 @@ document.addEventListener('keydown', event => {
   const directions: Record<string, [number, number]> = { w: [0, -1], ArrowUp: [0, -1], a: [-1, 0], ArrowLeft: [-1, 0], s: [0, 1], ArrowDown: [0, 1], d: [1, 0], ArrowRight: [1, 0] };
   const direction = directions[event.key]; if (direction) { event.preventDefault(); if (!event.repeat) step(...direction); }
 });
-$('replay').onclick = async () => {
+async function seekReplay(step: number) {
   if (!view) return;
   const session = view; const source = stream;
+  const request = ++replayRequest;
+  replayLoading = true; render();
   try {
-    if (session.running) await post('stop');
-    if (!isCurrent(source, session)) return;
-    const next = await api<PlayerView[]>(`/api/sessions/${session.sessionId}/replay`);
-    if (!isCurrent(source, session)) return;
-    frames = next; replayIndex = 0; $<HTMLInputElement>('replay-slider').max = String(frames.length - 1); $<HTMLInputElement>('replay-slider').value = '0'; render();
-  }
-  catch (error) { if (isCurrent(source, session)) toast(String(error)); }
-};
-$('exit-replay').onclick = () => { frames = null; render(); };
-$('replay-slider').oninput = () => { replayIndex = Number($<HTMLInputElement>('replay-slider').value); render(); };
+    if (session.running && !await post('stop')) return;
+    if (!isCurrent(source, session) || request !== replayRequest) return;
+    const next = await api<ReplayView>(`/api/sessions/${session.sessionId}/replay?step=${step}`);
+    if (!isCurrent(source, session) || request !== replayRequest) return;
+    replay = next;
+  } catch (error) { if (isCurrent(source, session) && request === replayRequest) toast(error instanceof Error ? error.message : String(error)); }
+  finally { if (isCurrent(source, session) && request === replayRequest) { replayLoading = false; render(); } }
+}
+$('replay').onclick = () => void seekReplay(0);
+$('exit-replay').onclick = () => { replayRequest++; replayLoading = false; replay = null; render(); };
+$('replay-slider').oninput = () => void seekReplay(Number($<HTMLInputElement>('replay-slider').value));
+$('replay-first').onclick = () => void seekReplay(0);
+$('replay-prev').onclick = () => { if (replay) void seekReplay(replay.step - 1); };
+$('replay-next').onclick = () => { if (replay) void seekReplay(replay.step + 1); };
+$('replay-last').onclick = () => { if (replay) void seekReplay(replay.total); };
 async function start() {
   try {
     const latest = await api<SessionView | null>('/api/latest');
@@ -737,17 +760,21 @@ $('model-form').onsubmit = async event => {
 
 function renderMessages() {
   if (!view) return;
-  const pending = frames ? null : view?.pendingAuthorization;
-  const routePending = !frames && view.pendingRouteSelection;
+  const pending = replay ? null : view?.pendingAuthorization;
+  const routePending = !replay && view.pendingRouteSelection;
   $('comms-notice').hidden = !pending && !routePending;
   $('comms-notice').textContent = routePending ? '待选路' : '待授权';
   document.querySelectorAll<HTMLButtonElement>('[data-open="comms"]').forEach(button => {
     button.classList.toggle('needs-authorization', !!pending || !!routePending);
     button.setAttribute('aria-label', routePending ? '机器人通信 · 待选路' : pending ? '机器人通信 · 待授权' : '机器人通信');
   });
-  const messageKey = JSON.stringify([view.messages, pending?.id, !!frames, answeringAuthorization]);
+  const messageKey = JSON.stringify([view.messages, pending?.id, !!replay, answeringAuthorization]);
   if (messageKey === lastMessages) return;
   const area = $('messages');
+  if (replay) {
+    area.textContent = '回溯显示行动后的地图、资源和已知信息。对话与模型运行记录不随行动步数回退。';
+    lastMessages = messageKey; return;
+  }
   const pinned = area.scrollHeight - area.scrollTop - area.clientHeight < 70;
   const scrollTop = area.scrollTop;
   const oldAuthorization = area.querySelector<HTMLElement>('[data-authorization-id]')?.dataset.authorizationId;
@@ -793,7 +820,7 @@ function renderMessages() {
   lastMessages = messageKey;
 }
 async function answerAuthorization(approve: boolean, authorizationId: string) {
-  const pending = view?.pendingAuthorization; if (!pending || pending.id !== authorizationId || frames || answeringAuthorization) return;
+  const pending = view?.pendingAuthorization; if (!pending || pending.id !== authorizationId || replay || answeringAuthorization) return;
   answeringAuthorization = true; renderMessages(); renderRoutePicker();
   try { if (await post('authorize', { authorizationId: pending.id, approve }) && pending.kind === 'hazard') openPanel('comms'); }
   finally { answeringAuthorization = false; renderMessages(); renderRoutePicker(); }

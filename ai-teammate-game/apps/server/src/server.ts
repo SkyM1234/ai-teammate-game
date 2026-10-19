@@ -8,8 +8,7 @@ import type { SessionSave } from './session.ts';
 import { modelCatalog } from './model.ts';
 import type { ModelAdapter } from './model.ts';
 import { validateLevel } from '../../../packages/game-core/src/level.ts';
-import { GameEngine } from '../../../packages/game-core/src/engine.ts';
-import { SessionJournal, readableGame } from './journal.ts';
+import { SessionJournal } from './journal.ts';
 import { ModelPreferences } from './model-preferences.ts';
 import { loadLevels } from './levels.ts';
 import type { Action, Level, Position } from '../../../packages/game-core/src/types.ts';
@@ -54,7 +53,6 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
   function persist(session: GameSession): Promise<void> {
     const save = session.save();
     const snapshot = JSON.stringify(save, null, 2) + '\n';
-    const summary = readableGame(save);
     const previous = pendingWrites.get(session.id) ?? Promise.resolve();
     const promise = previous.catch(() => undefined).then(async () => {
       await session.journal?.flush();
@@ -63,8 +61,6 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
       const path = join(directory, 'game.json');
       const temporary = `${path}.tmp`;
       await writeFile(temporary, snapshot, 'utf8'); await rename(temporary, path);
-      const summaryPath = join(directory, 'game.md');
-      await writeFile(`${summaryPath}.tmp`, summary, 'utf8'); await rename(`${summaryPath}.tmp`, summaryPath);
     });
     pendingWrites.set(session.id, promise); return promise;
   }
@@ -162,13 +158,11 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
         res.on('close', () => { clearInterval(heartbeat); session.listeners.delete(send); eventClients.delete(res); }); return;
       }
       if (req.method === 'GET' && operation === 'replay') {
-        const replay = GameEngine.forReplay(session.engine.level, session.engine.state.ledger); const frames = [replay.playerView()];
-        for (const entry of session.engine.state.ledger) {
-          const outcome = replay.replayEntry(entry);
-          if (!outcome.accepted) throw new HttpError(400, '回放记录无法按当前规则重现');
-          frames.push(replay.playerView());
-        }
-        json(res, frames); return;
+        const value = url.searchParams.get('step') ?? '0';
+        if (!/^\d+$/.test(value)) throw new HttpError(400, '回溯步数必须是非负整数');
+        const step = Number(value);
+        if (!Number.isSafeInteger(step) || step > session.engine.state.ledger.length) throw new HttpError(400, '回溯步数超出行动账本范围');
+        json(res, session.engine.replayAt(step)); return;
       }
       if (req.method !== 'POST') throw new HttpError(405, '请求方法不支持');
       const input = await body(req);

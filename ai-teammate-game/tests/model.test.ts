@@ -12,6 +12,7 @@ import { createAppServer } from '../apps/server/src/server.ts';
 import { defaultModelConfig, liveModel, modelCatalog, validateModelConfig } from '../apps/server/src/model.ts';
 import { validateLevel } from '../packages/game-core/src/level.ts';
 import { SessionJournal } from '../apps/server/src/journal.ts';
+import type { JournalEntry } from '../apps/server/src/journal.ts';
 import { deepseekProvider } from '../../pi-main/packages/ai/dist/providers/deepseek.js';
 
 const level = validateLevel(JSON.parse(await readFile(new URL('./fixtures/station-01.json', import.meta.url), 'utf8')));
@@ -73,21 +74,24 @@ test('真实 pi 兼容接口发起 HTTP 请求，一轮工具串行执行并把�
   for (const request of requests) { const body = JSON.stringify(request.body); assert.ok(!body.includes('s-04')); assert.ok(!body.includes('a-01')); assert.ok(!body.includes(secret)); }
   assert.ok(JSON.stringify(requests[0].body.messages).includes('均使用简体中文'));
   assert.ok(!JSON.stringify(session.view()).includes(secret)); assert.ok(!JSON.stringify(session.save()).includes(secret));
-  const files = (await readdir(join(directory, 'models'))).sort();
-  const contexts = files.filter(name => name.endsWith('.context.json'));
-  const logs = files.filter(name => name.endsWith('.md'));
-  assert.equal(contexts.length, requests.length); assert.equal(logs.length, requests.length);
-  const firstContext = JSON.parse(await readFile(join(directory, 'models', contexts[0]), 'utf8'));
-  assert.equal(firstContext.metadata.model.id, 'mock-robot');
-  assert.deepEqual(firstContext.context.tools.map((tool: { name: string }) => tool.name), session.agent.state.tools.map(tool => tool.name));
-  const secondContext = await readFile(join(directory, 'models', contexts[1]), 'utf8');
+  assert.deepEqual(await readdir(directory), ['events.jsonl']);
+  const events = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  const entries = events.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+  const contexts = entries.filter(entry => entry.type === 'model_request');
+  const responses = entries.filter(entry => entry.type === 'model_response');
+  assert.equal(contexts.length, requests.length); assert.equal(responses.length, requests.length);
+  const firstContext = contexts[0];
+  assert.equal((firstContext.metadata as { model: { id: string } }).model.id, 'mock-robot');
+  assert.deepEqual(firstContext.context.tools?.map(tool => tool.name), session.agent.state.tools.map(tool => tool.name));
+  const secondContext = JSON.stringify(contexts[1]);
   assert.ok(secondContext.includes('newDiscoveries')); assert.ok(secondContext.includes('toolCallId'));
-  const firstLog = await readFile(join(directory, 'models', logs[0]), 'utf8');
-  assert.ok(firstLog.includes('完整请求上下文')); assert.ok(firstLog.includes('系统提示')); assert.ok(firstLog.includes('开始检查附近通道。'));
+  const firstLog = JSON.stringify(entries.filter(entry => 'requestId' in entry && entry.requestId === firstContext.requestId));
+  assert.ok(firstLog.includes('system')); assert.ok(firstLog.includes('开始检查附近通道。'));
   assert.ok(firstLog.includes('工具调用结果')); assert.ok(firstLog.includes('本轮决策结束'));
-  const events = await readFile(join(directory, 'events.md'), 'utf8');
   assert.ok(events.includes('玩家对话')); assert.ok(events.includes('游戏动作')); assert.ok(events.includes('自动运行结束'));
-  for (const name of files) assert.ok(!(await readFile(join(directory, 'models', name), 'utf8')).includes(secret));
+  assert.ok(!events.includes(secret));
+  assert.deepEqual(responses.map(entry => entry.requestId), contexts.map(entry => entry.requestId));
+  assert.ok(entries.indexOf(firstContext) < entries.indexOf(responses[0]));
 });
 
 test('预算收尾通过真实 pi HTTP 适配器仅声明报告和完成工具，并沿用指令与最后工具结果', async t => {
@@ -158,15 +162,16 @@ test('上游鉴权错误和超时暂停任务，不泄露上游错误内容或�
     assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.engine.state.human.oxygen, 120);
     assert.ok(session.modelError); assert.ok(!JSON.stringify(session.view()).includes(secret));
     assert.match(session.modelError, failure === 'auth' ? /鉴权/ : /超时/);
-    const logs = (await readdir(join(directory, 'models'))).filter(name => name.endsWith('.md'));
-    assert.equal(logs.length, 1);
-    const log = await readFile(join(directory, 'models', logs[0]), 'utf8');
-    assert.ok(log.includes('模型响应')); assert.ok(log.includes('自动运行结束')); assert.ok(!log.includes(secret));
+    const log = await readFile(join(directory, 'events.jsonl'), 'utf8');
+    const entries = log.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+    assert.equal(entries.filter(entry => entry.type === 'model_request').length, 1);
+    assert.ok(entries.some(entry => entry.type === 'model_response')); assert.ok(log.includes('自动运行结束')); assert.ok(!log.includes(secret));
     if (failure === 'auth') {
       await session.command('检查附近'); await session.settled();
-      const files = await readdir(join(directory, 'models'));
-      assert.equal(files.filter(name => name.endsWith('.md')).length, 2);
-      for (const name of files) assert.ok(!(await readFile(join(directory, 'models', name), 'utf8')).includes(secret));
+      const after = await readFile(join(directory, 'events.jsonl'), 'utf8');
+      const entries = after.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+      assert.equal(entries.filter(entry => entry.type === 'model_request').length, 2);
+      assert.ok(after.startsWith(log)); assert.ok(!after.includes(secret));
     }
   }
 });
@@ -200,9 +205,9 @@ test('切换模型取消正在等待的网络请求，保留进度和委托；�
   assert.equal(session.running, false); assert.equal(session.adapter.mode, 'demo');
   assert.equal(session.task?.text, '检查附近通道'); assert.equal(session.task.status, 'paused');
   assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.agent.state.model.id, 'local-demo');
-  const files = (await readdir(join(directory, 'models'))).filter(name => name.endsWith('.md'));
-  assert.equal(files.length, 1);
-  const cancelled = await readFile(join(directory, 'models', files[0]), 'utf8');
+  const cancelled = await readFile(join(directory, 'events.jsonl'), 'utf8');
+  const entries = cancelled.trim().split('\n').map(line => JSON.parse(line) as JournalEntry);
+  assert.equal(entries.filter(entry => entry.type === 'model_request').length, 1);
   assert.ok(cancelled.includes('取消当前运行')); assert.ok(cancelled.includes('自动运行结束')); assert.ok(!cancelled.includes(secret));
   await session.configureModel(config, secret);
   await session.configureModel({ ...config, timeoutMs: 2000 }, '');

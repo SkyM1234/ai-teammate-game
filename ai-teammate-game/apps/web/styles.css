@@ -244,7 +244,12 @@ kbd { display: inline-grid; place-items: center; min-width: 23px; height: 24px; 
 .ledger-entry { position: relative; display: grid; grid-template-columns: 43px 25px minmax(0, 1fr); gap: 6px 10px; padding: 16px 0; font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }.ledger-entry::before { content: ''; position: absolute; left: 65px; top: 0; bottom: 0; width: 1px; background: #586e4b; }.ledger-glyph { position: relative; display: grid; place-items: center; height: 25px; background: #293d2b; border: 1px solid #6c8358; color: #d9df99; font-size: 15px; }
 .ledger-entry .tu { color: #d4dea2; font-size: 11px; }
 .ledger-entry .cost { grid-column: 3; font-size: 10px; color: #a9bc90; }.replay-console { flex-shrink: 0; margin-top: 14px; padding-top: 12px; border-top: 1px solid #6b7c54; }.replay-console .section-title { margin-bottom: 0; }
-#replay-controls { display: flex; align-items: center; gap: 12px; margin: 14px 0 4px; font-size: 11px; color: #dce899; }
+#replay-controls { display: grid; gap: 12px; margin: 14px 0 4px; font-size: 11px; color: #dce899; }
+.replay-steps, .replay-range { display: flex; align-items: center; gap: 8px; }
+.replay-steps > button { flex: 1; padding: 7px 4px; font-size: 11px; }
+.ledger-jump { padding: 0; text-align: left; background: none; border: 0; font: inherit; color: inherit; }
+.ledger-jump:hover, .ledger-jump[aria-current] { color: #e4ec9a; text-decoration: underline; }
+.ledger-entry[data-selected="true"] { background: #dce54712; }
 #replay-slider { flex: 1; min-width: 0; width: 0; padding: 0; accent-color: #dce547; }
 .comms-panel { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
 .comms-panel > :not(.messages) { flex-shrink: 0; }
