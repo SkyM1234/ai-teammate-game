@@ -82,9 +82,9 @@
     <div class="circuit-row"><span><i class="status-lamp" id="circuit-lamp" aria-hidden="true"></i>辅助电路</span><strong id="circuit-state">断电</strong></div><p class="panel-note">靠近已确认开关后可操作。阅读、对话和等待不消耗资源。</p>
   </section>
   <section data-panel="objective" class="drawer-panel objective-panel" hidden>
-    <div class="mission-heading"><span class="mission-signal"><i class="status-lamp" aria-hidden="true"></i>求救信号已锁定</span><strong id="mission-progress">0 / 3</strong></div><div class="mission-track" aria-hidden="true"><span id="mission-progress-bar"></span></div><p id="exit-status" role="status"></p>
-    <ol class="mission-steps" aria-label="救援目标"><li data-milestone="0" aria-current="step"><span>修补供氧管</span><em class="milestone-state">当前阶段</em><small>完成条件：修补伤员供氧管，降低每 TU 氧气消耗。</small></li><li data-milestone="1"><span>准备气闸</span><em class="milestone-state">待完成</em><small>完成条件：维修气闸控制器，停止出口喷气并恢复通行。</small></li><li data-milestone="2"><span>搬运撤离</span><em class="milestone-state">待完成</em><small>完成条件：把伤员带至 EXIT，并启动撤离。</small></li></ol>
-    <p class="panel-note">先稳定生命支持，再为撤离创造条件。</p>
+    <div class="mission-heading"><span class="mission-signal"><i class="status-lamp" aria-hidden="true"></i>救援目标 · 必须完成</span><strong id="mission-progress">0 / 2</strong></div><div class="mission-track" aria-hidden="true"><span id="mission-progress-bar"></span></div><p id="exit-status" role="status"></p>
+    <ol class="mission-steps" aria-label="必须完成的救援目标"><li data-milestone="0" aria-current="step"><span>修复气闸</span><em class="milestone-state">当前阶段</em><small>完成条件：维修气闸控制器，停止出口喷气并恢复通行。</small></li><li data-milestone="1"><span>搬运撤离</span><em class="milestone-state">待完成</em><small>完成条件：把伤员带至 EXIT，并启动撤离。</small></li></ol>
+    <section class="optional-preparation" aria-labelledby="optional-preparation-heading"><h3 id="optional-preparation-heading">可选准备</h3><div class="preparation-heading"><strong>修补供氧管</strong><span id="optional-oxygen-state">未修补</span></div><p>降低每 TU 的氧气消耗，可按资源和路线决定是否修补；不是撤离的必要条件。</p></section>
     <div id="demo-rescue-controls" hidden><button id="demo-rescue" class="rescue-launch" aria-describedby="demo-rescue-note"><span class="rescue-launch-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 5v14l11-7z"/></svg></span><span>规则通关</span><svg class="rescue-launch-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button><p id="demo-rescue-note" class="rescue-launch-note">按预设路线完成救援，可随时停止。</p></div>
   </section>
   <section data-panel="ledger" class="drawer-panel ledger-panel" hidden>

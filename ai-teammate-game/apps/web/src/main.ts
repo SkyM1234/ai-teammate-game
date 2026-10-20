@@ -134,7 +134,7 @@ function render() {
   $('map-battery').textContent = String(p.robot.battery);
   $('map-phase').textContent = replay ? '历史回溯' : phaseNames[p.phase];
   document.querySelector<HTMLElement>('.shell')!.dataset.danger = String(p.human.oxygen < 25);
-  const milestones = [p.human.oxygenRate === p.rules.repairedOxygenRate, p.exitStatus === 'safe', p.phase === 'success'];
+  const milestones = [p.exitStatus === 'safe', p.phase === 'success'];
   $('exit-status').textContent = p.exitStatus === 'leaking' ? '出口漏气喷射中 · 修复气闸控制器后才可进入。' : '出口已密封 · 可将伤员搬运至 EXIT 撤离。';
   const firstIncomplete = milestones.indexOf(false);
   $('mission-progress').textContent = `${milestones.filter(Boolean).length} / ${milestones.length}`;
@@ -145,6 +145,9 @@ function render() {
     step.querySelector('.milestone-state')!.textContent = milestones[i] ? '已完成' : i === firstIncomplete ? '当前阶段' : '待完成';
     if (i === firstIncomplete) step.setAttribute('aria-current', 'step'); else step.removeAttribute('aria-current');
   });
+  const oxygenRepaired = p.human.oxygenRate === p.rules.repairedOxygenRate;
+  $('optional-oxygen-state').textContent = oxygenRepaired ? '已修补' : '未修补';
+  $('optional-oxygen-state').dataset.complete = String(oxygenRepaired);
   for (const id of ['oxygen-bar', 'monitor-oxygen-bar']) {
     $(id).style.width = `${p.human.oxygen / p.rules.oxygenMax * 100}%`;
     $(id).style.background = p.human.oxygen < 25 ? '#ef817c' : '#66ddce';
