@@ -448,9 +448,9 @@ test('普通移动遇危险后取消委托，重新委托可完成后续移动',
   assert.equal(moveResults(session)[1].code, 'OK');
 });
 
-test('无进展暂停，请求或行动预算耗尽则取消委托并说明原因', async () => {
+test('连续两次动作失败暂停，请求或行动预算耗尽则取消委托并说明原因', async () => {
   const cases = [
-    { requestLimit: 12, budget: 16, rounds: [[report], [report]], reason: /连续 2 轮.*未推进.*剩余.*16 TU/ },
+    { requestLimit: 12, budget: 16, rounds: [[move(0, 0)], [move(0, 0)]], reason: /连续 2 次动作工具执行失败.*剩余.*16 TU/ },
     { requestLimit: 1, budget: 16, rounds: [[report]], reason: /模型请求次数已用尽.*剩余.*16 TU/ },
     { requestLimit: 12, budget: 1, rounds: [[move(3, 9)]], reason: /行动预算已用尽.*剩余.*0 TU/ },
   ];
@@ -465,6 +465,90 @@ test('无进展暂停，请求或行动预算耗尽则取消委托并说明原�
       assert.match(message!.text, /委托已取消.*重新下达指令/);
     } else assert.equal(session.task?.status, 'paused');
   }
+});
+
+test('动作失败后查询和报告不截断纠错，成功移动后可以继续委托', async () => {
+  const { session } = scripted([
+    [move(0, 0)],
+    [{ name: 'get_status', arguments: {} }, report],
+    [move(3, 9), { name: 'ask_player', arguments: { question: '已纠正目标，下一步？' } }],
+  ]);
+  await session.command('检查移动'); await session.settled();
+  assert.equal(session.metrics.requests, 3);
+  assert.equal(session.task?.status, 'waiting');
+  assert.deepEqual(session.engine.state.robot.position, { x: 3, y: 9 });
+  assert.equal(session.engine.state.elapsedTU, 1);
+  assert.equal(session.engine.state.human.oxygen, level.rules.oxygen - level.rules.oxygenRate);
+});
+
+test('查询和报告不清零失败计数，第二次失败暂停并跳过批次剩余动作', async () => {
+  const { session } = scripted([
+    [move(0, 0)],
+    [{ name: 'get_status', arguments: {} }, report],
+    [move(0, 0), move(3, 9)],
+  ]);
+  await session.command('检查移动'); await session.settled();
+  assert.equal(session.metrics.requests, 3);
+  assert.equal(session.task?.status, 'paused');
+  assert.equal(session.engine.state.elapsedTU, 0);
+  assert.equal(session.metrics.skippedTools, 1);
+  assert.match(session.messages.at(-1)!.text, /连续 2 次动作工具执行失败/);
+});
+
+test('成功动作包含零 TU 动作和部分移动，均清零连续失败计数', async () => {
+  for (const kind of ['normal', 'zero-tu', 'partial']) {
+    const custom = structuredClone(level);
+    if (kind === 'zero-tu') custom.rules.actionCosts.move.tu = 0;
+    const { session } = scripted([
+      [move(0, 0)],
+      [kind === 'partial' ? move(5, 8) : move(3, 9)],
+      [move(0, 0)],
+      [{ name: 'ask_player', arguments: { question: '需要新的目标吗？' } }],
+    ], 0, custom);
+    await session.command(kind === 'partial' ? '找维修材料' : '检查移动'); await session.settled();
+    assert.equal(session.metrics.requests, 4, kind);
+    assert.equal(session.task?.status, 'waiting', kind);
+    assert.equal(session.engine.state.elapsedTU, kind === 'zero-tu' ? 0 : 1, kind);
+    if (kind === 'partial') assert.equal(session.messages.find(message => message.tool?.status === 'partial')?.tool?.name, 'move_to');
+  }
+});
+
+test('动作工具抛错计入连续失败，第二次抛错后暂停', async () => {
+  const { session } = scripted([[move(3, 9)], [move(3, 9)], [report]]);
+  session.agent.state.tools.find(tool => tool.name === 'move_to')!.execute = async () => { throw new Error('模拟动作执行错误'); };
+  await session.command('检查移动'); await session.settled();
+  assert.equal(session.metrics.requests, 2);
+  assert.equal(session.task?.status, 'paused');
+  assert.equal(session.engine.state.elapsedTU, 0);
+  assert.match(session.messages.at(-1)!.text, /连续 2 次动作工具执行失败/);
+});
+
+test('授权拒绝和跳过调用不算失败也不清零，后续动作失败才触发暂停', async () => {
+  for (const failAgain of [false, true]) {
+    const { session } = scripted([
+      [move(0, 0)],
+      [repair, move(3, 9)],
+      failAgain ? [move(0, 0)] : [{ name: 'ask_player', arguments: { question: '改用其他方案？' } }],
+    ]);
+    giveMaterial(session);
+    await session.command('检查移动'); const pending = await authorization(session);
+    await session.authorize(pending.id, false); await session.settled();
+    assert.equal(session.metrics.requests, 3);
+    assert.equal(session.task?.status, failAgain ? 'paused' : 'waiting');
+    assert.equal(session.engine.state.elapsedTU, 0);
+    assert.equal(session.engine.state.robot.inventory.length, 1);
+    assert.equal(session.metrics.skippedTools, 2);
+    if (failAgain) assert.match(session.messages.at(-1)!.text, /连续 2 次动作工具执行失败/);
+  }
+});
+
+test('新指令重新开始连续失败计数', async () => {
+  const ask: ToolIntent = { name: 'ask_player', arguments: { question: '需要新的目标吗？' } };
+  const { session } = scripted([[move(0, 0)], [ask], [move(0, 0)], [ask]]);
+  await session.command('检查移动'); await session.settled();
+  await session.command('重新检查'); await session.settled();
+  assert.equal(session.metrics.requests, 4);
+  assert.equal(session.task?.status, 'waiting');
 });
 
 test('一个模型响应中的多个安全工具串行执行，后续结果区分新发现与已有引用', async () => {
@@ -596,11 +680,13 @@ test('新指令取代旧移动，取消的工具不会在新任务中补执行',
   assert.ok(!session.messages.some(m => m.text === '状态报告'));
 });
 
-test('无进展循环有限终止，任务上下文不泄露未见的气闸或电池 ID', async () => {
-  const { session, contexts } = scripted([[report], [report], [report]]);
+test('连续查询和报告由请求预算终止，任务上下文不泄露未见的气闸或电池 ID', async () => {
+  const custom = structuredClone(level); custom.rules.requestLimit = 3;
+  const { session, contexts } = scripted([[report], [{ name: 'get_status', arguments: {} }], [report]], 0, custom);
   await session.command('维修气闸控制器'); await session.settled();
-  assert.equal(session.metrics.requests, 2);
-  assert.equal(session.task?.status, 'paused');
+  assert.equal(session.metrics.requests, 3);
+  assert.equal(session.task, null);
+  assert.equal(session.engine.state.phase, 'awaiting_command');
   assert.equal(session.engine.state.elapsedTU, 0);
   for (const context of contexts) {
     assert.ok(!context.includes('a-01')); assert.ok(!context.includes('s-04')); assert.ok(context.includes('echo-'));
@@ -907,7 +993,8 @@ test('拒绝授权不执行当前或后续调用，拒绝结果进入下一模�
   await session.authorize(pending.id, false); await session.settled();
   assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.engine.state.robot.inventory.length, 1);
   assert.ok(contexts[1].includes('AUTHORIZATION_DENIED')); assert.ok(!session.messages.some(m => m.text === '状态报告'));
-  assert.equal(session.pendingAuthorization, null); assert.equal(session.metrics.requests, 2);
+  assert.equal(session.pendingAuthorization, null); assert.equal(session.metrics.requests, 3);
+  assert.equal(session.task?.status, 'waiting');
 });
 
 test('等待授权时停止、手动操作或改令不会死锁，旧授权不能补执行', async () => {

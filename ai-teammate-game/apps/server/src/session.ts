@@ -119,8 +119,7 @@ export class GameSession {
   private requestExternalRevision = 0;
   private requestCount = 0;
   private runTU = 0;
-  private roundStartTU = 0;
-  private noProgressTurns = 0;
+  private consecutiveActionFailures = 0;
   private budgetStopReason: string | null = null;
   private closingTurn = false;
   private allowedCalls = new Set<string>();
@@ -152,7 +151,6 @@ export class GameSession {
       prepareRequest: async ({ context }) => {
         this.requestCount++; this.metrics.requests++;
         this.requestCommandRevision = this.commandRevision; this.requestExternalRevision = this.externalRevision;
-        this.roundStartTU = this.engine.state.elapsedTU;
         this.control = 'continue';
         this.engine.state.phase = 'agent_thinking';
         const base = context.messages[0];
@@ -228,13 +226,20 @@ export class GameSession {
         this.engine.state.phase = 'executing';
         return undefined;
       },
-      afterToolCall: async ({ toolCall, args, result, isError }) => {
+      afterToolCall: async ({ toolCall, args, result, isError }, signal) => {
         this.metrics.executedTools++;
+        const outcome = result.details as ToolOutcome | undefined;
+        // Queries and reports neither advance nor reset the action failure streak.
+        if (['move_to', 'scan', 'interact', 'set_circuit'].includes(toolCall.name)
+          && !signal?.aborted && this.requestCommandRevision === this.commandRevision && this.requestExternalRevision === this.externalRevision
+          && outcome?.code !== 'BUDGET') {
+          if (isError || outcome?.accepted === false) this.consecutiveActionFailures++;
+          else if (outcome?.accepted) this.consecutiveActionFailures = 0;
+        }
         if (isError) {
           this.rememberFailure(toolCall.name, args, 'TOOL_ERROR', result.content.filter(block => block.type === 'text').map(block => block.text).join('\n'));
           this.control = 'redecide'; return undefined;
         }
-        const outcome = result.details as ToolOutcome;
         if (!outcome || !outcome.delta) return undefined;
         if (!outcome.accepted) this.rememberFailure(toolCall.name, args, outcome.code, outcome.message);
         const delta = diffKnowledge(this.knowledgeBefore, this.engine.state.knowledge);
@@ -266,7 +271,6 @@ export class GameSession {
       finishTurn: async ({ message, toolResults }) => {
         this.metrics.inputTokens += message.usage.input + message.usage.cacheRead;
         this.metrics.outputTokens += message.usage.output;
-        if (this.engine.state.elapsedTU === this.roundStartTU && this.control !== 'task_done') this.noProgressTurns++; else this.noProgressTurns = 0;
         if (message.stopReason === 'error' || message.stopReason === 'aborted') {
           if (!this.engine.terminal) this.engine.state.phase = 'paused';
           if (this.task && this.task.status === 'active') this.task.status = 'paused';
@@ -292,9 +296,9 @@ export class GameSession {
           return { action: 'end' };
         }
         if (this.control === 'wait_player') return { action: 'end' };
-        if (this.noProgressTurns >= 2) {
+        if (this.consecutiveActionFailures >= 2) {
           const remaining = this.remainingBudget();
-          this.pause(`连续 ${this.noProgressTurns} 轮未推进游戏时间。剩余行动预算 ${remaining.remainingTU} TU，剩余模型请求 ${remaining.remainingRequests} 次。请重新下达指令。`);
+          this.pause(`连续 ${this.consecutiveActionFailures} 次动作工具执行失败。剩余行动预算 ${remaining.remainingTU} TU，剩余模型请求 ${remaining.remainingRequests} 次。请重新下达指令。`);
           return { action: 'end' };
         }
         if (toolResults.length === 0) {
@@ -334,7 +338,7 @@ export class GameSession {
         await this.journal?.record('自动运行结束', { control: this.control, phase: this.engine.state.phase, task: this.task, metrics: this.metrics, tools: this.messages.filter(entry => entry.tool).map(entry => entry.tool) }, true);
         this.journal?.endRun();
       }
-      if (event.type === 'turn_end') await this.journal?.record('本轮决策结束', { control: this.control, phase: this.engine.state.phase, elapsedTU: this.engine.state.elapsedTU, runTU: this.runTU, requestCount: this.requestCount, noProgressTurns: this.noProgressTurns, telemetry: this.engine.robotContext(), toolResults: event.toolResults }, true);
+      if (event.type === 'turn_end') await this.journal?.record('本轮决策结束', { control: this.control, phase: this.engine.state.phase, elapsedTU: this.engine.state.elapsedTU, runTU: this.runTU, requestCount: this.requestCount, consecutiveActionFailures: this.consecutiveActionFailures, telemetry: this.engine.robotContext(), toolResults: event.toolResults }, true);
     });
     this.say('robot', 'R-07 在线。你的供氧管正在泄漏，我的电量有限。请告诉我下一步该怎么做。');
   }
@@ -481,7 +485,6 @@ export class GameSession {
       }
       const route = pending.options.find(route => route.choice === choice);
       if (!route) throw new Error('所选路线不在当前候选列表中。');
-      this.noProgressTurns = 0;
       this.say('human', `选择前往 (${pending.target.x}, ${pending.target.y}) 的${route.choice === 'safe' ? '避险' : '较短带电'}路线：预计 ${route.estimatedCost.tu} TU、${route.estimatedCost.battery} 电量、${route.estimatedCost.oxygen} 氧气。`);
       this.resolveRouteSelection(choice);
     });
@@ -520,7 +523,6 @@ export class GameSession {
         this.resolveAuthorization('stale'); throw new RevisionConflictError('状态已变化，该授权已取消，机器人将重新决策。');
       }
       this.say('human', `${approve ? '授权' : '拒绝'}：${pending.description}`);
-      this.noProgressTurns = 0;
       this.resolveAuthorization(approve ? 'approve' : 'deny');
     });
   }
@@ -904,7 +906,7 @@ export class GameSession {
     await this.adapter.checkReady?.();
     if (this.adapter.ready === false) { this.modelError = '未找到可用的模型凭据，请检查 pi 登录、API Key 或模型设置。'; this.pause(this.modelError); this.checkpoint(text); return; }
     this.modelError = null;
-    this.runTU = 0; this.requestCount = 0; this.noProgressTurns = 0; this.budgetStopReason = null; this.closingTurn = false; this.control = 'continue'; this.running = true;
+    this.runTU = 0; this.requestCount = 0; this.consecutiveActionFailures = 0; this.budgetStopReason = null; this.closingTurn = false; this.control = 'continue'; this.running = true;
     this.record('自动运行开始', { text, task: this.task, stateRevision: this.engine.state.stateRevision });
     if (this.task) { this.task.status = 'active'; this.task.question = null; this.task.waitReason = undefined; }
     this.currentPromise = this.agent.prompt(text).catch(error => {
