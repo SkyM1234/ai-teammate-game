@@ -15,7 +15,6 @@
         "inventorySlots": 2,
         "sensorRadius": 1,
         "radarRadius": 5,
-        "leakCost": 6,
         "moveLimit": 12,
         "toolLimit": 8,
         "requestLimit": 12,
@@ -142,6 +141,9 @@
             }
           }
         }
+      },
+      "leakCosts": {
+        "h-01": 6
       },
       "routes": [
         {
@@ -949,10 +951,6 @@
                 ],
                 "stopOnHazard": false,
                 "allowedRepairs": []
-              },
-              "targetPosition": {
-                "x": 6,
-                "y": 1
               }
             },
             {
@@ -1084,10 +1082,6 @@
                 ],
                 "stopOnHazard": false,
                 "allowedRepairs": []
-              },
-              "targetPosition": {
-                "x": 6,
-                "y": 1
               }
             },
             {
@@ -3331,7 +3325,6 @@
         "inventorySlots": 2,
         "sensorRadius": 1,
         "radarRadius": 5,
-        "leakCost": 6,
         "moveLimit": 12,
         "toolLimit": 8,
         "requestLimit": 12,
@@ -3514,6 +3507,10 @@
             }
           }
         }
+      },
+      "leakCosts": {
+        "h-01": 6,
+        "h-02": 6
       },
       "routes": [
         {
@@ -4337,10 +4334,6 @@
                 ],
                 "stopOnHazard": false,
                 "allowedRepairs": []
-              },
-              "targetPosition": {
-                "x": 6,
-                "y": 4
               }
             },
             {
@@ -4573,10 +4566,6 @@
                 ],
                 "stopOnHazard": false,
                 "allowedRepairs": []
-              },
-              "targetPosition": {
-                "x": 6,
-                "y": 4
               }
             },
             {

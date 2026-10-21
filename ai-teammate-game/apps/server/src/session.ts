@@ -404,7 +404,7 @@ export class GameSession {
       const crossing = hazards.filter(entity => path.some(position => samePosition(position, entity.position)));
       const base = this.engine.level.rules.actionCosts[this.engine.state.human.carried ? 'carry_move' : 'move'];
       const tu = path.length * base.tu;
-      const battery = path.length * base.battery + path.filter(position => crossing.some(entity => samePosition(position, entity.position))).length * this.engine.level.rules.leakCost;
+      const battery = path.length * base.battery + crossing.reduce((total, entity) => total + entity.leakCost! * path.filter(position => samePosition(position, entity.position)).length, 0);
       const hazardIds = crossing.map(entity => entity.id);
       return { choice: `route-${index + 1}`, label: `路线 ${String.fromCharCode(65 + index)}`, highlights: [], path, steps: path.length, estimatedCost: { tu, battery, oxygen: tu * this.engine.state.human.oxygenRate }, withinRemainingTU: tu <= this.remainingBudget().remainingTU, hazardIds, requiresAuthorization: hazardIds.some(id => !constraints.authorizedHazardIds.includes(id)) };
     });
@@ -450,7 +450,7 @@ export class GameSession {
         const hazardIds = route.hazardIds.filter(id => !this.task?.constraints.authorizedHazardIds.includes(id));
         const crossing = hazardIds.map(id => this.engine.state.knowledge.entities[id]);
         const cost = route.estimatedCost;
-        return { kind: 'hazard', hazardIds, route, description: '允许本次移动经过已知带电线路吗？', consequence: `根据已知信息，路线预计 ${cost.tu} TU、${cost.battery} 电量、${cost.oxygen} 氧气；经过 ${crossing.map(entity => `(${entity.position.x},${entity.position.y})`).join('、')}；每次进入额外消耗 ${this.engine.level.rules.leakCost} 电量（已计入估算），仍检查返回储备和行动预算。拒绝后停止本次自动运行。` };
+        return { kind: 'hazard', hazardIds, route, description: '允许本次移动经过已知带电线路吗？', consequence: `根据已知信息，路线预计 ${cost.tu} TU、${cost.battery} 电量、${cost.oxygen} 氧气；经过 ${crossing.map(entity => `(${entity.position.x},${entity.position.y}) 每次进入额外消耗 ${entity.leakCost} 电量`).join('、')}（已计入估算），仍检查返回储备和行动预算。拒绝后停止本次自动运行。` };
       }
     }
     return null;

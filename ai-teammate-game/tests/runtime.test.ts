@@ -274,7 +274,7 @@ test('人工选择后才请求危险授权，批准沿所选路线走2格，拒�
 
 test('玩家选择绕路后遇新障碍直接取消委托，不再请求模型或授权', async () => {
   const custom = structuredClone(level); custom.rules.actionTULimit = 30;
-  custom.entities.push({ id: 'beside-detour', type: 'hazard', name: '绕路旁线路', position: { x: 5, y: 4 }, reflection: 2 });
+  custom.entities.push({ id: 'beside-detour', type: 'hazard', name: '绕路旁线路', position: { x: 5, y: 4 }, reflection: 2, leakCost: 6 });
   const { session } = scripted([[move(9, 3), report], [{ name: 'ask_player', arguments: { question: '不应再次请求模型' } }]], 0, custom);
   session.adapter.mode = 'live'; prepareDetour(session);
   await session.command('前往 (9,3)'); const pending = await routeSelection(session);
@@ -296,7 +296,7 @@ test('玩家选择绕路后遇新障碍直接取消委托，不再请求模型�
 test('玩家选择绕路后发现新危险直接取消委托，不穿越危险或申请后续授权', async () => {
   for (const stopOnHazard of [false, true]) {
     const custom = structuredClone(level); custom.rules.actionTULimit = 30;
-    custom.entities.push({ id: 'hidden-hazard', type: 'hazard', name: '隐藏线路', position: { x: 6, y: 5 }, reflection: 2 });
+    custom.entities.push({ id: 'hidden-hazard', type: 'hazard', name: '隐藏线路', position: { x: 6, y: 5 }, reflection: 2, leakCost: 6 });
     const { session } = scripted([[move(9, 3), report], [{ name: 'ask_player', arguments: { question: '不应再次请求模型' } }]], 0, custom);
     session.adapter.mode = 'live'; prepareDetour(session);
     await session.command('前往 (9,3)'); const pending = await routeSelection(session);
@@ -349,7 +349,7 @@ test('过期或无效路线选择不能移动，新指令会取消旧选择', as
 
 test('路线预估使用搬运与地图配置消耗，只统计已识别的危险', async () => {
   const custom = structuredClone(level); custom.rules.actionCosts.carry_move = { tu: 2, battery: 3 };
-  custom.entities.push({ id: 'hidden-hazard', type: 'hazard', name: '隐藏线路', position: { x: 6, y: 5 }, reflection: 2 });
+  custom.entities.push({ id: 'hidden-hazard', type: 'hazard', name: '隐藏线路', position: { x: 6, y: 5 }, reflection: 2, leakCost: 6 });
   const { session } = scripted([[move(9, 3)]], 0, custom);
   prepareDetour(session); session.engine.state.human.carried = true;
   session.engine.state.human.position = { ...session.engine.state.robot.position }; session.engine.state.human.oxygenRate = 1;
@@ -405,7 +405,7 @@ test('普通短距离移动直接执行，不增加路线确认回合', async ()
 test('普通移动只在新障碍、关闭门或带电危险影响剩余路线时停止', async () => {
   for (const type of ['obstacle', 'door', 'hazard'] as const) for (const targetX of [3, 5]) {
     const custom = structuredClone(level);
-    custom.entities = [{ id: 'hidden-blocker', type, name: '未知阻挡', position: { x: 4, y: 9 }, reflection: 2 }];
+    custom.entities = [{ id: 'hidden-blocker', type, name: '未知阻挡', position: { x: 4, y: 9 }, reflection: 2, leakCost: type === 'hazard' ? 6 : undefined }];
     const { session } = scripted([[move(targetX, 9), report, finish], [finish]], 0, custom);
     session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
     await session.command(`前往 (${targetX},9)`); await session.settled();
@@ -435,7 +435,7 @@ test('普通移动只在新障碍、关闭门或带电危险影响剩余路线�
 test('移动看到路线旁的障碍、门或危险时继续原路线，不追加模型请求或授权', async () => {
   for (const type of ['obstacle', 'door', 'hazard'] as const) {
     const custom = structuredClone(level);
-    custom.entities = [{ id: 'beside-route', type, name: '路旁物体', position: { x: 3, y: 8 }, reflection: 2 }];
+    custom.entities = [{ id: 'beside-route', type, name: '路旁物体', position: { x: 3, y: 8 }, reflection: 2, leakCost: type === 'hazard' ? 6 : undefined }];
     const { session } = scripted([[move(5, 9), report, finish]], 0, custom);
     session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
     await session.command('前往 (5,9)'); await session.settled();
@@ -452,7 +452,7 @@ test('移动看到路线旁的障碍、门或危险时继续原路线，不追�
 test('剩余路径上的已清除障碍、已打开门或断电线路不影响移动', async () => {
   for (const type of ['obstacle', 'door', 'hazard'] as const) {
     const custom = structuredClone(level);
-    custom.entities = [{ id: 'passable', type, name: '可通行对象', position: { x: 4, y: 9 }, reflection: 2 }];
+    custom.entities = [{ id: 'passable', type, name: '可通行对象', position: { x: 4, y: 9 }, reflection: 2, leakCost: type === 'hazard' ? 6 : undefined }];
     const { session } = scripted([[move(5, 9), finish]], 0, custom);
     session.adapter.mode = 'live';
     session.engine.state.entities[0].removed = type === 'obstacle';
@@ -468,7 +468,7 @@ test('剩余路径上的已清除障碍、已打开门或断电线路不影响�
 test('忽略路旁危险后，仍在发现剩余路径上的障碍时停止', async () => {
   const custom = structuredClone(level);
   custom.entities = [
-    { id: 'beside-route', type: 'hazard', name: '路旁线路', position: { x: 3, y: 8 }, reflection: 2 },
+    { id: 'beside-route', type: 'hazard', name: '路旁线路', position: { x: 3, y: 8 }, reflection: 2, leakCost: 6 },
     { id: 'on-route', type: 'obstacle', name: '路上障碍', position: { x: 5, y: 9 }, reflection: 2 },
   ];
   const { session } = scripted([[move(6, 9), report, finish]], 0, custom);
@@ -483,7 +483,7 @@ test('忽略路旁危险后，仍在发现剩余路径上的障碍时停止', as
 
 test('普通移动遇危险后取消委托，重新委托可完成后续移动', async () => {
   const custom = structuredClone(level);
-  custom.entities = [{ id: 'hidden-hazard', type: 'hazard', name: '未知线路', position: { x: 4, y: 9 }, reflection: 2 }];
+  custom.entities = [{ id: 'hidden-hazard', type: 'hazard', name: '未知线路', position: { x: 4, y: 9 }, reflection: 2, leakCost: 6 }];
   const { session } = scripted([[move(5, 9), report], [move(3, 8), finish]], 0, custom);
   session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
   await session.command('前往 (5,9)'); await session.settled();
@@ -1088,15 +1088,19 @@ test('已明确委托的维修无需重复授权，放下物资的授权只用�
 });
 
 test('危险移动在工具前申请精确线路授权，仅作用于当前调用并保留预算检查', async () => {
-  const { session } = scripted([[move(8, 3), report, finish]]);
+  const custom = structuredClone(level);
+  custom.entities.find(e => e.id === 'h-01')!.leakCost = 11;
+  const { session } = scripted([[move(8, 3), report, finish]], 0, custom);
   session.adapter.mode = 'live';
   session.engine.state.robot.position = { x: 8, y: 4 };
   session.engine.state.circuitOn = true; session.engine.observe();
   await session.command('探索气闸附近'); const pending = await authorization(session);
   assert.equal(pending.kind, 'hazard'); assert.deepEqual(pending.hazardIds, ['h-01']);
+  assert.match(pending.consequence, /预计 1 TU、12 电量/);
+  assert.match(pending.consequence, /\(8,3\) 每次进入额外消耗 11 电量/);
   assert.equal(session.engine.state.elapsedTU, 0);
   await session.authorize(pending.id, true); await session.settled();
-  assert.equal(session.engine.state.elapsedTU, 1); assert.equal(session.engine.state.robot.battery, level.rules.battery - level.rules.actionCosts.move.battery - level.rules.leakCost);
+  assert.equal(session.engine.state.elapsedTU, 1); assert.equal(session.engine.state.robot.battery, custom.rules.battery - custom.rules.actionCosts.move.battery - custom.entities.find(e => e.id === 'h-01')!.leakCost!);
   assert.deepEqual(session.engine.state.robot.position, { x: 8, y: 3 });
   assert.deepEqual(session.task?.constraints.authorizedHazardIds, []);
   assert.deepEqual(session.engine.state.ledger[0].constraints?.authorizedHazardIds, ['h-01']);

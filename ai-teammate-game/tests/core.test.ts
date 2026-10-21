@@ -189,7 +189,7 @@ test('清障说明、漏电附加消耗和返回电量储备随配置更新', ()
   custom.entities.find(e => e.id === 'o-01')!.actionCosts!.clear! = { tu: 5, battery: 7 };
   custom.rules.actionCosts.move = { tu: 2, battery: 8 };
   custom.rules.actionCosts.carry_move = { tu: 3, battery: 9 };
-  custom.rules.leakCost = 11;
+  custom.entities.find(e => e.id === 'h-01')!.leakCost = 11;
   const engine = new GameEngine(custom);
   engine.state.robot.position = { x: 6, y: 10 }; engine.observe();
   assert.equal(engine.perform({ kind: 'scan', targetId: 'o-01' }).accepted, true);
@@ -302,7 +302,7 @@ test('机器人在相邻格切换开关，更新观察且请求只结算一次',
 
 test('恢复拒绝旧规则版本和缺失标记历史的存档', () => {
   const engine = new GameEngine(level);
-  for (const rulesVersion of [1, 2]) assert.throws(() => engine.restore({ ...engine.snapshot(), rulesVersion }), /版本不兼容/);
+  for (const rulesVersion of [1, 2, 3]) assert.throws(() => engine.restore({ ...engine.snapshot(), rulesVersion }), /版本不兼容/);
   const incomplete = engine.snapshot() as unknown as Record<string, unknown>;
   delete incomplete.markerHistory;
   assert.throws(() => engine.restore(incomplete as unknown as ReturnType<GameEngine['snapshot']>), /存档不完整/);

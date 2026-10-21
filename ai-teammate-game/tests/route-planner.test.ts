@@ -31,7 +31,7 @@ test('最少带电、最低电量、最少步数可以是三条不同路线', ()
   const level = corridorLevel();
   const paths = routes(level);
   assert.deepEqual(paths.map(path => path.length), [22, 14, 10]);
-  const costs = paths.map(path => path.length + path.filter(p => level.entities.some(e => samePosition(e.position, p))).length * level.rules.leakCost);
+  const costs = paths.map(path => path.length + path.reduce((total, p) => total + (level.entities.find(e => samePosition(e.position, p))?.leakCost ?? 0), 0));
   assert.deepEqual(costs, [22, 20, 28]);
   assertValid(level, paths);
 });
@@ -43,6 +43,15 @@ test('同消耗的不同走廊仍可作为第四条路线，循环和重复路�
   assert.ok(paths.some(path => path.some(p => p.x === 6 && p.y === 9)));
   assertValid(level, paths);
   assert.deepEqual(routes(level), paths);
+});
+
+test('最低电量路线读取每条已知线路的费用，包括零费用', () => {
+  const level = corridorLevel();
+  level.entities.find(e => e.id === 'middle-hazard')!.leakCost = 30;
+  for (const entity of level.entities.filter(e => e.position.y === 7)) entity.leakCost = 0;
+  const paths = routes(level);
+  assert.deepEqual(paths.map(path => path.length), [22, 10, 14]);
+  assertValid(level, paths);
 });
 
 test('最低电量路径根据搬运消耗变化，零电量消耗也不会产生循环', () => {

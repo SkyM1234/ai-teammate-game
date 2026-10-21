@@ -10,11 +10,11 @@ const maxDetourSearches = 32;
 
 export function findKnownRoutes(level: Level, knowledge: Knowledge, start: Position, target: Position, circuitOn: boolean, carried: boolean, exitBlocked: boolean): Position[][] {
   const blocked = new Set<string>();
-  const hazards = new Set<string>();
+  const hazards = new Map<string, number>();
   for (const entity of Object.values(knowledge.entities)) {
     const key = positionKey(entity.position);
     if (['cabinet', 'airlock', 'switch'].includes(entity.type) || entity.type === 'door' && entity.state !== 'opened' || entity.type === 'obstacle' && entity.state !== 'cleared') blocked.add(key);
-    if (circuitOn && entity.type === 'hazard') hazards.add(key);
+    if (circuitOn && entity.type === 'hazard') hazards.set(key, (hazards.get(key) ?? 0) + entity.leakCost!);
   }
   if (exitBlocked) blocked.add(positionKey(level.exit));
   const passable = (p: Position) => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.y >= 0 && p.x < level.width && p.y < level.height && level.tiles[p.y][p.x] !== '#' && !blocked.has(positionKey(p));
@@ -40,7 +40,7 @@ export function findKnownRoutes(level: Level, knowledge: Knowledge, start: Posit
         const key = positionKey(position);
         if (excluded.has(key)) continue;
         const hazard = hazards.has(key) ? 1 : 0;
-        const next: SearchNode = { position, steps: current.steps + 1, battery: current.battery + base.battery + hazard * level.rules.leakCost, hazards: current.hazards + hazard, previous: current };
+        const next: SearchNode = { position, steps: current.steps + 1, battery: current.battery + base.battery + (hazards.get(key) ?? 0), hazards: current.hazards + hazard, previous: current };
         const old = best.get(key);
         if (old && compare(next, old, metric) >= 0) continue;
         best.set(key, next); frontier.push(next);

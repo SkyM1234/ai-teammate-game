@@ -13,11 +13,11 @@ export function corridorLevel(fourth = false): Level {
   level.robotStart = { x: 1, y: 7 }; level.humanStart = { ...level.robotStart };
   level.exit = { x: 11, y: 11, actionCosts: level.exit.actionCosts }; level.rooms = [];
   level.entities = [
-    ...[4, 6, 8].map(x => ({ id: `hazard-${x}`, type: 'hazard' as const, name: '线路', position: { x, y: 7 }, reflection: 2 })),
-    { id: 'middle-hazard', type: 'hazard', name: '线路', position: { x: 6, y: 5 }, reflection: 2 },
-    ...(fourth ? [{ id: 'lower-hazard', type: 'hazard' as const, name: '线路', position: { x: 6, y: 9 }, reflection: 2 }] : []),
+    ...[4, 6, 8].map(x => ({ id: `hazard-${x}`, type: 'hazard' as const, name: '线路', position: { x, y: 7 }, reflection: 2, leakCost: 6 })),
+    { id: 'middle-hazard', type: 'hazard', name: '线路', position: { x: 6, y: 5 }, reflection: 2, leakCost: 6 },
+    ...(fourth ? [{ id: 'lower-hazard', type: 'hazard' as const, name: '线路', position: { x: 6, y: 9 }, reflection: 2, leakCost: 6 }] : []),
   ];
-  level.rules.leakCost = 6; level.rules.actionCosts.move = { tu: 1, battery: 1 };
+  level.rules.actionCosts.move = { tu: 1, battery: 1 };
   level.rules.battery = 100; level.rules.oxygen = 100; level.rules.actionTULimit = 100;
   delete level.verification;
   return level;

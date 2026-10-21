@@ -59,6 +59,43 @@ test('同类物品拾取、放下和使用独立计费，零费用也实际生�
   assert.deepEqual(engine.state.robot.inventory, []);
 });
 
+test('线路漏电消耗必填且仅适用于 hazard，不接受全局配置', () => {
+  for (const value of [undefined, null, -1, 1.5, '6']) {
+    const invalid = structuredClone(level);
+    Reflect.set(invalid.entities.find(e => e.type === 'hazard')!, 'leakCost', value);
+    assert.throws(() => validateLevel(invalid), /entities.h-01.leakCost/);
+  }
+  const invalid = structuredClone(level);
+  invalid.entities.find(e => e.type === 'supply')!.leakCost = 6;
+  assert.throws(() => validateLevel(invalid), /仅 hazard/);
+  const global = structuredClone(level);
+  Reflect.set(global.rules, 'leakCost', 6);
+  assert.throws(() => validateLevel(global), /必须配置在 hazard 实体/);
+});
+
+test('不同线路按自身漏电消耗结算和展示，零消耗与断电均生效', () => {
+  const custom = structuredClone(level);
+  custom.entities = [
+    { id: 'free-wire', type: 'hazard', name: '线路', position: { x: 3, y: 9 }, reflection: 2, leakCost: 0 },
+    { id: 'costly-wire', type: 'hazard', name: '线路', position: { x: 4, y: 9 }, reflection: 2, leakCost: 11 },
+  ];
+  const engine = new GameEngine(validateLevel(custom));
+  assert.equal(engine.state.knowledge.entities['free-wire'].leakCost, 0);
+  assert.ok(!engine.state.knowledge.entities['costly-wire']);
+  engine.state.circuitOn = true;
+  const constraints = { reserveReturnBattery: false, reserveMargin: 0, authorizedHazardIds: ['free-wire', 'costly-wire'], stopOnHazard: false, allowedRepairs: [] };
+  for (const [id, battery] of [['free-wire', 1], ['costly-wire', 12]] as const) {
+    assert.equal(engine.perform({ kind: 'scan', targetId: id }).accepted, true);
+    const observed = engine.state.knowledge.entities[id];
+    assert.equal(observed.leakCost, battery - 1);
+    assert.match(observed.details!, new RegExp(`额外消耗 ${battery - 1} 电量`));
+    assert.deepEqual(engine.perform({ kind: 'move', target: observed.position }, crypto.randomUUID(), constraints).cost, { tu: 1, battery, oxygen: 2 });
+  }
+  engine.state.circuitOn = false;
+  engine.state.robot.position = { x: 3, y: 9 };
+  assert.deepEqual(engine.perform({ kind: 'move', target: { x: 4, y: 9 } }).cost, { tu: 1, battery: 1, oxygen: 2 });
+});
+
 test('不同障碍的清理说明与扣费一致，开启和关闭电路分别结算', () => {
   const custom = structuredClone(level);
   const first = custom.entities.find(e => e.id === 'o-01')!;

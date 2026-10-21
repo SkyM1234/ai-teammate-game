@@ -30,7 +30,7 @@ export class GameEngine {
   constructor(level: Level) {
     this.level = structuredClone(level);
     this.state = {
-      schemaVersion: 1, levelId: level.id, levelVersion: level.version, rulesVersion: 3,
+      schemaVersion: 1, levelId: level.id, levelVersion: level.version, rulesVersion: 4,
       stateRevision: 0, elapsedTU: 0, phase: 'awaiting_command', circuitOn: false,
       human: { position: { ...level.humanStart }, oxygen: level.rules.oxygen, oxygenRate: level.rules.oxygenRate, carried: false },
       robot: { position: { ...level.robotStart }, battery: level.rules.battery, inventory: [] },
@@ -90,6 +90,7 @@ export class GameEngine {
       scanned, observedAt: this.state.elapsedTU, source: scanned ? 'scan' : 'sensor',
     };
     if (entity.itemType) result.itemType = entity.itemType;
+    if (entity.type === 'hazard') result.leakCost = entity.leakCost;
     const costs = this.level.entities.find(definition => definition.id === entity.id)?.actionCosts;
     if (costs) result.actionCosts = structuredClone(costs);
     if (entity.type === 'supply' && entity.removed) result.details = consumedSupplyDetails;
@@ -98,7 +99,7 @@ export class GameEngine {
       if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
       else if (entity.type === 'switch') result.details = '机器人须在可达的相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
       else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : `控制器损坏导致出口喷气，出口格不可进入；需要 ${this.repairCost(entity.id)!.materials} 份维修材料修复。`;
-      else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${this.level.rules.leakCost} 电量。`;
+      else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${entity.leakCost} 电量。`;
       else if (entity.itemType === 'battery') result.details = `可恢复 ${this.level.rules.batteryRefill} 电量。`;
       else if (entity.itemType === 'oxygen') result.details = `可恢复 ${this.level.rules.oxygenRefill} 氧气。`;
       else if (entity.type === 'obstacle') result.details = `清理需要 ${costs!.clear!.tu} TU、${costs!.clear!.battery} 电量。`;
@@ -161,8 +162,8 @@ export class GameEngine {
   actionCost(action: Action): Cost {
     const base = this.configuredActionCost(action);
     if (!base) throw new Error(`动作消耗未配置：${action.kind}`);
-    const hazard = action.kind === 'move' && this.state.circuitOn && this.state.entities.some(e => e.type === 'hazard' && samePosition(e.position, action.target));
-    return { tu: base.tu, battery: base.battery + (hazard ? this.level.rules.leakCost : 0), oxygen: this.state.human.oxygenRate * base.tu };
+    const leakCost = action.kind === 'move' && this.state.circuitOn ? this.state.entities.filter(e => e.type === 'hazard' && samePosition(e.position, action.target)).reduce((total, entity) => total + entity.leakCost!, 0) : 0;
+    return { tu: base.tu, battery: base.battery + leakCost, oxygen: this.state.human.oxygenRate * base.tu };
   }
 
   replayEntry(entry: GameState['ledger'][number]): ActionOutcome {
@@ -410,7 +411,7 @@ export class GameEngine {
   snapshot(): GameState { return structuredClone(this.state); }
 
   restore(snapshot: GameState): void {
-    if (snapshot.schemaVersion !== 1 || snapshot.rulesVersion !== 3 || snapshot.levelId !== this.level.id || snapshot.levelVersion !== this.level.version) throw new Error('存档版本不兼容');
+    if (snapshot.schemaVersion !== 1 || snapshot.rulesVersion !== 4 || snapshot.levelId !== this.level.id || snapshot.levelVersion !== this.level.version) throw new Error('存档版本不兼容');
     if (!snapshot.robot || !snapshot.human || !Array.isArray(snapshot.entities) || !Array.isArray(snapshot.ledger) || !Array.isArray(snapshot.markerHistory) || !snapshot.knowledge) throw new Error('存档不完整');
     this.state = structuredClone(snapshot);
     if (!this.terminal) this.state.phase = 'paused';

@@ -124,11 +124,11 @@ npm run dev
 
 ## 调整数值
 
-物品、资源及动作消耗统一在各地图的 `content/levels/*.json` 配置。`entities` 设置物品和障碍物的数量、名称、类型及位置；`rules` 设置初始资源、上限、补给量、耗氧率和漏电额外电量 `leakCost`。
+物品、资源及动作消耗统一在各地图的 `content/levels/*.json` 配置。`entities` 设置物品和障碍物的数量、名称、类型及位置，每个 `hazard` 实体通过必填的 `leakCost` 设置该线路的漏电额外电量；`rules` 设置初始资源、上限、补给量和耗氧率。
 
 `rules.actionCosts` 中每项的 `tu` 是耗时，`battery` 是耗电量。`move` / `carry_move` 为普通 / 搬运移动，`scan` 扫描，`open` 开门或柜，`collect` 拾取，`drop_item` 放下物资，`use_battery` 安装电池，`use_oxygen` 补氧，`repair_human` 修补供氧管，`repair_airlock` 修复气闸，`clear` 清障，`pickup_human` / `drop_human` 抱起 / 放下玩家，`circuit` 操作开关，`extract` 撤离。两种维修的 `materials` 配置维修材料消耗份数，允许为 0。
 
-所有消耗必须是非负整数。氧气消耗统一为动作 `tu × 当前耗氧率`，修补供氧管这次仍按修补前的耗氧率结算；进入带电线路额外扣除 `leakCost` 电量。执行结算、自动行动预算、授权提示、扫描说明和模型可见规则均读取同一份配置。修改后重启服务并新建对局生效；已有存档及回放继续使用该局保存的配置。
+所有消耗必须是非负整数。氧气消耗统一为动作 `tu × 当前耗氧率`，修补供氧管这次仍按修补前的耗氧率结算；进入带电线路额外扣除该实体的 `leakCost` 电量，允许为 0。执行结算、路线估算、授权提示、扫描说明和模型可见信息均读取同一份配置。修改后重启服务并新建对局生效；不兼容 `rules.leakCost` 旧格式及使用该格式的存档、回放。
 
 ## 接入真实模型
 

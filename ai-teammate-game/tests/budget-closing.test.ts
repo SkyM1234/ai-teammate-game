@@ -166,7 +166,7 @@ test('收尾请求失败仍终止，保留已提交动作且不重试或标记�
 test('路径新危险和游戏失败即使同时耗尽预算也不追加收尾', async () => {
   for (const cause of ['hazard', 'failure', 'finish']) {
     const custom = structuredClone(level); custom.rules.requestLimit = 1;
-    if (cause === 'hazard') custom.entities = [{ id: 'new-hazard', name: '新线路', type: 'hazard', position: { x: 4, y: 9 }, reflection: 2 }];
+    if (cause === 'hazard') custom.entities = [{ id: 'new-hazard', leakCost: 6, name: '新线路', type: 'hazard', position: { x: 4, y: 9 }, reflection: 2 }];
     if (cause === 'failure') custom.rules.oxygen = custom.rules.oxygenRate;
     const { session, contexts } = scripted([cause === 'finish' ? [finish] : [move(5)]], custom);
     session.engine.state.circuitOn = cause === 'hazard';

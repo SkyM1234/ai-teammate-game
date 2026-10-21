@@ -19,9 +19,10 @@ export function validateLevel(value: unknown): Level {
   if (!Number.isInteger(level.width) || !Number.isInteger(level.height) || level.width < 3 || level.height < 3) throw new Error('地图尺寸非法');
   if (!Array.isArray(level.tiles) || level.tiles.length !== level.height || level.tiles.some(row => typeof row !== 'string' || row.length !== level.width || /[^#.DEX]/.test(row))) throw new Error('地图行长度或字符非法');
   if (!Array.isArray(level.entities) || !level.rules || typeof level.id !== 'string' || !level.id.trim() || typeof level.name !== 'string' || !level.name.trim() || !Number.isInteger(level.version) || level.version < 1 || !Array.isArray(level.rooms)) throw new Error('关卡字段不完整');
-  for (const name of ['oxygen', 'oxygenMax', 'oxygenRate', 'repairedOxygenRate', 'battery', 'batteryMax', 'batteryRefill', 'oxygenRefill', 'inventorySlots', 'sensorRadius', 'radarRadius', 'leakCost', 'moveLimit', 'toolLimit', 'requestLimit', 'actionTULimit'] as const) {
+  for (const name of ['oxygen', 'oxygenMax', 'oxygenRate', 'repairedOxygenRate', 'battery', 'batteryMax', 'batteryRefill', 'oxygenRefill', 'inventorySlots', 'sensorRadius', 'radarRadius', 'moveLimit', 'toolLimit', 'requestLimit', 'actionTULimit'] as const) {
     if (!Number.isInteger(level.rules[name]) || level.rules[name] < 0) throw new Error(`规则 ${name} 非法`);
   }
+  if ('leakCost' in level.rules) throw new Error('漏电消耗必须配置在 hazard 实体的 leakCost 中');
   for (const [name, amount] of Object.entries(level.rules)) if (name !== 'actionCosts' && (!Number.isInteger(amount) || amount < 0)) throw new Error(`规则 ${name} 非法`);
   validateCosts(level.rules.actionCosts, ['move', 'carry_move', 'scan'], 'rules.actionCosts');
   validateCosts(level.human?.actionCosts, ['repair', 'pickup_human', 'drop_human'], 'human.actionCosts');
@@ -39,6 +40,7 @@ export function validateLevel(value: unknown): Level {
   const ids = new Set<string>();
   for (const entity of level.entities) {
     if (!inside(entity.position) || ids.has(entity.id) || !['supply', 'cabinet', 'door', 'hazard', 'obstacle', 'airlock', 'switch'].includes(entity.type)) throw new Error('实体位置、类型或 ID 非法');
+    if (entity.type === 'hazard' ? !Number.isInteger(entity.leakCost) || entity.leakCost! < 0 : entity.leakCost !== undefined) throw new Error(`漏电消耗 entities.${entity.id}.leakCost 非法，仅 hazard 可配置且必须为非负整数`);
     if (entity.type === 'supply' && !['repair', 'battery', 'oxygen'].includes(entity.itemType ?? '')) throw new Error('补给类型非法');
     if (entity.orientation !== undefined && (entity.type !== 'door' || !['horizontal', 'vertical'].includes(entity.orientation))) throw new Error('门朝向非法：仅门可配置 horizontal 或 vertical');
     const actions = entity.type === 'supply' ? ['collect', 'drop_item', ...(entity.itemType === 'repair' ? [] : ['use_item'])]

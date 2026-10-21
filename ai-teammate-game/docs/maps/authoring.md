@@ -50,7 +50,13 @@
 | `human` | `repair`（包含 `materials`）、`pickup_human`、`drop_human` |
 | `exit` | `extract` |
 
-危险线路没有主动交互，不需要配置 `actionCosts`；通电时进入线路的额外扣电仍使用 `rules.leakCost`。
+危险线路没有主动交互，不需要配置 `actionCosts`；每个 `type: "hazard"` 实体必须配置 `leakCost`，表示通电时每次进入该线路额外消耗的电量，必须为非负整数，允许为 `0`。例如：
+
+```json
+{ "id": "h-01", "type": "hazard", "name": "裸露线路", "position": { "x": 3, "y": 2 }, "reflection": 2, "leakCost": 6 }
+```
+
+不同线路可以分别设置费用；已发现线路的 `leakCost` 会提供给 AI，扫描说明、路线估算、授权提示和实际扣电均读取该实体的配置。不兼容 `rules.leakCost` 旧格式及使用该格式的存档、回放。
 
 例如，同一氧气补给可以分别定义拾取、放下和使用费用：
 

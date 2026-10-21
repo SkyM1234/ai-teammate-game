@@ -12,7 +12,7 @@ export function galleryView(layout: 'square' | 'long' | 'walls', alternateState:
     { id: 'cabinet', type: 'cabinet', name: '柜', position: { x: 4, y: 6 }, state: alternateState ? 'opened' : 'closed' },
     { id: 'airlock', type: 'airlock', name: '控制器', position: { x: 6, y: 6 }, state: alternateState ? 'repaired' : 'damaged' },
     { id: 'switch', type: 'switch', name: '开关', position: { x: 2, y: 9 }, state: alternateState ? 'on' : 'off' },
-    { id: 'hazard', type: 'hazard', name: '线缆', position: { x: 4, y: 9 }, state: alternateState ? 'inactive' : 'active' },
+    { id: 'hazard', type: 'hazard', leakCost: 6, name: '线缆', position: { x: 4, y: 9 }, state: alternateState ? 'inactive' : 'active' },
     { id: 'obstacle', type: 'obstacle', name: '障碍', position: { x: 6, y: 9 }, state: 'blocked' },
   ];
   const observed: ObservedEntity[] = definitions.map(entity => ({ ...entity, observedAt: 0, source: 'sensor', scanned: true }));
@@ -26,7 +26,7 @@ export function galleryView(layout: 'square' | 'long' | 'walls', alternateState:
     rules: {
       oxygen: 120, oxygenMax: 180, oxygenRate: 2, repairedOxygenRate: 1,
       battery: 90, batteryMax: 100, batteryRefill: 30, oxygenRefill: 40,
-      inventorySlots: 2, sensorRadius: 1, radarRadius: 5, leakCost: 6,
+      inventorySlots: 2, sensorRadius: 1, radarRadius: 5,
       moveLimit: 12, toolLimit: 6, requestLimit: 8, actionTULimit: 12,
       actionCosts: {
         move: { tu: 1, battery: 1 }, carry_move: { tu: 1, battery: 2 }, scan: { tu: 1, battery: 1 },

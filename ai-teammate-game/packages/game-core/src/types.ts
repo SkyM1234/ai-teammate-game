@@ -19,7 +19,7 @@ export interface HumanActionCosts {
 export interface Rules {
   oxygen: number; oxygenMax: number; oxygenRate: number; repairedOxygenRate: number;
   battery: number; batteryMax: number; batteryRefill: number; oxygenRefill: number;
-  inventorySlots: number; sensorRadius: number; radarRadius: number; leakCost: number;
+  inventorySlots: number; sensorRadius: number; radarRadius: number;
   moveLimit: number; toolLimit: number; requestLimit: number; actionTULimit: number;
   actionCosts: ActionCosts;
 }
@@ -27,6 +27,7 @@ export interface EntityDefinition {
   id: string; type: EntityType; name: string; position: Position; reflection: number;
   itemType?: ItemType; containerId?: string; powerRequired?: boolean;
   orientation?: DoorOrientation;
+  leakCost?: number;
   actionCosts?: EntityActionCosts;
 }
 export interface Entity extends EntityDefinition {
@@ -49,6 +50,7 @@ export interface ObservedEntity {
   actionCosts?: EntityActionCosts;
   powerRequired?: boolean;
   orientation?: DoorOrientation;
+  leakCost?: number;
   observedAt: number; source: 'sensor' | 'scan';
 }
 export interface Knowledge {
