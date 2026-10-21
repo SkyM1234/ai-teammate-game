@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { corridorLevel } from './fixtures/corridors.ts';
 import { GameSession } from '../apps/server/src/session.ts';
 import { demoModel, toolStream } from '../apps/server/src/model.ts';
 import type { ToolIntent } from '../apps/server/src/model.ts';
@@ -184,8 +185,8 @@ test('移动前向玩家比较22格避险与2格带电路线，等待不消耗�
   const before = session.engine.snapshot();
   await session.command('前往 (9,3)'); const pending = await routeSelection(session);
   assert.deepEqual(pending.options.map(({ choice, steps, estimatedCost, withinRemainingTU, requiresAuthorization, hazardIds }) => ({ choice, steps, estimatedCost, withinRemainingTU, requiresAuthorization, hazardIds })), [
-    { choice: 'safe', steps: 22, estimatedCost: { tu: 22, battery: 22, oxygen: 44 }, withinRemainingTU: false, requiresAuthorization: false, hazardIds: [] },
-    { choice: 'shortest', steps: 2, estimatedCost: { tu: 2, battery: 8, oxygen: 4 }, withinRemainingTU: true, requiresAuthorization: true, hazardIds: ['h-01'] },
+    { choice: 'route-1', steps: 22, estimatedCost: { tu: 22, battery: 22, oxygen: 44 }, withinRemainingTU: false, requiresAuthorization: false, hazardIds: [] },
+    { choice: 'route-2', steps: 2, estimatedCost: { tu: 2, battery: 8, oxygen: 4 }, withinRemainingTU: true, requiresAuthorization: true, hazardIds: ['h-01'] },
   ]);
   assert.deepEqual(pending.options[1].path, [{ x: 8, y: 3 }, { x: 9, y: 3 }]);
   assert.deepEqual(session.view().pendingRouteSelection, pending);
@@ -197,7 +198,53 @@ test('移动前向玩家比较22格避险与2格带电路线，等待不消耗�
   await session.stop(); await session.settled();
   assert.equal(session.pendingRouteSelection, null); assert.equal(session.task, null);
   assert.equal(session.metrics.requests, 1); assert.equal(session.engine.state.elapsedTU, 0);
-  await assert.rejects(session.selectRoute(pending.id, 'safe'), /失效/);
+  await assert.rejects(session.selectRoute(pending.id, 'route-1'), /失效/);
+});
+
+test('四条独立候选均可显示，选择第四条后在同次调用中授权并严格沿其执行', async () => {
+  const custom = corridorLevel(true);
+  const { session } = scripted([[move(11, 7), finish]], 0, custom);
+  session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
+  for (const entity of custom.entities) {
+    session.engine.state.robot.position = entity.position; session.engine.observe();
+  }
+  session.engine.state.robot.position = { ...custom.robotStart };
+  await session.command('前往 (11,7)');
+  const pending = await routeSelection(session);
+  assert.equal(pending.options.length, 4);
+  assert.deepEqual(pending.options.map(route => route.choice), ['route-1', 'route-2', 'route-3', 'route-4']);
+  assert.ok(pending.options[0].highlights.includes('无已知带电格'));
+  assert.ok(pending.options[1].highlights.includes('电量最省'));
+  assert.ok(pending.options[2].highlights.includes('步数最少'));
+  assert.deepEqual(pending.options.map(route => route.label), ['路线 A', '路线 B', '路线 C', '路线 D']);
+  assert.equal(session.engine.state.elapsedTU, 0); assert.equal(session.metrics.requests, 1);
+  const selected = pending.options[3];
+  await session.selectRoute(pending.id, selected.choice);
+  const request = await authorization(session);
+  assert.deepEqual(request.hazardIds, ['lower-hazard']);
+  await session.authorize(request.id, true); await session.settled();
+  assert.deepEqual(session.engine.state.ledger.map(entry => entry.action), selected.path.map(target => ({ kind: 'move', target })));
+  assert.equal(session.engine.state.robot.battery, custom.rules.battery - selected.estimatedCost.battery);
+  assert.equal(moveResults(session)[0].targetReached, true); assert.equal(session.metrics.requests, 1);
+});
+
+test('已有危险授权不改变路线候选，只改变相应路线是否需要再次授权', async () => {
+  const { session } = scripted([[move(9, 3)]]);
+  prepareDetour(session);
+  await session.command('前往 (9,3)');
+  const first = await routeSelection(session);
+  const paths = first.options.map(route => route.path);
+  await session.stop(); await session.settled();
+  const next = scripted([[move(9, 3)]]).session;
+  prepareDetour(next);
+  next.listeners.add(() => {
+    if (next.task) next.task.constraints.authorizedHazardIds = ['h-01'];
+  });
+  await next.command('前往 (9,3)');
+  const second = await routeSelection(next);
+  assert.deepEqual(second.options.map(route => route.path), paths);
+  assert.ok(second.options.every(route => !route.requiresAuthorization));
+  await next.stop(); await next.settled();
 });
 
 test('人工选择后才请求危险授权，批准沿所选路线走2格，拒绝直接停止且取消后续工具', async () => {
@@ -205,7 +252,7 @@ test('人工选择后才请求危险授权，批准沿所选路线走2格，拒�
     const { session } = scripted([[move(9, 3), report, finish], [move(3, 9)]]);
     session.adapter.mode = 'live'; prepareDetour(session);
     await session.command('前往 (9,3)'); const selection = await routeSelection(session);
-    await session.selectRoute(selection.id, 'shortest'); const pending = await authorization(session);
+    await session.selectRoute(selection.id, 'route-2'); const pending = await authorization(session);
     assert.equal(session.pendingRouteSelection, null); assert.equal(session.engine.state.elapsedTU, 0);
     assert.deepEqual(pending.hazardIds, ['h-01']); assert.deepEqual(pending.route?.path, selection.options[1].path);
     assert.match(pending.consequence, /2 TU.*8 电量.*4 氧气/);
@@ -233,7 +280,7 @@ test('玩家选择绕路后遇新障碍直接取消委托，不再请求模型�
   await session.command('前往 (9,3)'); const pending = await routeSelection(session);
   assert.ok(pending.options.every(route => route.withinRemainingTU));
   assert.ok(!pending.options[0].path.some(position => position.x === 5 && position.y === 4));
-  await session.selectRoute(pending.id, 'safe'); await session.settled();
+  await session.selectRoute(pending.id, 'route-1'); await session.settled();
   assert.equal(session.pendingAuthorization, null);
   assert.equal(session.pendingRouteSelection, null); assert.equal(session.metrics.requests, 1);
   assert.equal(session.running, false); assert.equal(session.task, null); assert.equal(session.engine.state.phase, 'awaiting_command');
@@ -255,7 +302,7 @@ test('玩家选择绕路后发现新危险直接取消委托，不穿越危险�
     await session.command('前往 (9,3)'); const pending = await routeSelection(session);
     session.task!.constraints.stopOnHazard = stopOnHazard;
     assert.ok(!JSON.stringify(pending).includes('hidden-hazard'));
-    await session.selectRoute(pending.id, 'safe'); await session.settled();
+    await session.selectRoute(pending.id, 'route-1'); await session.settled();
     const result = moveResults(session)[0];
     assert.equal(result.code, 'NEW_HAZARD'); assert.equal(result.targetReached, false);
     assert.match(result.message, /hidden-hazard/); assert.match(result.message, /自动运行已停止/); assert.equal(result.batchControl, 'wait_player');
@@ -272,14 +319,14 @@ test('危险授权时停止运行后，再次指挥同一位置仍会显示相�
   const { session } = scripted([[move(9, 3), report, finish], [move(9, 3), finish]]);
   session.adapter.mode = 'live'; prepareDetour(session);
   await session.command('前往 (9,3)'); const firstSelection = await routeSelection(session);
-  await session.selectRoute(firstSelection.id, 'shortest'); const firstAuthorization = await authorization(session);
+  await session.selectRoute(firstSelection.id, 'route-2'); const firstAuthorization = await authorization(session);
   await session.stop(); await session.settled();
   assert.equal(session.pendingAuthorization, null); assert.equal(session.running, false); assert.equal(session.task, null);
   assert.equal(session.engine.state.elapsedTU, 0); assert.ok(!session.messages.some(message => message.text === '状态报告'));
   assert.equal(session.metrics.requests, 1); assert.equal(session.engine.state.elapsedTU, 0);
   await session.command('前往 (9,3)'); const secondSelection = await routeSelection(session);
   assert.notEqual(secondSelection.id, firstSelection.id); assert.deepEqual(secondSelection.options, firstSelection.options);
-  await session.selectRoute(secondSelection.id, 'shortest'); const secondAuthorization = await authorization(session);
+  await session.selectRoute(secondSelection.id, 'route-2'); const secondAuthorization = await authorization(session);
   assert.notEqual(secondAuthorization.id, firstAuthorization.id);
   assert.deepEqual(secondAuthorization.route, firstAuthorization.route);
   await session.authorize(secondAuthorization.id, true); await session.settled();
@@ -292,12 +339,12 @@ test('过期或无效路线选择不能移动，新指令会取消旧选择', as
   const { session } = scripted([[move(9, 3)], [finish]]);
   session.adapter.mode = 'live'; prepareDetour(session);
   await session.command('前往 (9,3)'); const pending = await routeSelection(session);
-  await assert.rejects(session.selectRoute(crypto.randomUUID(), 'safe'), /失效/);
-  await assert.rejects(session.selectRoute(pending.id, 'invalid' as 'safe'), /候选列表/);
+  await assert.rejects(session.selectRoute(crypto.randomUUID(), 'route-1'), /失效/);
+  await assert.rejects(session.selectRoute(pending.id, 'route-99'), /候选列表/);
   assert.equal(session.pendingRouteSelection?.id, pending.id); assert.equal(session.engine.state.elapsedTU, 0);
   await session.command('保持原地'); await session.settled();
   assert.equal(session.pendingRouteSelection, null); assert.equal(session.engine.state.elapsedTU, 0);
-  await assert.rejects(session.selectRoute(pending.id, 'shortest'), /失效/);
+  await assert.rejects(session.selectRoute(pending.id, 'route-2'), /失效/);
 });
 
 test('路线预估使用搬运与地图配置消耗，只统计已识别的危险', async () => {
@@ -321,7 +368,7 @@ test('共享信息、版本变化及手动操作使选路失效，恢复存档�
     if (operation === 'marker') session.marker({ x: 6, y: 4 }, '新线索', true);
     else if (operation === 'revision') {
       session.engine.state.stateRevision++;
-      await assert.rejects(session.selectRoute(pending.id, 'safe'), /状态已变化/);
+      await assert.rejects(session.selectRoute(pending.id, 'route-1'), /状态已变化/);
     } else if (operation === 'manual') await session.manual({ kind: 'move', target: { x: 6, y: 3 } }, crypto.randomUUID());
     else {
       const restored = new GameSession(level, { id: session.id, delayMs: 0 }); await restored.restore(session.save());
@@ -331,7 +378,7 @@ test('共享信息、版本变化及手动操作使选路失效，恢复存档�
     }
     await session.settled();
     assert.equal(session.pendingRouteSelection, null);
-    await assert.rejects(session.selectRoute(pending.id, 'shortest'), /失效/);
+    await assert.rejects(session.selectRoute(pending.id, 'route-2'), /失效/);
     assert.equal(session.engine.state.elapsedTU, operation === 'manual' ? 1 : 0);
     assert.ok(!session.messages.some(message => message.text === '状态报告'));
   }
@@ -829,7 +876,7 @@ test('修改单步 TU 后预算允许的步数及累计资源一致', async () =
   assert.deepEqual(session.engine.state.robot.position, { x: 5, y: 9 }); assert.equal(session.engine.state.elapsedTU, 6);
 });
 
-test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停止', async () => {
+test('选择长路线后单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停止', async () => {
   for (const budget of [30, 13]) {
     const longRoute = structuredClone(level);
     longRoute.robotStart = { x: 1, y: 10 };
@@ -840,7 +887,10 @@ test('单次 move_to 可超过12格，仍在自动运行的 TU 预算边界停�
       mode: 'test', label: 'long route', model: demoModel,
       streamFn: () => toolStream([{ name: 'move_to', arguments: { target: { x: 10, y: 1 } } }]),
     } });
-    await session.command('前往 (10,1)'); await session.settled();
+    await session.command('前往 (10,1)');
+    const pending = await routeSelection(session);
+    const shortest = pending.options.reduce((a, b) => a.steps <= b.steps ? a : b);
+    await session.selectRoute(pending.id, shortest.choice); await session.settled();
     const steps = Math.min(18, budget);
     assert.equal(session.metrics.requests, 1);
     assert.equal(session.metrics.executedTools, 1);

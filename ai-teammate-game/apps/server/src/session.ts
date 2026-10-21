@@ -5,6 +5,7 @@ import type { AgentMessage, AgentTool } from '../../../../pi-main/packages/agent
 import { toToolDeclaration } from '../../../../pi-main/packages/ai/dist/utils/transcript.js';
 import { defaultConstraints, diffKnowledge, GameEngine } from '../../../packages/game-core/src/engine.ts';
 import { sensorCells } from '../../../packages/game-core/src/navigation.ts';
+import { findKnownRoutes } from '../../../packages/game-core/src/route-planner.ts';
 import { distance, emptyDelta, samePosition } from '../../../packages/game-core/src/types.ts';
 import type { Action, ActionOutcome, Constraints, Cost, GameState, Knowledge, Level, ObservationDelta, ObservedEntity, PlayerView, Position } from '../../../packages/game-core/src/types.ts';
 import { demoModel, toolStream, defaultModelConfig, validateModelConfig, liveModel, modelErrorMessage } from './model.ts';
@@ -56,7 +57,7 @@ interface ToolOutcome {
   executedSteps?: number; targetReached?: boolean; costTU: number;
 }
 export interface MoveRoute {
-  choice: 'safe' | 'shortest'; path: Position[]; steps: number; estimatedCost: Cost;
+  choice: string; label: string; highlights: string[]; path: Position[]; steps: number; estimatedCost: Cost;
   withinRemainingTU: boolean; hazardIds: string[]; requiresAuthorization: boolean;
 }
 export class RevisionConflictError extends Error {}
@@ -398,19 +399,22 @@ export class GameSession {
   private moveRoutes(target: Position): MoveRoute[] {
     const constraints = this.task?.constraints ?? defaultConstraints();
     const hazards = this.engine.state.circuitOn ? Object.values(this.engine.state.knowledge.entities).filter(entity => entity.type === 'hazard') : [];
-    const safe = this.engine.knownPath(target, constraints);
-    const shortest = this.engine.knownPath(target, { ...constraints, authorizedHazardIds: [...new Set([...constraints.authorizedHazardIds, ...hazards.map(entity => entity.id)])] });
-    const routes: MoveRoute[] = [];
-    const add = (choice: MoveRoute['choice'], path: Position[]) => {
+    const paths = findKnownRoutes(this.engine.level, this.engine.state.knowledge, this.engine.state.robot.position, target, this.engine.state.circuitOn, this.engine.state.human.carried, this.engine.exitStatus === 'leaking');
+    const routes: MoveRoute[] = paths.map((path, index) => {
       const crossing = hazards.filter(entity => path.some(position => samePosition(position, entity.position)));
       const base = this.engine.level.rules.actionCosts[this.engine.state.human.carried ? 'carry_move' : 'move'];
       const tu = path.length * base.tu;
       const battery = path.length * base.battery + path.filter(position => crossing.some(entity => samePosition(position, entity.position))).length * this.engine.level.rules.leakCost;
       const hazardIds = crossing.map(entity => entity.id);
-      routes.push({ choice, path, steps: path.length, estimatedCost: { tu, battery, oxygen: tu * this.engine.state.human.oxygenRate }, withinRemainingTU: tu <= this.remainingBudget().remainingTU, hazardIds, requiresAuthorization: hazardIds.some(id => !constraints.authorizedHazardIds.includes(id)) });
-    };
-    if (safe) add('safe', safe);
-    if (shortest && (!safe || shortest.length < safe.length)) add('shortest', shortest);
+      return { choice: `route-${index + 1}`, label: `路线 ${String.fromCharCode(65 + index)}`, highlights: [], path, steps: path.length, estimatedCost: { tu, battery, oxygen: tu * this.engine.state.human.oxygenRate }, withinRemainingTU: tu <= this.remainingBudget().remainingTU, hazardIds, requiresAuthorization: hazardIds.some(id => !constraints.authorizedHazardIds.includes(id)) };
+    });
+    for (const route of routes) {
+      if (route.steps === Math.min(...routes.map(option => option.steps))) route.highlights.push('步数最少');
+      if (route.estimatedCost.battery === Math.min(...routes.map(option => option.estimatedCost.battery))) route.highlights.push('电量最省');
+      if (!route.hazardIds.length) route.highlights.push('无已知带电格');
+      else if (route.hazardIds.length === Math.min(...routes.map(option => option.hazardIds.length))) route.highlights.push('带电格最少');
+      if (!route.highlights.length) route.highlights.push('备选通道');
+    }
     return routes;
   }
 
@@ -485,7 +489,7 @@ export class GameSession {
       }
       const route = pending.options.find(route => route.choice === choice);
       if (!route) throw new Error('所选路线不在当前候选列表中。');
-      this.say('human', `选择前往 (${pending.target.x}, ${pending.target.y}) 的${route.choice === 'safe' ? '避险' : '较短带电'}路线：预计 ${route.estimatedCost.tu} TU、${route.estimatedCost.battery} 电量、${route.estimatedCost.oxygen} 氧气。`);
+      this.say('human', `选择前往 (${pending.target.x}, ${pending.target.y}) 的${route.label}：预计 ${route.estimatedCost.tu} TU、${route.estimatedCost.battery} 电量、${route.estimatedCost.oxygen} 氧气。`);
       this.resolveRouteSelection(choice);
     });
   }

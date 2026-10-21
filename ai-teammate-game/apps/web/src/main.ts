@@ -348,8 +348,9 @@ function drawMap() {
   if (station) station.update(p, selected, routeOverlays()); else drawFlatMap();
 }
 
-const routeColor = (choice: string) => choice === 'safe' ? '#66ddce' : '#f2b864';
-const routeLabel = (choice: string) => choice === 'safe' ? 'A' : 'B';
+const routeIndex = (choice: string) => Number(choice.slice('route-'.length)) - 1;
+const routeColor = (choice: string) => ['#66ddce', '#f2b864', '#9fa8ff', '#f18cbb'][routeIndex(choice)] ?? '#66ddce';
+const routeLabel = (choice: string) => String.fromCharCode(65 + routeIndex(choice));
 function routeOverlays(): RouteOverlay[] {
   if (!view || replay) return [];
   const routes = view.pendingRouteSelection?.options ?? (view.pendingAuthorization?.route ? [view.pendingAuthorization.route] : []);
@@ -372,9 +373,9 @@ function renderRoutePicker() {
   if (pending) for (const route of pending.options) {
     const option = document.createElement('button'); option.type = 'button'; option.className = 'route-option';
     option.style.setProperty('--route-color', routeColor(route.choice)); option.disabled = choosingRoute;
-    const title = document.createElement('strong'); title.textContent = `${routeLabel(route.choice)} · ${route.choice === 'safe' ? '避险路线' : '带电近路'} · ${route.steps} 格`;
+    const title = document.createElement('strong'); title.textContent = `${route.label} · ${route.steps} 格`;
     const cost = document.createElement('span'); cost.textContent = `${route.estimatedCost.tu} TU · ${route.estimatedCost.battery} 电量 · ${route.estimatedCost.oxygen} 氧气`;
-    const note = document.createElement('small'); note.textContent = [route.requiresAuthorization ? '选择后还需危险授权' : '选择后开始移动', !route.withinRemainingTU ? '超出本次剩余 TU，途中会停止' : ''].filter(Boolean).join(' · ');
+    const note = document.createElement('small'); note.textContent = [...route.highlights, route.requiresAuthorization ? '选择后还需危险授权' : '选择后开始移动', !route.withinRemainingTU ? '超出本次剩余 TU，途中会停止' : ''].filter(Boolean).join(' · ');
     option.append(title, cost, note);
     option.onclick = async () => {
       if (choosingRoute) return;

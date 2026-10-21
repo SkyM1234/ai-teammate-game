@@ -332,10 +332,10 @@ test('HTTP 选路同步候选路径、校验与去重，选带电路线后拒绝
   controller.abort(); await reader.cancel().catch(() => undefined);
   const selectionId = session.pendingRouteSelection!.id;
   assert.equal((await call(path)).data.pendingRouteSelection?.options.length, 2);
-  for (const invalid of [{ selectionId, choice: 'anything' }, { selectionId: 'bad-id', choice: 'safe' }, { choice: 'safe' }]) {
+  for (const invalid of [{ selectionId, choice: 'anything' }, { selectionId: 'bad-id', choice: 'route-1' }, { choice: 'route-1' }]) {
     assert.equal((await call(`${path}/select-route`, { requestId: crypto.randomUUID(), ...invalid })).status, 400);
   }
-  const input = { requestId: crypto.randomUUID(), selectionId, choice: 'shortest' };
+  const input = { requestId: crypto.randomUUID(), selectionId, choice: 'route-2' };
   assert.equal((await call(`${path}/select-route`, input)).status, 200);
   assert.equal((await call(`${path}/select-route`, input)).status, 200);
   assert.equal((await call(`${path}/select-route`, { ...input, requestId: crypto.randomUUID() })).status, 409);

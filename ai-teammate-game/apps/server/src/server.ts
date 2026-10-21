@@ -174,8 +174,8 @@ export function createAppServer(inputLevels: Level | Level[], options: { savesDi
             await session.authorize(input.authorizationId, input.approve);
           }
           else if (operation === 'select-route') {
-            if (typeof input.selectionId !== 'string' || !uuidPattern.test(input.selectionId) || !['safe', 'shortest'].includes(input.choice as string)) throw new HttpError(400, '路线选择参数不合法');
-            await session.selectRoute(input.selectionId, input.choice as 'safe' | 'shortest');
+            if (typeof input.selectionId !== 'string' || !uuidPattern.test(input.selectionId) || typeof input.choice !== 'string' || !/^route-[1-9]\d*$/.test(input.choice)) throw new HttpError(400, '路线选择参数不合法');
+            await session.selectRoute(input.selectionId, input.choice);
           }
           else if (operation === 'marker') {
             if (typeof input.note !== 'string' || typeof input.shared !== 'boolean') throw new HttpError(400, '标记参数不完整');
