@@ -212,25 +212,67 @@ function render() {
   const near = p.observed.filter(e => !['cleared', 'inventory'].includes(e.state) && p.sensorCells.some(cell => same(cell, e.position)) && dist(e.position, p.robot.position) <= 1);
   for (const e of near) {
     const group = document.createElement('div'); group.className = 'action-group';
-    const title = document.createElement('p'); title.textContent = e.name;
-    const state = document.createElement('span'); state.className = 'object-state'; state.textContent = `${stateNames[e.state] ?? e.state} · (${e.position.x}, ${e.position.y})`;
-    group.append(itemArt(e.itemType ?? e.type), title, state);
-    if (!e.scanned) group.append(button('检查', { kind: 'scan', targetId: e.id }));
-    if (e.type === 'supply' && e.state === 'available') group.append(button('拾取', { kind: 'collect', targetId: e.id }));
-    if (['cabinet', 'door'].includes(e.type) && e.state === 'closed') group.append(button('开启', { kind: 'open', targetId: e.id }));
-    if (e.type === 'obstacle') group.append(button('清理', { kind: 'clear', targetId: e.id }));
-    if (e.type === 'airlock' && e.state === 'damaged') group.append(button('维修', { kind: 'repair', targetId: e.id }));
-    if (e.type === 'switch') {
-      const detail = document.createElement('p'); detail.className = 'subtle';
-      detail.textContent = e.controlledDevices ? `控制：${e.controlledDevices.map(device => device.name).join('、') || '无'}` : '控制设备未知，检查后可确认。';
-      group.append(detail, button(e.state === 'on' ? '关闭电路' : '开启电路', { kind: 'circuit', targetId: e.id, on: e.state !== 'on' }));
+    group.dataset.state = e.state; group.setAttribute('role', 'group'); group.setAttribute('aria-label', e.name);
+    const heading = document.createElement('div'); heading.className = 'action-heading';
+    const identity = document.createElement('div'); identity.className = 'action-identity';
+    const title = document.createElement('strong'); title.className = 'action-name'; title.textContent = e.name;
+    const meta = document.createElement('div'); meta.className = 'action-meta';
+    const state = document.createElement('span'); state.className = 'object-state'; state.textContent = stateNames[e.state] ?? e.state;
+    const position = document.createElement('span'); position.textContent = `坐标 (${e.position.x}, ${e.position.y})`;
+    meta.append(state, position); identity.append(title, meta);
+    heading.append(itemArt(e.itemType ?? e.type), identity); group.append(heading);
+    const controls = document.createElement('div'); controls.className = 'action-buttons';
+    if (!e.scanned) {
+      const inspect = button(e.type === 'switch' ? '检查控制设备' : '检查', { kind: 'scan', targetId: e.id });
+      if (e.type === 'switch') inspect.classList.add('primary');
+      controls.append(inspect);
     }
+    if (e.type === 'supply' && e.state === 'available') controls.append(button('拾取', { kind: 'collect', targetId: e.id }));
+    if (['cabinet', 'door'].includes(e.type) && e.state === 'closed') controls.append(button('开启', { kind: 'open', targetId: e.id }));
+    if (e.type === 'obstacle') controls.append(button('清理', { kind: 'clear', targetId: e.id }));
+    if (e.type === 'airlock' && e.state === 'damaged') controls.append(button('维修', { kind: 'repair', targetId: e.id }));
+    if (e.type === 'switch') {
+      const detail = document.createElement('div'); detail.className = 'action-detail';
+      const label = document.createElement('div'); label.className = 'action-detail-heading';
+      const caption = document.createElement('span'); caption.textContent = '控制设备';
+      const count = document.createElement('span'); count.textContent = e.controlledDevices ? `${e.controlledDevices.length} 项` : '待检查';
+      label.append(caption, count); detail.append(label);
+      if (e.controlledDevices?.length) {
+        const devices = document.createElement('ul'); devices.className = 'controlled-devices';
+        for (const device of e.controlledDevices) {
+          const row = document.createElement('li');
+          const name = document.createElement('span'); name.textContent = device.name;
+          const type = document.createElement('span'); type.className = 'controlled-device-type';
+          type.textContent = device.type === 'hazard' ? '线路' : device.type === 'door' ? '门' : '柜体';
+          row.append(name, type); devices.append(row);
+        }
+        detail.append(devices);
+      } else {
+        const hint = document.createElement('p'); hint.className = 'action-hint';
+        hint.textContent = e.controlledDevices ? '此开关未连接设备。' : '控制范围未知，检查后可确认。';
+        detail.append(hint);
+      }
+      group.append(detail);
+      controls.append(button(e.state === 'on' ? '关闭电路' : '开启电路', { kind: 'circuit', targetId: e.id, on: e.state !== 'on' }));
+    }
+    if (controls.childElementCount) group.append(controls);
     $('nearby').append(group);
   }
-  if (dist(p.human.position, p.robot.position) <= 1 && p.human.oxygenRate !== p.rules.repairedOxygenRate) $('nearby').append(button('修补供氧管', { kind: 'repair', targetId: 'human' }));
-  if (same(p.human.position, p.robot.position)) $('nearby').append(button(p.human.carried ? '放下你' : '抱起你', { kind: p.human.carried ? 'drop_human' : 'pickup_human' }));
-  if (p.human.carried && same(p.robot.position, p.level.exit)) $('nearby').append(button('启动气闸 · 撤离', { kind: 'extract' }));
-  if (!$('nearby').childElementCount) { const hint = document.createElement('p'); hint.className = 'subtle'; hint.textContent = '附近没有已确认的可操作对象。'; $('nearby').append(hint); }
+  const assistance = document.createElement('div'); assistance.className = 'assistance-actions';
+  const assistanceButtons = document.createElement('div'); assistanceButtons.className = 'action-buttons';
+  if (dist(p.human.position, p.robot.position) <= 1 && p.human.oxygenRate !== p.rules.repairedOxygenRate) assistanceButtons.append(button('修补供氧管', { kind: 'repair', targetId: 'human' }));
+  if (same(p.human.position, p.robot.position)) assistanceButtons.append(button(p.human.carried ? '放下你' : '抱起你', { kind: p.human.carried ? 'drop_human' : 'pickup_human' }));
+  if (p.human.carried && same(p.robot.position, p.level.exit)) assistanceButtons.append(button('启动气闸 · 撤离', { kind: 'extract' }));
+  if (assistanceButtons.childElementCount) {
+    const title = document.createElement('strong'); title.className = 'action-name'; title.textContent = '伤员协助';
+    assistance.append(title, assistanceButtons); $('nearby').append(assistance);
+  }
+  if (!$('nearby').childElementCount) {
+    const empty = document.createElement('div'); empty.className = 'nearby-empty';
+    const title = document.createElement('strong'); title.textContent = '附近暂无可操作对象';
+    const hint = document.createElement('p'); hint.textContent = '移动机器人，靠近设施或伤员。';
+    empty.append(title, hint); $('nearby').append(empty);
+  }
   $('nearby-count').textContent = `${$('nearby').querySelectorAll('button').length} 项操作`;
   document.querySelectorAll<HTMLButtonElement>('[data-dx]').forEach(el => { el.disabled = terminal || !!replay; });
   const task = p.task;
