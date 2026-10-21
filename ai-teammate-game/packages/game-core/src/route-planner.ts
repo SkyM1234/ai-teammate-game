@@ -8,13 +8,13 @@ interface SearchNode { position: Position; steps: number; battery: number; hazar
 const maxRoutes = 4;
 const maxDetourSearches = 32;
 
-export function findKnownRoutes(level: Level, knowledge: Knowledge, start: Position, target: Position, circuitOn: boolean, carried: boolean, exitBlocked: boolean): Position[][] {
+export function findKnownRoutes(level: Level, knowledge: Knowledge, start: Position, target: Position, carried: boolean, exitBlocked: boolean): Position[][] {
   const blocked = new Set<string>();
   const hazards = new Map<string, number>();
   for (const entity of Object.values(knowledge.entities)) {
     const key = positionKey(entity.position);
     if (['cabinet', 'airlock', 'switch'].includes(entity.type) || entity.type === 'door' && entity.state !== 'opened' || entity.type === 'obstacle' && entity.state !== 'cleared') blocked.add(key);
-    if (circuitOn && entity.type === 'hazard') hazards.set(key, (hazards.get(key) ?? 0) + entity.leakCost!);
+    if (entity.state === 'active' && entity.type === 'hazard') hazards.set(key, (hazards.get(key) ?? 0) + entity.leakCost!);
   }
   if (exitBlocked) blocked.add(positionKey(level.exit));
   const passable = (p: Position) => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.y >= 0 && p.x < level.width && p.y < level.height && level.tiles[p.y][p.x] !== '#' && !blocked.has(positionKey(p));

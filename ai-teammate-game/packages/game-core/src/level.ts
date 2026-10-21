@@ -43,6 +43,8 @@ export function validateLevel(value: unknown): Level {
     if (entity.type === 'hazard' ? !Number.isInteger(entity.leakCost) || entity.leakCost! < 0 : entity.leakCost !== undefined) throw new Error(`漏电消耗 entities.${entity.id}.leakCost 非法，仅 hazard 可配置且必须为非负整数`);
     if (entity.type === 'supply' && !['repair', 'battery', 'oxygen'].includes(entity.itemType ?? '')) throw new Error('补给类型非法');
     if (entity.orientation !== undefined && (entity.type !== 'door' || !['horizontal', 'vertical'].includes(entity.orientation))) throw new Error('门朝向非法：仅门可配置 horizontal 或 vertical');
+    if (entity.powerRequired !== undefined && (typeof entity.powerRequired !== 'boolean' || !['door', 'cabinet'].includes(entity.type))) throw new Error('仅门和柜体可配置 powerRequired');
+    if (entity.type === 'switch' ? !Array.isArray(entity.controls) || entity.controls.some(id => typeof id !== 'string') || new Set(entity.controls).size !== entity.controls.length : entity.controls !== undefined) throw new Error('开关 controls 必须是无重复的设备 ID 数组，仅开关可配置');
     const actions = entity.type === 'supply' ? ['collect', 'drop_item', ...(entity.itemType === 'repair' ? [] : ['use_item'])]
       : entity.type === 'door' || entity.type === 'cabinet' ? ['open']
       : entity.type === 'switch' ? ['circuit_on', 'circuit_off']
@@ -50,6 +52,15 @@ export function validateLevel(value: unknown): Level {
     if (actions.length || entity.actionCosts !== undefined) validateCosts(entity.actionCosts, actions, `entities.${entity.id}.actionCosts`);
     ids.add(entity.id);
   }
+  const controlled = new Set<string>();
+  for (const control of level.entities.filter(e => e.type === 'switch')) {
+    for (const id of control.controls!) {
+      const device = level.entities.find(e => e.id === id);
+      if (!device || !(device.type === 'hazard' || device.powerRequired) || controlled.has(id)) throw new Error(`开关 ${control.id} 的控制设备 ${id} 非法或重复归属`);
+      controlled.add(id);
+    }
+  }
+  for (const device of level.entities) if ((device.type === 'hazard' || device.powerRequired) && !controlled.has(device.id)) throw new Error(`设备 ${device.id} 缺少控制开关`);
   for (const entity of level.entities) if (entity.containerId && !level.entities.some(container => container.id === entity.containerId && container.type === 'cabinet')) throw new Error('物品容器引用非法');
   if (level.verification !== undefined && (!level.verification || !Array.isArray(level.verification.actions))) throw new Error('验证路线必须包含 actions 数组');
   const alternatives = level.verification?.alternatives;

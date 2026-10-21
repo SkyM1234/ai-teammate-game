@@ -61,7 +61,7 @@ test('规则演示拒绝否定、条件及复合句，不执行关键词指向�
     assert.equal(session.task?.goal?.kind, 'custom');
     assert.deepEqual(session.task?.constraints.allowedRepairs, []);
     assert.equal(session.engine.state.elapsedTU, 0);
-    assert.equal(session.engine.state.circuitOn, false);
+    assert.equal(session.engine.state.circuits['sw-01'], false);
     assert.equal(session.pendingAuthorization, null);
     assert.equal(session.task?.status, 'waiting');
     assert.match(session.task.question!, /简单指令|简单目标/);
@@ -88,9 +88,9 @@ test('真实模式不按开启关键词自动通电，授权在原工具循环�
     session.engine.state.robot.position = { x: 6, y: 2 }; session.engine.observe();
     await session.command(approve ? '开启辅助电路' : '不要开启电路');
     const request = await authorization(session);
-    assert.equal(session.engine.state.circuitOn, false); assert.equal(session.engine.state.elapsedTU, 0);
+    assert.equal(session.engine.state.circuits['sw-01'], false); assert.equal(session.engine.state.elapsedTU, 0);
     await session.authorize(request.id, approve); await session.settled();
-    assert.equal(session.engine.state.circuitOn, approve);
+    assert.equal(session.engine.state.circuits['sw-01'], approve);
     assert.equal(session.engine.state.elapsedTU, approve ? 1 : 0);
     assert.equal(session.metrics.requests, approve ? 1 : 2);
   }

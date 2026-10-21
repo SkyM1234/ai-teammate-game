@@ -283,18 +283,18 @@ test('HTTP 前端可切换已知邻接开关，拒绝远程和非法参数且请
     const result = await call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: 0, action });
     assert.equal(result.status, 400);
   }
-  assert.equal(session.engine.state.circuitOn, false);
+  assert.equal(session.engine.state.circuits['sw-01'], false);
   assert.equal(session.engine.state.elapsedTU, 0);
   session.engine.state.robot.position = { x: 6, y: 2 }; session.engine.observe();
   const request = { requestId: crypto.randomUUID(), expectedRevision: 0, action: { kind: 'circuit', targetId: 'sw-01', on: true } };
-  assert.equal((await call(`${path}/action`, request)).data.circuitOn, true);
+  assert.equal((await call(`${path}/action`, request)).data.observed.find((e: { id: string }) => e.id === 'sw-01')!.state, 'on');
   assert.equal((await call(`${path}/action`, request)).data.elapsedTU, 1);
   session.engine.state.robot.position = { x: 6, y: 3 }; session.engine.observe();
   const distant = await call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: 1, action: { kind: 'circuit', targetId: 'sw-01', on: false } });
-  assert.equal(distant.data.circuitOn, true); assert.equal(distant.data.elapsedTU, 1);
+  assert.equal(distant.data.observed.find((e: { id: string }) => e.id === 'sw-01')!.state, 'on'); assert.equal(distant.data.elapsedTU, 1);
   session.engine.state.robot.position = { x: 6, y: 2 }; session.engine.observe();
   const off = await call(`${path}/action`, { requestId: crypto.randomUUID(), expectedRevision: 1, action: { kind: 'circuit', targetId: 'sw-01', on: false } });
-  assert.equal(off.data.circuitOn, false); assert.equal(off.data.elapsedTU, 2);
+  assert.equal(off.data.observed.find((e: { id: string }) => e.id === 'sw-01')!.state, 'off'); assert.equal(off.data.elapsedTU, 2);
 });
 
 test('运行中的存档恢复为暂停，停止请求不因客户端旧版本而失效', async t => {
@@ -313,7 +313,7 @@ test('运行中的存档恢复为暂停，停止请求不因客户端旧版本�
 test('HTTP 选路同步候选路径、校验与去重，选带电路线后拒绝授权立即停止', async t => {
   const { call, sessions, initial, base } = await fixture(t);
   const path = `/api/sessions/${initial.sessionId}`; const session = sessions.get(initial.sessionId)!;
-  session.engine.state.circuitOn = true;
+  session.engine.state.circuits['sw-01'] = true;
   session.engine.state.entities.find(entity => entity.id === 'd-01')!.opened = true;
   for (const position of [{ x: 6, y: 2 }, { x: 6, y: 3 }, { x: 7, y: 3 }]) {
     session.engine.state.robot.position = position; session.engine.observe();

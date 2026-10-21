@@ -17,6 +17,7 @@ export function corridorLevel(fourth = false): Level {
     { id: 'middle-hazard', type: 'hazard', name: '线路', position: { x: 6, y: 5 }, reflection: 2, leakCost: 6 },
     ...(fourth ? [{ id: 'lower-hazard', type: 'hazard' as const, name: '线路', position: { x: 6, y: 9 }, reflection: 2, leakCost: 6 }] : []),
   ];
+  level.entities.push({ id: 'sw-01', type: 'switch', name: '开关', position: { x: 1, y: 11 }, controls: level.entities.map(e => e.id), reflection: 2, actionCosts: template.entities.find(e => e.type === 'switch')!.actionCosts });
   level.rules.actionCosts.move = { tu: 1, battery: 1 };
   level.rules.battery = 100; level.rules.oxygen = 100; level.rules.actionTULimit = 100;
   delete level.verification;

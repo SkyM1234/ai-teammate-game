@@ -26,6 +26,7 @@ export interface Rules {
 export interface EntityDefinition {
   id: string; type: EntityType; name: string; position: Position; reflection: number;
   itemType?: ItemType; containerId?: string; powerRequired?: boolean;
+  controls?: string[];
   orientation?: DoorOrientation;
   leakCost?: number;
   actionCosts?: EntityActionCosts;
@@ -49,6 +50,8 @@ export interface ObservedEntity {
   state: string; itemType?: ItemType; scanned: boolean; details?: string;
   actionCosts?: EntityActionCosts;
   powerRequired?: boolean;
+  powered?: boolean;
+  controlledDevices?: Pick<EntityDefinition, 'id' | 'name' | 'type'>[];
   orientation?: DoorOrientation;
   leakCost?: number;
   observedAt: number; source: 'sensor' | 'scan';
@@ -91,7 +94,7 @@ export interface LedgerEntry {
 }
 export interface GameState {
   schemaVersion: number; levelId: string; levelVersion: number; rulesVersion: number;
-  stateRevision: number; elapsedTU: number; phase: Phase; circuitOn: boolean;
+  stateRevision: number; elapsedTU: number; phase: Phase; circuits: Record<string, boolean>;
   human: { position: Position; oxygen: number; oxygenRate: number; carried: boolean };
   robot: { position: Position; battery: number; inventory: string[] };
   entities: Entity[]; knowledge: Knowledge; radarHistory: RadarEcho[]; markers: Marker[];
@@ -101,7 +104,7 @@ export interface GameState {
 export interface PlayerView {
   level: Pick<Level, 'id' | 'name' | 'width' | 'height' | 'tiles' | 'rooms' | 'exit'>;
   exitStatus: 'leaking' | 'safe';
-  phase: Phase; stateRevision: number; elapsedTU: number; circuitOn: boolean;
+  phase: Phase; stateRevision: number; elapsedTU: number;
   human: GameState['human'] & { actionCosts: HumanActionCosts }; robot: Omit<GameState['robot'], 'inventory'> & { inventory: ObservedEntity[] };
   rules: Rules; observed: ObservedEntity[]; radar: RadarEcho[]; markers: Marker[];
   sensorCells: Position[]; ledger: LedgerEntry[]; failureReason: string | null;

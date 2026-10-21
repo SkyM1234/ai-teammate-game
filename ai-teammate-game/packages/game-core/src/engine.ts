@@ -30,8 +30,9 @@ export class GameEngine {
   constructor(level: Level) {
     this.level = structuredClone(level);
     this.state = {
-      schemaVersion: 1, levelId: level.id, levelVersion: level.version, rulesVersion: 4,
-      stateRevision: 0, elapsedTU: 0, phase: 'awaiting_command', circuitOn: false,
+      schemaVersion: 1, levelId: level.id, levelVersion: level.version, rulesVersion: 5,
+      stateRevision: 0, elapsedTU: 0, phase: 'awaiting_command',
+      circuits: Object.fromEntries(level.entities.filter(e => e.type === 'switch').map(e => [e.id, false])),
       human: { position: { ...level.humanStart }, oxygen: level.rules.oxygen, oxygenRate: level.rules.oxygenRate, carried: false },
       robot: { position: { ...level.robotStart }, battery: level.rules.battery, inventory: [] },
       entities: level.entities.map(e => ({ ...structuredClone(e), opened: false, repaired: false, removed: false, taken: false })),
@@ -46,6 +47,10 @@ export class GameEngine {
   get exitStatus(): PlayerView['exitStatus'] { return this.state.entities.some(e => e.type === 'airlock' && e.repaired) ? 'safe' : 'leaking'; }
 
   private getEntity(id: string): Entity | undefined { return this.state.entities.find(e => e.id === id); }
+
+  isPowered(id: string): boolean {
+    return this.state.entities.some(e => e.type === 'switch' && e.controls?.includes(id) && this.state.circuits[e.id]);
+  }
 
   private reachable(p: Position): boolean {
     return distance(this.state.robot.position, p) <= 1 && this.level.tiles[p.y]?.[p.x] !== '#';
@@ -82,24 +87,31 @@ export class GameEngine {
     if (entity.taken) state = 'inventory';
     else if (entity.removed) state = 'cleared';
     else if (entity.type === 'door' || entity.type === 'cabinet') state = entity.opened ? 'opened' : 'closed';
-    else if (entity.type === 'hazard') state = this.state.circuitOn ? 'active' : 'inactive';
-    else if (entity.type === 'switch') state = this.state.circuitOn ? 'on' : 'off';
+    else if (entity.type === 'hazard') state = this.isPowered(entity.id) ? 'active' : 'inactive';
+    else if (entity.type === 'switch') state = this.state.circuits[entity.id] ? 'on' : 'off';
     else if (entity.type === 'airlock') state = entity.repaired ? 'repaired' : 'damaged';
     const result: ObservedEntity = {
       id: entity.id, type: entity.type, name: entity.name, position: { ...entity.position }, state,
       scanned, observedAt: this.state.elapsedTU, source: scanned ? 'scan' : 'sensor',
     };
     if (entity.itemType) result.itemType = entity.itemType;
+    if (entity.powerRequired) result.powered = this.isPowered(entity.id);
     if (entity.type === 'hazard') result.leakCost = entity.leakCost;
     const costs = this.level.entities.find(definition => definition.id === entity.id)?.actionCosts;
     if (costs) result.actionCosts = structuredClone(costs);
     if (entity.type === 'supply' && entity.removed) result.details = consumedSupplyDetails;
     else if (scanned) {
       if (entity.powerRequired) result.powerRequired = true;
-      if (entity.powerRequired) result.details = '需要辅助电路供电；打开后断电不会自动关闭。';
-      else if (entity.type === 'switch') result.details = '机器人须在可达的相邻格操作；控制电池柜、电动门与暴露线路，通电可能激活漏电。';
+      if (entity.powerRequired) result.details = '需要对应开关供电；检查开关才能确认控制关系，打开后断电不会自动关闭。';
+      else if (entity.type === 'switch') {
+        result.controlledDevices = entity.controls!.map(id => {
+          const device = this.getEntity(id)!;
+          return { id: device.id, name: device.name, type: device.type };
+        });
+        result.details = `控制设备：${result.controlledDevices.map(device => `${device.name}（${device.id}）`).join('、') || '无'}。通电可能激活所控线路的漏电。`;
+      }
       else if (entity.type === 'airlock') result.details = entity.repaired ? '已修复，出口漏气已停止；将玩家搬运至撤离出口后启动撤离。' : `控制器损坏导致出口喷气，出口格不可进入；需要 ${this.repairCost(entity.id)!.materials} 份维修材料修复。`;
-      else if (entity.type === 'hazard') result.details = `接入辅助电路，通电时每次进入额外消耗 ${entity.leakCost} 电量。`;
+      else if (entity.type === 'hazard') result.details = `由对应开关供电，通电时每次进入额外消耗 ${entity.leakCost} 电量。`;
       else if (entity.itemType === 'battery') result.details = `可恢复 ${this.level.rules.batteryRefill} 电量。`;
       else if (entity.itemType === 'oxygen') result.details = `可恢复 ${this.level.rules.oxygenRefill} 氧气。`;
       else if (entity.type === 'obstacle') result.details = `清理需要 ${costs!.clear!.tu} TU、${costs!.clear!.battery} 电量。`;
@@ -115,6 +127,19 @@ export class GameEngine {
         this.state.knowledge.entities[entity.id] = this.observation(entity);
       }
     }
+    // A checked switch establishes the state of its already identified devices,
+    // including devices outside sensor range. It does not discover their positions.
+    for (const control of Object.values(this.state.knowledge.entities)) {
+      if (control.type !== 'switch' || !this.visible(this.getEntity(control.id)!)) continue;
+      for (const device of control.controlledDevices ?? []) {
+        const known = this.state.knowledge.entities[device.id];
+        if (!known) continue;
+        const powered = control.state === 'on';
+        if (known.type === 'hazard') known.state = powered ? 'active' : 'inactive';
+        if (known.powered !== undefined) known.powered = powered;
+        known.observedAt = this.state.elapsedTU;
+      }
+    }
   }
 
   private updateRadar(): void {
@@ -126,7 +151,7 @@ export class GameEngine {
       echoes.set(key, {
         id: `echo-${key}`, position: { ...entity.position },
         strength: entity.reflection >= 2 || !!current ? 'strong' : 'weak',
-        shape: current?.shape === 'flickering' || entity.type === 'hazard' && this.state.circuitOn ? 'flickering' : 'steady',
+        shape: current?.shape === 'flickering' || entity.type === 'hazard' && this.isPowered(entity.id) ? 'flickering' : 'steady',
         observedAt: this.state.elapsedTU, historical: false,
       });
     }
@@ -135,7 +160,7 @@ export class GameEngine {
   }
 
   knownPath(target: Position, constraints: Constraints = defaultConstraints()): Position[] | null {
-    return findKnownPath(this.level, this.state.knowledge, this.state.robot.position, target, this.state.circuitOn, constraints.authorizedHazardIds, this.exitStatus === 'leaking');
+    return findKnownPath(this.level, this.state.knowledge, this.state.robot.position, target, constraints.authorizedHazardIds, this.exitStatus === 'leaking');
   }
 
   perform(action: Action, actionId: string = crypto.randomUUID(), constraints: Constraints = defaultConstraints()): ActionOutcome {
@@ -162,7 +187,7 @@ export class GameEngine {
   actionCost(action: Action): Cost {
     const base = this.configuredActionCost(action);
     if (!base) throw new Error(`动作消耗未配置：${action.kind}`);
-    const leakCost = action.kind === 'move' && this.state.circuitOn ? this.state.entities.filter(e => e.type === 'hazard' && samePosition(e.position, action.target)).reduce((total, entity) => total + entity.leakCost!, 0) : 0;
+    const leakCost = action.kind === 'move' ? this.state.entities.filter(e => e.type === 'hazard' && this.isPowered(e.id) && samePosition(e.position, action.target)).reduce((total, entity) => total + entity.leakCost!, 0) : 0;
     return { tu: base.tu, battery: base.battery + leakCost, oxygen: this.state.human.oxygenRate * base.tu };
   }
 
@@ -229,7 +254,7 @@ export class GameEngine {
         if (samePosition(target, this.level.exit) && this.exitStatus === 'leaking') return reject('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法进入；请先修复气闸控制器。');
         const blocker = this.state.entities.find(e => samePosition(e.position, target) && !e.removed && (e.type === 'cabinet' || e.type === 'airlock' || e.type === 'switch' || e.type === 'door' && !e.opened || e.type === 'obstacle'));
         if (blocker) return reject('BLOCKED', '前方无法通行，请检查附近设施。');
-        const hazard = this.state.entities.find(e => e.type === 'hazard' && samePosition(e.position, target) && this.state.circuitOn);
+        const hazard = this.state.entities.find(e => e.type === 'hazard' && samePosition(e.position, target) && this.isPowered(e.id));
         if (hazard && !constraints.authorizedHazardIds.includes(hazard.id)) return reject('HAZARD_AUTH_REQUIRED', '前方有带电线路，需要断电或明确授权。');
         message = `移动至 (${target.x}, ${target.y})${this.state.human.carried ? ' · 搬运中' : ''}`;
         effect = () => { this.state.robot.position = { x: target.x, y: target.y }; if (this.state.human.carried) this.state.human.position = { x: target.x, y: target.y }; };
@@ -242,7 +267,7 @@ export class GameEngine {
         break;
       case 'open':
         if (!entity || !['door', 'cabinet'].includes(entity.type) || entity.opened) return reject('PRECONDITION_FAILED', '该目标不能开启，或已经开启。');
-        if (entity.powerRequired && !this.state.circuitOn) return reject('POWER_REQUIRED', '需要机器人找到并靠近辅助电路开关，操作开关通电后再开启设备。');
+        if (entity.powerRequired && !this.isPowered(entity.id)) return reject('POWER_REQUIRED', '需要机器人寻找并检查控制此设备的开关，靠近对应开关通电后再开启设备。');
         message = `开启 ${entity.name}`; effect = () => { entity.opened = true; };
         break;
       case 'collect':
@@ -293,13 +318,13 @@ export class GameEngine {
         message = '抱起玩家，切换负重模式'; effect = () => { this.state.human.carried = true; };
         break;
       case 'drop_human':
-        if (!this.state.human.carried || this.state.entities.some(e => e.type === 'hazard' && this.state.circuitOn && samePosition(e.position, this.state.robot.position))) return reject('PRECONDITION_FAILED', '只能在安全地面放下玩家。');
+        if (!this.state.human.carried || this.state.entities.some(e => e.type === 'hazard' && this.isPowered(e.id) && samePosition(e.position, this.state.robot.position))) return reject('PRECONDITION_FAILED', '只能在安全地面放下玩家。');
         message = '放下玩家'; effect = () => { this.state.human.carried = false; };
         break;
       case 'circuit':
         if (entity?.type !== 'switch') return reject('UNKNOWN_TARGET', '必须指定已识别且可触及的实体电路开关。');
-        if (typeof action.on !== 'boolean' || action.on === this.state.circuitOn) return reject('PRECONDITION_FAILED', '电路已经处于该状态。');
-        message = `${action.on ? '开启' : '关闭'}辅助电路`; effect = () => { this.state.circuitOn = action.on; };
+        if (typeof action.on !== 'boolean' || action.on === this.state.circuits[entity.id]) return reject('PRECONDITION_FAILED', '电路已经处于该状态。');
+        message = `${action.on ? '开启' : '关闭'}${entity.name}`; effect = () => { this.state.circuits[entity.id] = action.on; };
         break;
       case 'extract':
         if (this.exitStatus === 'leaking') return reject('EXIT_LEAK_ACTIVE', '出口正在漏气喷射，无法撤离；请先修复气闸控制器。');
@@ -313,7 +338,13 @@ export class GameEngine {
     if (constraints.reserveReturnBattery) {
       const start = action.kind === 'move' ? action.target : this.state.robot.position;
       const destination = this.state.human.carried ? this.level.exit : this.state.human.position;
-      const path = findKnownPath(this.level, this.state.knowledge, start, destination, action.kind === 'circuit' ? action.on : this.state.circuitOn, constraints.authorizedHazardIds);
+      const knowledge = structuredClone(this.state.knowledge);
+      if (action.kind === 'circuit') {
+        for (const device of knowledge.entities[action.targetId]?.controlledDevices ?? []) {
+          if (knowledge.entities[device.id]?.type === 'hazard') knowledge.entities[device.id].state = action.on ? 'active' : 'inactive';
+        }
+      }
+      const path = findKnownPath(this.level, knowledge, start, destination, constraints.authorizedHazardIds);
       const reserve = path ? path.length * this.level.rules.actionCosts[this.state.human.carried ? 'carry_move' : 'move'].battery + constraints.reserveMargin : Number.POSITIVE_INFINITY;
       const refill = action.kind === 'use_item' && this.getEntity(action.itemId)?.itemType === 'battery' ? this.level.rules.batteryRefill : 0;
       if (this.state.robot.battery - cost.battery + refill < reserve) return reject('RETURN_RESERVE', '该动作会违反返回电量储备，需调整路线或补给。');
@@ -370,7 +401,7 @@ export class GameEngine {
     return structuredClone({
       level: { id: this.level.id, name: this.level.name, width: this.level.width, height: this.level.height, tiles: this.level.tiles, rooms: this.level.rooms, exit: this.level.exit },
       exitStatus: this.exitStatus,
-      phase: this.state.phase, stateRevision: this.state.stateRevision, elapsedTU: this.state.elapsedTU, circuitOn: this.state.circuitOn,
+      phase: this.state.phase, stateRevision: this.state.stateRevision, elapsedTU: this.state.elapsedTU,
       human: { ...this.state.human, actionCosts: this.level.human.actionCosts },
       robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => observed.find(entity => entity.id === id)).filter((e): e is ObservedEntity => !!e) },
       rules: this.level.rules, observed, radar: this.state.radarHistory, markers: this.state.markers,
@@ -380,7 +411,7 @@ export class GameEngine {
 
   robotTelemetry() {
     return structuredClone({
-      elapsedTU: this.state.elapsedTU, exitStatus: this.exitStatus, circuitOn: this.state.circuitOn,
+      elapsedTU: this.state.elapsedTU, exitStatus: this.exitStatus,
       human: { ...this.state.human, actionCosts: this.level.human.actionCosts },
       robot: { ...this.state.robot, inventory: this.state.robot.inventory.map(id => {
         const item = this.state.knowledge.entities[id];
@@ -411,8 +442,8 @@ export class GameEngine {
   snapshot(): GameState { return structuredClone(this.state); }
 
   restore(snapshot: GameState): void {
-    if (snapshot.schemaVersion !== 1 || snapshot.rulesVersion !== 4 || snapshot.levelId !== this.level.id || snapshot.levelVersion !== this.level.version) throw new Error('存档版本不兼容');
-    if (!snapshot.robot || !snapshot.human || !Array.isArray(snapshot.entities) || !Array.isArray(snapshot.ledger) || !Array.isArray(snapshot.markerHistory) || !snapshot.knowledge) throw new Error('存档不完整');
+    if (snapshot.schemaVersion !== 1 || snapshot.rulesVersion !== 5 || snapshot.levelId !== this.level.id || snapshot.levelVersion !== this.level.version) throw new Error('存档版本不兼容');
+    if (!snapshot.robot || !snapshot.human || !Array.isArray(snapshot.entities) || !Array.isArray(snapshot.ledger) || !Array.isArray(snapshot.markerHistory) || !snapshot.knowledge || !snapshot.circuits || this.level.entities.some(e => e.type === 'switch' && typeof snapshot.circuits[e.id] !== 'boolean')) throw new Error('存档不完整');
     this.state = structuredClone(snapshot);
     if (!this.terminal) this.state.phase = 'paused';
   }

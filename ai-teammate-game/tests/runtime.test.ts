@@ -156,7 +156,7 @@ async function authorization(session: GameSession) {
 }
 
 function prepareDetour(session: GameSession) {
-  session.engine.state.circuitOn = true;
+  session.engine.state.circuits['sw-01'] = true;
   session.engine.state.entities.find(entity => entity.id === 'd-01')!.opened = true;
   for (const position of [{ x: 6, y: 2 }, { x: 6, y: 3 }, { x: 7, y: 3 }]) {
     session.engine.state.robot.position = position; session.engine.observe();
@@ -204,7 +204,7 @@ test('移动前向玩家比较22格避险与2格带电路线，等待不消耗�
 test('四条独立候选均可显示，选择第四条后在同次调用中授权并严格沿其执行', async () => {
   const custom = corridorLevel(true);
   const { session } = scripted([[move(11, 7), finish]], 0, custom);
-  session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
+  session.adapter.mode = 'live'; session.engine.state.circuits['sw-01'] = true;
   for (const entity of custom.entities) {
     session.engine.state.robot.position = entity.position; session.engine.observe();
   }
@@ -297,6 +297,7 @@ test('玩家选择绕路后发现新危险直接取消委托，不穿越危险�
   for (const stopOnHazard of [false, true]) {
     const custom = structuredClone(level); custom.rules.actionTULimit = 30;
     custom.entities.push({ id: 'hidden-hazard', type: 'hazard', name: '隐藏线路', position: { x: 6, y: 5 }, reflection: 2, leakCost: 6 });
+    custom.entities.find(e => e.type === 'switch')!.controls!.push('hidden-hazard');
     const { session } = scripted([[move(9, 3), report], [{ name: 'ask_player', arguments: { question: '不应再次请求模型' } }]], 0, custom);
     session.adapter.mode = 'live'; prepareDetour(session);
     await session.command('前往 (9,3)'); const pending = await routeSelection(session);
@@ -406,8 +407,9 @@ test('普通移动只在新障碍、关闭门或带电危险影响剩余路线�
   for (const type of ['obstacle', 'door', 'hazard'] as const) for (const targetX of [3, 5]) {
     const custom = structuredClone(level);
     custom.entities = [{ id: 'hidden-blocker', type, name: '未知阻挡', position: { x: 4, y: 9 }, reflection: 2, leakCost: type === 'hazard' ? 6 : undefined }];
+    custom.entities.push({ ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: type === 'hazard' ? ['hidden-blocker'] : [] });
     const { session } = scripted([[move(targetX, 9), report, finish], [finish]], 0, custom);
-    session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
+    session.adapter.mode = 'live'; session.engine.state.circuits['sw-01'] = true;
     await session.command(`前往 (${targetX},9)`); await session.settled();
     const result = moveResults(session)[0];
     const blocked = targetX === 5;
@@ -436,8 +438,9 @@ test('移动看到路线旁的障碍、门或危险时继续原路线，不追�
   for (const type of ['obstacle', 'door', 'hazard'] as const) {
     const custom = structuredClone(level);
     custom.entities = [{ id: 'beside-route', type, name: '路旁物体', position: { x: 3, y: 8 }, reflection: 2, leakCost: type === 'hazard' ? 6 : undefined }];
+    custom.entities.push({ ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: type === 'hazard' ? ['beside-route'] : [] });
     const { session } = scripted([[move(5, 9), report, finish]], 0, custom);
-    session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
+    session.adapter.mode = 'live'; session.engine.state.circuits['sw-01'] = true;
     await session.command('前往 (5,9)'); await session.settled();
     assert.equal(moveResults(session)[0].code, 'OK'); assert.equal(moveResults(session)[0].targetReached, true);
     assert.ok(moveResults(session)[0].newDiscoveries.some((entity: { id: string }) => entity.id === 'beside-route'));
@@ -453,6 +456,7 @@ test('剩余路径上的已清除障碍、已打开门或断电线路不影响�
   for (const type of ['obstacle', 'door', 'hazard'] as const) {
     const custom = structuredClone(level);
     custom.entities = [{ id: 'passable', type, name: '可通行对象', position: { x: 4, y: 9 }, reflection: 2, leakCost: type === 'hazard' ? 6 : undefined }];
+    custom.entities.push({ ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: type === 'hazard' ? ['passable'] : [] });
     const { session } = scripted([[move(5, 9), finish]], 0, custom);
     session.adapter.mode = 'live';
     session.engine.state.entities[0].removed = type === 'obstacle';
@@ -470,9 +474,10 @@ test('忽略路旁危险后，仍在发现剩余路径上的障碍时停止', as
   custom.entities = [
     { id: 'beside-route', type: 'hazard', name: '路旁线路', position: { x: 3, y: 8 }, reflection: 2, leakCost: 6 },
     { id: 'on-route', type: 'obstacle', name: '路上障碍', position: { x: 5, y: 9 }, reflection: 2 },
+    { ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: ['beside-route'] },
   ];
   const { session } = scripted([[move(6, 9), report, finish]], 0, custom);
-  session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
+  session.adapter.mode = 'live'; session.engine.state.circuits['sw-01'] = true;
   await session.command('前往 (6,9)'); await session.settled();
   const result = moveResults(session)[0];
   assert.equal(result.code, 'NEW_OBSTACLE'); assert.match(result.message, /on-route/); assert.ok(!result.message.includes('beside-route'));
@@ -484,8 +489,9 @@ test('忽略路旁危险后，仍在发现剩余路径上的障碍时停止', as
 test('普通移动遇危险后取消委托，重新委托可完成后续移动', async () => {
   const custom = structuredClone(level);
   custom.entities = [{ id: 'hidden-hazard', type: 'hazard', name: '未知线路', position: { x: 4, y: 9 }, reflection: 2, leakCost: 6 }];
+  custom.entities.push({ ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: ['hidden-hazard'] });
   const { session } = scripted([[move(5, 9), report], [move(3, 8), finish]], 0, custom);
-  session.adapter.mode = 'live'; session.engine.state.circuitOn = true;
+  session.adapter.mode = 'live'; session.engine.state.circuits['sw-01'] = true;
   await session.command('前往 (5,9)'); await session.settled();
   assert.equal(session.metrics.requests, 1); assert.equal(session.task, null);
   await session.command('前往 (3,8)'); await session.settled();
@@ -633,7 +639,7 @@ test('设备缺电不会远程通电或要求玩家开关，失败不扣资源�
   session.engine.state.robot.position = { x: 4, y: 3 }; session.engine.observe();
   await session.command('检查附近'); await session.settled();
   assert.equal(session.task?.waitReason, 'decision');
-  assert.equal(session.engine.state.circuitOn, false);
+  assert.equal(session.engine.state.circuits['sw-01'], false);
   assert.equal(session.pendingAuthorization, null);
   assert.equal(session.engine.state.elapsedTU, 0);
   assert.equal(session.metrics.skippedTools, 1);
@@ -855,7 +861,7 @@ test('移动、扫描、交互和开关工具按配置的完整 TU 检查预算'
   for (const { cost, configured, tool, position, circuitOn } of cases) {
     const custom = structuredClone(level); configured(custom).tu = 5; custom.rules.actionTULimit = 4;
     const { session } = scripted([[tool]], 0, custom);
-    session.engine.state.robot.position = position; session.engine.state.circuitOn = circuitOn ?? false; session.engine.observe();
+    session.engine.state.robot.position = position; session.engine.state.circuits['sw-01'] = circuitOn ?? false; session.engine.observe();
     await session.command('检查状态'); await session.settled();
     assert.equal(session.engine.state.elapsedTU, 0, cost);
     assert.equal(session.engine.state.robot.battery, custom.rules.battery, cost);
@@ -945,14 +951,14 @@ test('同批次操作实体开关前等待按钮授权，拒绝不通电且跳�
   assert.equal(session.engine.state.knowledge.entities['c-01'].state, 'closed');
   assert.equal(pending.toolName, 'set_circuit');
   assert.equal(pending.arguments.targetId, 'sw-01');
-  assert.equal(session.engine.state.circuitOn, false);
+  assert.equal(session.engine.state.circuits['sw-01'], false);
   const context = JSON.parse(contexts[0]);
   assert.equal(context.messages.filter((message: { role: string }) => message.role === 'system').length, 1);
   assert.ok(context.messages[0].content.includes('不要编造隐藏物品ID'));
   assert.ok(context.messages[0].content.includes('当前机器人知识'));
   await session.authorize(pending.id, false); await session.settled();
   assert.equal(session.engine.state.elapsedTU, 2); assert.equal(session.metrics.skippedTools, 3);
-  assert.equal(session.engine.state.circuitOn, false);
+  assert.equal(session.engine.state.circuits['sw-01'], false);
 });
 
 test('批准实体开关工具后在原响应继续开柜，无额外模型请求或隐式动作', async () => {
@@ -965,7 +971,7 @@ test('批准实体开关工具后在原响应继续开柜，无额外模型请�
   assert.equal(session.metrics.requests, 1);
   assert.equal(session.engine.state.elapsedTU, 3);
   assert.deepEqual(session.engine.state.ledger.map(e => e.action.kind), ['circuit', 'move', 'open']);
-  assert.equal(session.engine.state.circuitOn, true);
+  assert.equal(session.engine.state.circuits['sw-01'], true);
 });
 
 test('规则演示寻找实体开关，明确开关指令直接授权且断电必须再次靠近', async () => {
@@ -974,12 +980,12 @@ test('规则演示寻找实体开关，明确开关指令直接授权且断电�
   assert.ok(!JSON.stringify(session.engine.robotContext()).includes('sw-01'));
   await session.command('开启辅助电路'); await session.settled();
   assert.equal(session.task?.status, 'completed');
-  assert.equal(session.engine.state.circuitOn, true);
+  assert.equal(session.engine.state.circuits['sw-01'], true);
   assert.equal(session.pendingAuthorization, null);
   await session.manual({ kind: 'move', target: { x: session.engine.state.robot.position.x - 1, y: session.engine.state.robot.position.y } }, 'leave-switch');
   await session.command('关闭辅助电路'); await session.settled();
   assert.equal(session.task?.status, 'completed');
-  assert.equal(session.engine.state.circuitOn, false);
+  assert.equal(session.engine.state.circuits['sw-01'], false);
   for (const e of session.engine.state.ledger.filter(e => e.action.kind === 'circuit')) assert.ok(Math.abs(e.position.x - 6) + Math.abs(e.position.y - 1) <= 1);
 });
 
@@ -1093,7 +1099,7 @@ test('危险移动在工具前申请精确线路授权，仅作用于当前调�
   const { session } = scripted([[move(8, 3), report, finish]], 0, custom);
   session.adapter.mode = 'live';
   session.engine.state.robot.position = { x: 8, y: 4 };
-  session.engine.state.circuitOn = true; session.engine.observe();
+  session.engine.state.circuits['sw-01'] = true; session.engine.observe();
   await session.command('探索气闸附近'); const pending = await authorization(session);
   assert.equal(pending.kind, 'hazard'); assert.deepEqual(pending.hazardIds, ['h-01']);
   assert.match(pending.consequence, /预计 1 TU、12 电量/);

@@ -167,9 +167,10 @@ test('路径新危险和游戏失败即使同时耗尽预算也不追加收尾',
   for (const cause of ['hazard', 'failure', 'finish']) {
     const custom = structuredClone(level); custom.rules.requestLimit = 1;
     if (cause === 'hazard') custom.entities = [{ id: 'new-hazard', leakCost: 6, name: '新线路', type: 'hazard', position: { x: 4, y: 9 }, reflection: 2 }];
+    if (cause === 'hazard') custom.entities.push({ ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: ['new-hazard'] });
     if (cause === 'failure') custom.rules.oxygen = custom.rules.oxygenRate;
     const { session, contexts } = scripted([cause === 'finish' ? [finish] : [move(5)]], custom);
-    session.engine.state.circuitOn = cause === 'hazard';
+    session.engine.state.circuits['sw-01'] = cause === 'hazard';
     await session.command('调查附近'); await session.settled();
     assert.equal(contexts.length, 1, cause); assert.equal(session.metrics.requests, 1, cause);
     if (cause === 'hazard') assert.equal(session.task, null);

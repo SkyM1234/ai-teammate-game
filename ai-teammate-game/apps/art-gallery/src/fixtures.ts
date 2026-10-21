@@ -20,7 +20,7 @@ export function galleryView(layout: 'square' | 'long' | 'walls', alternateState:
   const sensorCells = tiles.flatMap((row, y) => [...row].flatMap((tile, x) => tile === '#' ? [] : [{ x, y }]));
   return {
     level: { id: `art-gallery-${layout}`, name: '美术资源展示', width, height, tiles, rooms: [], exit: { x: width - 2, y: height - 2, actionCosts: { extract: { tu: 1, battery: 1 } } } },
-    exitStatus: alternateState ? 'safe' : 'leaking', phase: 'paused', stateRevision: 0, elapsedTU: 0, circuitOn: alternateState,
+    exitStatus: alternateState ? 'safe' : 'leaking', phase: 'paused', stateRevision: 0, elapsedTU: 0,
     robot: { position: { x: 2, y: 1 }, battery: 90, inventory: [] },
     human: { position: { x: alternateState ? 2 : 4, y: 1 }, oxygen: 120, oxygenRate: 2, carried: alternateState, actionCosts: { repair: { tu: 1, battery: 1, materials: 1 }, pickup_human: { tu: 1, battery: 1 }, drop_human: { tu: 1, battery: 1 } } },
     rules: {

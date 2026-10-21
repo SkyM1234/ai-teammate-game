@@ -78,11 +78,12 @@ test('不同线路按自身漏电消耗结算和展示，零消耗与断电均�
   custom.entities = [
     { id: 'free-wire', type: 'hazard', name: '线路', position: { x: 3, y: 9 }, reflection: 2, leakCost: 0 },
     { id: 'costly-wire', type: 'hazard', name: '线路', position: { x: 4, y: 9 }, reflection: 2, leakCost: 11 },
+    { ...structuredClone(level.entities.find(e => e.type === 'switch')!), controls: ['free-wire', 'costly-wire'] },
   ];
   const engine = new GameEngine(validateLevel(custom));
   assert.equal(engine.state.knowledge.entities['free-wire'].leakCost, 0);
   assert.ok(!engine.state.knowledge.entities['costly-wire']);
-  engine.state.circuitOn = true;
+  engine.state.circuits['sw-01'] = true;
   const constraints = { reserveReturnBattery: false, reserveMargin: 0, authorizedHazardIds: ['free-wire', 'costly-wire'], stopOnHazard: false, allowedRepairs: [] };
   for (const [id, battery] of [['free-wire', 1], ['costly-wire', 12]] as const) {
     assert.equal(engine.perform({ kind: 'scan', targetId: id }).accepted, true);
@@ -91,7 +92,7 @@ test('不同线路按自身漏电消耗结算和展示，零消耗与断电均�
     assert.match(observed.details!, new RegExp(`额外消耗 ${battery - 1} 电量`));
     assert.deepEqual(engine.perform({ kind: 'move', target: observed.position }, crypto.randomUUID(), constraints).cost, { tu: 1, battery, oxygen: 2 });
   }
-  engine.state.circuitOn = false;
+  engine.state.circuits['sw-01'] = false;
   engine.state.robot.position = { x: 3, y: 9 };
   assert.deepEqual(engine.perform({ kind: 'move', target: { x: 4, y: 9 } }).cost, { tu: 1, battery: 1, oxygen: 2 });
 });

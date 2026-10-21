@@ -138,7 +138,7 @@ export class StationRenderer {
     }
     this.exitLeak.position.copy(this.world(p.level.exit));
     const sensed = new Set(p.sensorCells.map(cell => `${cell.x},${cell.y}`));
-    const signature = JSON.stringify([p.observed, p.radar, p.markers, p.sensorCells, p.robot.position, p.circuitOn]);
+    const signature = JSON.stringify([p.observed, p.radar, p.markers, p.sensorCells, p.robot.position]);
     if (signature !== this.signature) {
       this.art.clear(this.objects);
       for (let y = 0; y < this.height; y++) for (let x = 0; x < this.width; x++) {

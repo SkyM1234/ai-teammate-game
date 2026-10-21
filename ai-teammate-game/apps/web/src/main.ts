@@ -164,7 +164,9 @@ function render() {
   document.querySelector<HTMLElement>('.telemetry')!.dataset.lowOxygen = String(p.human.oxygen < 25);
   document.querySelector<HTMLElement>('.telemetry')!.dataset.lowBattery = String(p.robot.battery / p.rules.batteryMax < .25);
   $('battery-condition').textContent = p.robot.battery / p.rules.batteryMax < .25 ? '电量不足' : '电量监测';
-  $('circuit-lamp').dataset.on = String(p.circuitOn);
+  const switches = p.observed.filter(e => e.type === 'switch');
+  const poweredSwitches = switches.filter(e => e.state === 'on').length;
+  $('circuit-lamp').dataset.on = String(poweredSwitches > 0);
   $('control-position').textContent = `(${p.robot.position.x}, ${p.robot.position.y})`;
   $('inventory-count').textContent = `${p.robot.inventory.length} / ${p.rules.inventorySlots}`;
   $('drawer-clock').textContent = `${String(p.elapsedTU).padStart(2, '0')} TU${replay ? ' / 回溯' : ''}`;
@@ -173,7 +175,7 @@ function render() {
   $('robot-location').textContent = `坐标 (${p.robot.position.x}, ${p.robot.position.y}) · ${p.human.carried ? '搬运伤员中' : `物资 ${p.robot.inventory.length} / ${p.rules.inventorySlots}`}`;
   $('human-status').textContent = `${p.human.carried ? '正在由 R-07 搬运' : '受伤 · 无法移动'} / 每 TU 消耗 ${p.human.oxygenRate} 氧气`;
   $('robot-status').textContent = `${phaseNames[p.phase]} / 坐标 (${p.robot.position.x}, ${p.robot.position.y})`;
-  $('circuit-state').textContent = p.circuitOn ? '已通电 · 故障可能带电' : '已断电';
+  $('circuit-state').textContent = switches.length ? `${poweredSwitches} / ${switches.length} 已知开关通电` : '尚未发现开关';
   $('agent-label').textContent = view.agentLabel;
   $('model-status').textContent = view.modelError ?? (view.agentMode === 'live' ? !view.modelReady ? '缺少模型凭据 · 请打开模型设置' : view.running ? '模型已配置 · 任务运行中' : '模型已配置 · 等待指令（连接将在请求时验证）' : '本地演示 · 无模型请求');
   $('model-status').classList.toggle('has-error', !!view.modelError || !view.modelReady);
@@ -218,7 +220,11 @@ function render() {
     if (['cabinet', 'door'].includes(e.type) && e.state === 'closed') group.append(button('开启', { kind: 'open', targetId: e.id }));
     if (e.type === 'obstacle') group.append(button('清理', { kind: 'clear', targetId: e.id }));
     if (e.type === 'airlock' && e.state === 'damaged') group.append(button('维修', { kind: 'repair', targetId: e.id }));
-    if (e.type === 'switch') group.append(button(p.circuitOn ? '关闭电路' : '开启电路', { kind: 'circuit', targetId: e.id, on: !p.circuitOn }));
+    if (e.type === 'switch') {
+      const detail = document.createElement('p'); detail.className = 'subtle';
+      detail.textContent = e.controlledDevices ? `控制：${e.controlledDevices.map(device => device.name).join('、') || '无'}` : '控制设备未知，检查后可确认。';
+      group.append(detail, button(e.state === 'on' ? '关闭电路' : '开启电路', { kind: 'circuit', targetId: e.id, on: e.state !== 'on' }));
+    }
     $('nearby').append(group);
   }
   if (dist(p.human.position, p.robot.position) <= 1 && p.human.oxygenRate !== p.rules.repairedOxygenRate) $('nearby').append(button('修补供氧管', { kind: 'repair', targetId: 'human' }));

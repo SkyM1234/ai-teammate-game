@@ -93,7 +93,7 @@ test('门的可接近位置排除上下墙格和门本体，最近候选为一�
   assert.deepEqual(engine.snapshot(), before);
   assert.ok(!JSON.stringify(context).includes('h-01'));
   assert.equal(engine.perform({ kind: 'move', target: candidates[0].position }).accepted, true);
-  engine.state.circuitOn = true;
+  engine.state.circuits['sw-01'] = true;
   assert.equal(engine.perform({ kind: 'open', targetId: 'd-01' }).accepted, true);
 });
 
@@ -113,7 +113,8 @@ test('可接近位置只使用已知阻挡，观察和清理后重新计算，�
   assert.equal(engine.perform({ kind: 'clear', targetId: 'o-01' }).accepted, true);
   engine.state.robot.position = { x: 6, y: 2 };
   assert.equal(hasEast(), true);
-  engine.state.circuitOn = true;
+  engine.state.circuits['sw-01'] = true;
+  engine.perform({ kind: 'scan', targetId: 'sw-01' });
   assert.equal(hasEast(), false);
 });
 

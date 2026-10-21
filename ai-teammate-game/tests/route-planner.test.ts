@@ -11,8 +11,8 @@ function knowledgeFor(level: Level): Knowledge {
 }
 
 const target = { x: 11, y: 7 };
-function routes(level: Level, knowledge = knowledgeFor(level), carried = false, circuitOn = true) {
-  return findKnownRoutes(level, knowledge, level.robotStart, target, circuitOn, carried, false);
+function routes(level: Level, knowledge = knowledgeFor(level), carried = false) {
+  return findKnownRoutes(level, knowledge, level.robotStart, target, carried, false);
 }
 function assertValid(level: Level, paths: Position[][]) {
   assert.equal(new Set(paths.map(path => path.map(positionKey).join(';'))).size, paths.length);
@@ -65,15 +65,27 @@ test('规划只使用已知实体，断电后不再按带电格避让', () => {
   const level = corridorLevel();
   const unknown: Knowledge = { entities: {}, scannedIds: [], markers: [] };
   assert.equal(routes(level, unknown)[0].length, 10);
-  assert.equal(routes(level, knowledgeFor(level), false, false)[0].length, 10);
+  const known = knowledgeFor(level);
+  for (const entity of Object.values(known.entities)) if (entity.type === 'hazard') entity.state = 'inactive';
+  assert.equal(routes(level, known)[0].length, 10);
+});
+
+test('部分线路断电时只避让仍带电的线路，不把所有电路视为同一状态', () => {
+  const level = corridorLevel();
+  const knowledge = knowledgeFor(level);
+  knowledge.entities['middle-hazard'].state = 'inactive';
+  const paths = routes(level, knowledge);
+  assert.deepEqual(paths.slice(0, 2).map(path => path.length), [14, 10]);
+  assert.ok(paths[0].some(p => samePosition(p, knowledge.entities['middle-hazard'].position)));
+  assert.ok(!paths[0].some(p => ['hazard-4', 'hazard-6', 'hazard-8'].some(id => samePosition(p, knowledge.entities[id].position))));
 });
 
 test('墙、已知阻挡和漏气出口排除，当前位置返回空路径，无路返回空列表', () => {
   const level = corridorLevel();
   const knowledge = knowledgeFor(level);
-  assert.deepEqual(findKnownRoutes(level, knowledge, level.robotStart, level.robotStart, true, false, false), [[]]);
-  assert.deepEqual(findKnownRoutes(level, knowledge, level.robotStart, { x: 0, y: 0 }, true, false, false), []);
-  assert.deepEqual(findKnownRoutes(level, knowledge, level.robotStart, level.exit, true, false, true), []);
+  assert.deepEqual(findKnownRoutes(level, knowledge, level.robotStart, level.robotStart, false, false), [[]]);
+  assert.deepEqual(findKnownRoutes(level, knowledge, level.robotStart, { x: 0, y: 0 }, false, false), []);
+  assert.deepEqual(findKnownRoutes(level, knowledge, level.robotStart, level.exit, false, true), []);
   for (const type of ['door', 'obstacle', 'cabinet', 'switch', 'airlock'] as const) {
     knowledge.entities.blocker = { id: 'blocker', type, name: '阻挡', position: target, state: 'closed', scanned: false, observedAt: 0, source: 'sensor' };
     assert.deepEqual(routes(level, knowledge), []);

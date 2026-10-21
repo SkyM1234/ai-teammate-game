@@ -62,9 +62,9 @@
     { "id": "s-03", "type": "supply", "name": "氧气补给", "position": { "x": 5, "y": 7 }, "itemType": "oxygen", "reflection": 1, "actionCosts": { "collect": { "tu": 1, "battery": 1 }, "drop_item": { "tu": 1, "battery": 1 }, "use_item": { "tu": 2, "battery": 2 } } },
     { "id": "c-01", "type": "cabinet", "name": "电池柜", "position": { "x": 5, "y": 3 }, "powerRequired": true, "reflection": 3, "actionCosts": { "open": { "tu": 1, "battery": 1 } } },
     { "id": "s-04", "type": "supply", "name": "备用电池", "position": { "x": 5, "y": 3 }, "itemType": "battery", "containerId": "c-01", "reflection": 1, "actionCosts": { "collect": { "tu": 1, "battery": 1 }, "drop_item": { "tu": 1, "battery": 1 }, "use_item": { "tu": 1, "battery": 1 } } },
-    { "id": "sw-01", "type": "switch", "name": "辅助电路开关", "position": { "x": 6, "y": 1 }, "reflection": 2, "actionCosts": { "circuit_on": { "tu": 1, "battery": 0 }, "circuit_off": { "tu": 1, "battery": 0 } } },
+    { "id": "sw-01", "type": "switch", "name": "辅助电路开关", "position": { "x": 6, "y": 1 }, "controls": ["c-01", "d-01", "h-01"], "reflection": 2, "actionCosts": { "circuit_on": { "tu": 1, "battery": 0 }, "circuit_off": { "tu": 1, "battery": 0 } } },
     { "id": "d-01", "type": "door", "name": "辅助电动门", "position": { "x": 7, "y": 3 }, "orientation": "vertical", "powerRequired": true, "reflection": 2, "actionCosts": { "open": { "tu": 1, "battery": 1 } } },
-    { "id": "h-01", "type": "hazard", "name": "暴露的带电线路", "position": { "x": 8, "y": 3 }, "reflection": 2, "leakCost": 6 },
+    { "id": "h-01", "type": "hazard", "name": "暴露的带电线路", "position": { "x": 8, "y": 3 }, "reflection": 2, "leakCost": 12 },
     { "id": "o-01", "type": "obstacle", "name": "坍塌金属架", "position": { "x": 7, "y": 10 }, "reflection": 3, "actionCosts": { "clear": { "tu": 3, "battery": 4 } } },
     { "id": "a-01", "type": "airlock", "name": "气闸控制器", "position": { "x": 9, "y": 9 }, "reflection": 2, "actionCosts": { "repair": { "tu": 4, "battery": 4, "materials": 1 } } }
   ],

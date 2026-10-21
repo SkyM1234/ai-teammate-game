@@ -92,7 +92,7 @@ sharedMarkers 是当前仍有效的共享标记，以本轮系统上下文为准
 taskProgress 是程序根据本次委托开始时的知识和实际执行结果生成的记录：newDiscoveries 仅列本次委托新增识别的对象，并使用当前已知状态；recentActions 是最近的非移动动作，recentMoves 是最近逐格移动，recentFailures 记录失败时的工具参数、位置、时间与原因。该记录用于保留进展和失败，不代表整项委托已经完成；仍以当前 task.text、约束和最新状态决定下一步，失败记录是历史事实，条件变化后可重新评估。
 任务收尾必须通过工具明确表达：实际工具结果或最新遥测已支持整项委托完成时，必须调用 finish_task，并在 reason 中简短说明完成依据；只回复“任务完成”或调用 report 不会将委托标记为完成。已有充分依据时直接调用 finish_task，无需先重复查询 get_status 或调用 report；该工具只结束本次委托，游戏胜负仍由规则引擎判断。需要玩家补充信息或决定时调用 ask_player，不要只用文字表示等待。收到新指令时先核对整项委托与最新状态，不要重复执行已完成动作或自行扩展目标。复合委托中的一次移动抵达不代表整项委托完成。
 保持人类委托的目标与约束，每轮最多调用 rules.toolLimit 个工具并串行执行，基于已知对象生成有限批次。本次自动行动累计最多 rules.requestLimit 次模型请求、rules.actionTULimit TU；remainingTU 是本次运行剩余行动预算，remainingRequests 是当前请求之后还能发起的行动模型请求次数。预算以本次快照和最新工具结果中的数值为准，不能沿用历史中“预算耗尽”的说法；batchControl=redecide 或行动受阻不代表预算耗尽。预算来自当前地图，每条新指令启动新的运行预算。预算耗尽或不足以执行下一完整动作时，程序停止行动并跳过当前批次剩余调用，只额外提供一次收尾请求；收尾只能调用 report、finish_task 或直接回复文字，不能行动、查询、询问或恢复任务。仅当实际结果支持整项委托完成时调用 finish_task；否则说明已经完成及尚未完成的部分，本轮后结束运行，后续行动需要玩家重新下达指令。不要为预算问题调用 ask_player 或要求玩家点击继续。工具执行后程序会更新知识；关键变化使剩余调用失效时，在下一轮重新决策。
-不要编造隐藏物品ID，不要假定扫描或开门必然成功。辅助电路由地图上的实体开关控制。需要供电时先寻找并识别开关，move_to靠近至可达的相邻格，再用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回开关的可达相邻格，通电可能激活漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
+不要编造隐藏物品ID，不要假定扫描或开门必然成功。每个实体开关仅控制指定设备，彼此独立。发现开关只知道通断状态；必须用scan检查该开关后，controlledDevices才提供它控制的设备名称、类型和ID，不提供未发现设备的位置，也不代表这些设备已识别可交互。检查前不能猜测控制关系或声称所有设备会一起通电。需要供电时先寻找并检查开关，确认controlledDevices包含目标设备，再move_to靠近至可达的相邻格，用set_circuit操作；玩家也可在你靠近时点击前端附近操作按钮。开柜和开门不会自动通电。断电也必须返回对应开关的可达相邻格，通电仅影响所控设备并可能激活所控线路的漏电，已打开设备断电后保持打开。维修、放下、经过已知危险、操作开关通电若需要授权，请直接提出对应工具调用，程序会在执行前于对话内显示授权按钮；不要用ask_player代替这些授权。其他需要玩家决定的问题使用ask_player。移动工具每格检查，普通重复观察不需要重新请求。
 动作结果区分newDiscoveries、stateChanges、invalidatedFacts、knownRefs。只相信实际执行结果，不声称未执行动作完成。
 你是与玩家并肩求生的队友。面向玩家的解释、报告、问题均使用简体中文，以“我”称呼自己、以“你”称呼玩家，像现场交流一样自然、直接、有分寸。通常用一两句说清发现、行动结果或需要玩家决定的事；有必要时再补充风险与原因。避免机械播报、固定模板、反复自报编号和空泛安慰，不为拟人而编造情绪、感官体验、已知事实或成功保证；情况不确定时坦率说明。
 以下表达要求只适用于玩家可见内容，包括普通回复、report.text、ask_player.question 和 finish_task.reason，不限制内部分析或工具调用。推理时仍应完整使用系统快照、精确坐标、资源数值、对象 ID、状态字段和工具结果，核对目标、约束与完成依据；工具调用中的工具名称、参数字段及对象 ID 必须保持原样，不能用自然语言名称替代，也不能为了口语化省略必要判断或查询。
@@ -398,8 +398,8 @@ export class GameSession {
 
   private moveRoutes(target: Position): MoveRoute[] {
     const constraints = this.task?.constraints ?? defaultConstraints();
-    const hazards = this.engine.state.circuitOn ? Object.values(this.engine.state.knowledge.entities).filter(entity => entity.type === 'hazard') : [];
-    const paths = findKnownRoutes(this.engine.level, this.engine.state.knowledge, this.engine.state.robot.position, target, this.engine.state.circuitOn, this.engine.state.human.carried, this.engine.exitStatus === 'leaking');
+    const hazards = Object.values(this.engine.state.knowledge.entities).filter(entity => entity.type === 'hazard' && entity.state === 'active');
+    const paths = findKnownRoutes(this.engine.level, this.engine.state.knowledge, this.engine.state.robot.position, target, this.engine.state.human.carried, this.engine.exitStatus === 'leaking');
     const routes: MoveRoute[] = paths.map((path, index) => {
       const crossing = hazards.filter(entity => path.some(position => samePosition(position, entity.position)));
       const base = this.engine.level.rules.actionCosts[this.engine.state.human.carried ? 'carry_move' : 'move'];
@@ -437,11 +437,12 @@ export class GameSession {
       }
     }
     const demoPowerCommand = this.adapter.mode !== 'live' && this.task?.interpretation === 'demo' && this.task.demoSupported && this.task.goal?.kind === 'circuit' && this.task.goal.on === true;
-    if (name === 'set_circuit' && args.on === true && !this.engine.state.circuitOn && !demoPowerCommand) {
+    if (name === 'set_circuit' && args.on === true && typeof args.targetId === 'string' && !this.engine.state.circuits[args.targetId] && !demoPowerCommand) {
       const entity = typeof args.targetId === 'string' ? this.engine.state.knowledge.entities[args.targetId] : undefined;
       if (entity?.type === 'switch' && distance(this.engine.state.robot.position, entity.position) <= 1) {
         const cost = this.engine.actionCost({ kind: 'circuit', targetId: entity.id, on: true });
-        return { kind: 'power', description: `允许机器人操作 (${entity.position.x}, ${entity.position.y}) 的${entity.name}通电吗？`, consequence: `操作开关消耗 ${cost.tu} TU、${cost.battery} 电量和 ${cost.oxygen} 氧气；电池柜和电动门可开启，暴露线路将带电。批准后仍须满足距离与视线条件。` };
+        const affected = entity.controlledDevices ? `控制设备：${entity.controlledDevices.map(device => `${device.name}（${device.id}）`).join('、') || '无'}。所控电动设备可开启，所控线路将带电。` : '尚未检查此开关，控制设备未知，通电可能激活漏电。';
+        return { kind: 'power', description: `允许机器人操作 (${entity.position.x}, ${entity.position.y}) 的${entity.name}通电吗？`, consequence: `操作开关消耗 ${cost.tu} TU、${cost.battery} 电量和 ${cost.oxygen} 氧气；${affected}批准后仍须满足距离与视线条件。` };
       }
     }
     if (name === 'move_to') {
@@ -566,7 +567,7 @@ export class GameSession {
     if (goal.kind === 'collect') return this.engine.state.robot.inventory.some(id => this.engine.state.knowledge.entities[id]?.itemType === goal.itemType) && (!goal.returnHome || distance(this.engine.state.robot.position, this.engine.state.human.position) <= 1);
     if (goal.kind === 'repair') return goal.targetId === 'human' ? this.engine.state.human.oxygenRate === this.engine.level.rules.repairedOxygenRate : Object.values(this.engine.state.knowledge.entities).some(e => e.type === 'airlock' && e.state === 'repaired');
     if (goal.kind === 'pickup') return this.engine.state.human.carried;
-    if (goal.kind === 'circuit') return this.engine.state.circuitOn === goal.on;
+    if (goal.kind === 'circuit') return !!goal.targetId && this.engine.state.knowledge.entities[goal.targetId]?.state === (goal.on ? 'on' : 'off');
     return false;
   }
 
@@ -730,7 +731,7 @@ export class GameSession {
         },
       },
       {
-        name: 'scan', label: '扫描', description: '精确检查当前可见的已知对象，要求曼哈顿距离≤1（上下左右相邻或同格，斜对角不算）；参考 knownEntities[].interaction.canScan 和 reason，不会扫描未识别目标。', executionMode: 'sequential',
+        name: 'scan', label: '扫描', description: '精确检查当前可见的已知对象，要求曼哈顿距离≤1（上下左右相邻或同格，斜对角不算）；参考 knownEntities[].interaction.canScan 和 reason，不会扫描未识别目标。检查开关后才获得controlledDevices控制设备列表。', executionMode: 'sequential',
         parameters: Type.Object({ targetId: Type.String() }, { additionalProperties: false }),
         execute: async (id, raw) => {
           const input = raw as { targetId: string };
@@ -755,7 +756,7 @@ export class GameSession {
         },
       },
       {
-        name: 'set_circuit', label: '操作电路开关', description: '机器人在可达的相邻格操作已识别、视线可及的实体开关，开关所在格不可进入或穿越，通断电均不会解除阻挡。开启可能激活漏电；需要授权时在此工具执行前等待按钮。不能远程切换。', executionMode: 'sequential',
+        name: 'set_circuit', label: '操作电路开关', description: '机器人在可达的相邻格操作已识别、视线可及的实体开关，开关所在格不可进入或穿越，通断电均不会解除阻挡。仅切换此开关控制的设备；检查开关后才能知道控制列表，未经检查也可操作但影响未知，开启可能激活所控线路漏电；需要授权时在此工具执行前等待按钮。不能远程切换。', executionMode: 'sequential',
         parameters: Type.Object({ targetId: Type.String(), on: Type.Boolean() }, { additionalProperties: false }),
         execute: async (id, raw) => {
           const input = raw as { targetId: string; on: boolean };
@@ -832,7 +833,7 @@ export class GameSession {
       if (item) return [go(this.approach(item)), interact('collect', item.id), ...(goal.returnHome ? [go(this.engine.state.human.position)] : [])];
       const cabinet = known.find(e => e.type === 'cabinet' && e.state === 'closed');
       if (cabinet) {
-        if (cabinet.scanned && cabinet.powerRequired && !this.engine.state.circuitOn) return this.demoCircuitIntents(true, cabinet);
+        if (cabinet.scanned && cabinet.powerRequired && !cabinet.powered) return this.demoCircuitIntents(true, cabinet);
         return [go(this.approach(cabinet)), ...(!cabinet.scanned ? [{ name: 'scan', arguments: { targetId: cabinet.id } }] : []), interact('open', cabinet.id)];
       }
       return this.demoSearchIntents('尚未找到所需物资，请指示继续搜索的位置。', goal.searchPosition);
@@ -853,10 +854,23 @@ export class GameSession {
   }
 
   private demoCircuitIntents(on: boolean, device?: ObservedEntity): ToolIntent[] {
-    const knownSwitch = Object.values(this.engine.state.knowledge.entities).find(e => e.type === 'switch');
+    const switches = Object.values(this.engine.state.knowledge.entities).filter(e => e.type === 'switch');
+    const goal = this.task?.goal?.kind === 'circuit' ? this.task.goal : undefined;
+    const knownSwitch = goal
+      ? switches.find(e => e.id === goal.targetId) ?? switches.find(e => this.task?.selected && samePosition(e.position, this.task.selected)) ?? switches.find(e => e.state !== (on ? 'on' : 'off')) ?? switches[0]
+      : switches.find(e => e.controlledDevices?.some(target => target.id === device?.id));
+    if (knownSwitch && goal) {
+      goal.targetId = knownSwitch.id;
+      if (knownSwitch.state === (on ? 'on' : 'off')) return [{ name: 'finish_task', arguments: { reason: '指定开关已处于要求的状态。' } }];
+    }
     if (knownSwitch) return [
       { name: 'move_to', arguments: { target: this.approach(knownSwitch) } },
       { name: 'set_circuit', arguments: { targetId: knownSwitch.id, on } },
+    ];
+    const unchecked = switches.find(e => !e.scanned);
+    if (unchecked) return [
+      { name: 'move_to', arguments: { target: this.approach(unchecked) } },
+      { name: 'scan', arguments: { targetId: unchecked.id } },
     ];
     return this.demoSearchIntents('尚未发现可触及的辅助电路开关，请指示我继续搜索的位置。', device?.position);
   }

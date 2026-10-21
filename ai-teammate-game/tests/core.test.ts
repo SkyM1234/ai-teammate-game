@@ -154,7 +154,7 @@ test('所有动作按 JSON 配置扣时间和电量，氧气按当前耗氧率�
     { name: 'move', action: { kind: 'move', target: { x: 3, y: 9 } } },
     { name: 'carry_move', action: { kind: 'move', target: { x: 3, y: 9 } }, setup: e => { e.state.human.carried = true; } },
     { name: 'scan', action: { kind: 'scan', targetId: 's-01' }, setup: e => { e.state.robot.position = { x: 3, y: 9 }; } },
-    { name: 'open', action: { kind: 'open', targetId: 'c-01' }, setup: e => { e.state.robot.position = { x: 5, y: 2 }; e.state.circuitOn = true; } },
+    { name: 'open', action: { kind: 'open', targetId: 'c-01' }, setup: e => { e.state.robot.position = { x: 5, y: 2 }; e.state.circuits['sw-01'] = true; } },
     { name: 'collect', action: { kind: 'collect', targetId: 's-01' }, setup: e => { e.state.robot.position = { x: 3, y: 9 }; } },
     { name: 'drop_item', action: { kind: 'drop_item', itemId: 's-01' }, setup: e => give(e, 's-01') },
     { name: 'use_battery', action: { kind: 'use_item', itemId: 's-04', targetId: 'robot' }, setup: e => give(e, 's-04') },
@@ -194,7 +194,7 @@ test('清障说明、漏电附加消耗和返回电量储备随配置更新', ()
   engine.state.robot.position = { x: 6, y: 10 }; engine.observe();
   assert.equal(engine.perform({ kind: 'scan', targetId: 'o-01' }).accepted, true);
   assert.equal(engine.state.knowledge.entities['o-01'].details, '清理需要 5 TU、7 电量。');
-  engine.state.robot.position = { x: 8, y: 4 }; engine.state.circuitOn = true;
+  engine.state.robot.position = { x: 8, y: 4 }; engine.state.circuits['sw-01'] = true;
   const hazard = engine.perform({ kind: 'move', target: { x: 8, y: 3 } }, crypto.randomUUID(), { reserveReturnBattery: false, reserveMargin: 0, authorizedHazardIds: ['h-01'], stopOnHazard: false, allowedRepairs: [] });
   assert.deepEqual(hazard.cost, { tu: 2, battery: 19, oxygen: 4 });
   engine.state.robot.position = { x: 2, y: 9 }; engine.state.robot.battery = 23;
@@ -255,7 +255,7 @@ test('电路开关遵守知识、距离与类型检查，失败不消耗资源',
   assert.equal(engine.perform({ kind: 'circuit', targetId: 'sw-01', on: true }).code, 'OUT_OF_RANGE');
   assert.equal(engine.state.elapsedTU, 0);
   assert.equal(engine.state.human.oxygen, level.rules.oxygen);
-  assert.equal(engine.state.circuitOn, false);
+  assert.equal(engine.state.circuits['sw-01'], false);
 });
 
 test('气闸控制器和电路开关始终阻挡空载及搬运移动，已知后寻路绕开', () => {
@@ -266,7 +266,7 @@ test('气闸控制器和电路开关始终阻挡空载及搬运移动，已知�
     const engine = new GameEngine(level);
     const entity = engine.state.entities.find(e => e.id === id)!;
     engine.state.robot.position = { ...start }; engine.state.human.carried = carried;
-    entity.repaired = active; engine.state.circuitOn = active; engine.observe();
+    entity.repaired = active; engine.state.circuits['sw-01'] = active; engine.observe();
     const before = engine.snapshot();
     const outcome = engine.perform({ kind: 'move', target: entity.position });
     assert.equal(outcome.accepted, false, id);
@@ -302,7 +302,7 @@ test('机器人在相邻格切换开关，更新观察且请求只结算一次',
 
 test('恢复拒绝旧规则版本和缺失标记历史的存档', () => {
   const engine = new GameEngine(level);
-  for (const rulesVersion of [1, 2, 3]) assert.throws(() => engine.restore({ ...engine.snapshot(), rulesVersion }), /版本不兼容/);
+  for (const rulesVersion of [1, 2, 3, 4]) assert.throws(() => engine.restore({ ...engine.snapshot(), rulesVersion }), /版本不兼容/);
   const incomplete = engine.snapshot() as unknown as Record<string, unknown>;
   delete incomplete.markerHistory;
   assert.throws(() => engine.restore(incomplete as unknown as ReturnType<GameEngine['snapshot']>), /存档不完整/);
